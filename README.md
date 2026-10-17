@@ -44,6 +44,14 @@ SIGEN_SIMULATE=1 python3 collector/sigen_collector.py          # simulated data
 SIGEN_HOST=192.168.1.60 python3 collector/sigen_collector.py   # real system
 ```
 
+### Ready-made image (QNAP, Synology, Unraid, Portainer)
+
+GitHub builds an image for Intel/AMD and ARM: `ghcr.io/copperostrich/sigen-dashboard:latest`.
+[`qnap/docker-compose.yml`](qnap/docker-compose.yml) is ready to paste into
+**Container Station → Applications → Create**: fill in the values marked `EDIT`, then open
+`http://<NAS-IP>:8088`. It uses port 8088 because QTS's own admin page is on 8080, and it
+keeps its history in `/share/Container/sigen-dashboard`.
+
 ### Until Modbus TCP is available
 
 Leave `SIGEN_SIMULATE=1`. A built-in simulator of an example home system (10 kWp solar,
