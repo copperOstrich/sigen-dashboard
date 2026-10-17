@@ -141,6 +141,9 @@ MIT, see [LICENSE](LICENSE).
 
 ## Credits
 
+Built with [Claude](https://claude.ai) by Anthropic, which designed and wrote the code
+with copperOstrich.
+
 Register map from Sigenergy's Modbus Protocol (V2.7–V2.9) as implemented by the
 [Sigenergy Local Modbus](https://github.com/TypQxQ/Sigenergy-Local-Modbus) Home Assistant
 integration; Amber endpoints from Amber's public API spec.
