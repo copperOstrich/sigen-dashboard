@@ -1,12 +1,14 @@
-# Home Energy: SigenStor + Amber dashboard
+# Home Energy: SigenStor dashboard
 
 A local dashboard and desktop widget for a SigenStor system that reads the inverter
 directly over **Modbus TCP**, so it keeps working when Sigenergy's cloud is down.
-Optional **Amber Electric** prices add buy/sell prices, spike warnings, forecasts and
-what your power is costing.
+Live retailer prices from **Amber Electric** or **LocalVolts** add buy/sell prices, spike
+warnings, forecasts and what your power is costing, and free **AEMO** market data shows
+the wholesale price, demand and generation mix for your region.
 
 ```
-SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) ◀── Amber API
+                                          ┌── Amber or LocalVolts API (optional)
+SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) ◀── AEMO market data
                                          │  SQLite history, web dashboard, JSON API
                      ┌───────────────────┼─────────────────────┐
               Browser dashboard   Windows widget app      Mac widget app
@@ -15,14 +17,14 @@ SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) �
 * **Collector** (`collector/`): Python standard library only, no packages to install.
   Polls every 5 s, keeps minute history for ~2 years, serves the dashboard on port 8080.
 * **Dashboard** (`web/`): live power flow, battery detail, today's totals and cost,
-  power and battery history, daily energy and cost, Amber prices and forecast,
-  system status and alarms. Light and dark mode, works on a phone.
+  power and battery history, daily energy and cost, retailer and wholesale prices
+  with forecasts, the grid's generation mix, system status and alarms. Light and dark mode, works on a phone.
 * **Desktop app** (`desktop/`): one app for Windows and macOS. A small always-on-top
   widget plus the full dashboard window, living in the tray / menu bar, with
   "Start at login".
 
 It never writes to the inverter. The Modbus client has no write functions, so it can't
-interfere with Amber SmartShift or VPP control.
+interfere with retailer battery control such as Amber SmartShift or a VPP.
 
 ## 1. Run the collector
 
@@ -68,27 +70,61 @@ Defaults match Sigenergy's protocol: port 502, plant unit **247** (whole-system 
 inverter unit **1** (battery cells, PV strings, temperatures). If you also have a
 Sigen AC charger, the inverter is often unit 2; set `SIGEN_INVERTER_UNIT=2`.
 
-## 2. Add Amber (optional)
+## 2. Add your retailer's prices (optional)
+
+Pick one. The keys stay on the collector; the desktop apps never see them.
+
+**Amber Electric**
 
 1. Sign in at app.amber.com.au, open **Developers**, generate a token.
-2. Put it in `.env` as `AMBER_API_KEY=...` and restart.
+2. Add `AMBER_API_KEY=...` to `.env` and restart.
 
-The key stays on the collector; the desktop apps never see it. You get:
+**LocalVolts**
 
-* current buy and sell price, price descriptor, spike status, grid renewables
-* past 12 h and next 24 h price chart, "cheapest 2 hours ahead" and forecast spike notes
-* a spike banner on the dashboard and price line on the widget
-* **today's net cost**, calculated minute by minute from your actual grid flow × the
+1. On localvolts.com open **My Profile → API Key** for your **API key** and **Partner ID**.
+   If no key is shown, request one at localvolts.com/localvolts-api.
+2. Add `LOCALVOLTS_API_KEY=...` and `LOCALVOLTS_PARTNER_ID=...` to `.env` and restart.
+   Your NMI is found automatically; set `LOCALVOLTS_NMI` only if you have several.
+
+With either one you get:
+
+* the current buy and sell price, a cheap/expensive rating and spike status
+* a chart of the past 12 hours and next 24, "cheapest 2 hours ahead" and spike forecasts
+* a spike banner on the dashboard and the price on the widget
+* **today's net cost**, worked out minute by minute from your actual grid flow × the
   price in force at the time
-* **daily cost** history; once Amber's meter data arrives (about a day later) it
-  replaces the estimate with Amber's own figures
+* **daily cost** history; once the retailer's meter data arrives it replaces the
+  estimate (LocalVolts' figures include daily supply charges, Amber's don't)
 
-Amber reports feed-in prices as negative when you're paid; the dashboard shows them as
-a positive "selling" price and counts them as credit.
+Notes:
+* Amber reports feed-in prices as negative when you're paid; the dashboard shows a
+  positive "selling" price and counts it as credit.
+* LocalVolts prices are the marginal cost of one more kWh (`costsFlexUp`) and what one more
+  exported kWh earns (`earningsFlexUp`), including network charges and losses.
+* If both are configured, LocalVolts is used; set `PRICE_PROVIDER=amber` or `localvolts`
+  to choose. In simulator mode without a key, Amber-style prices are simulated.
+* **Other retailers** (GloBird and most others) don't offer a public price API. You
+  still get the AEMO wholesale price below, which is what dynamic tariffs follow.
 
-In simulator mode without a key, prices are simulated too so you can see the panel.
+## 3. AEMO market data (on by default, no account needed)
 
-## 3. Desktop widget app (Windows and Mac)
+Every 5 minutes the collector reads AEMO's public National Electricity Market feeds for
+your region and shows:
+
+* the wholesale price (5-minute actuals and AEMO's 30-minute forecast) as a dashed line
+  on the price chart, and on the widget if you have no retailer prices
+* demand, the large-scale generation mix (coal, gas, solar, wind, hydro, battery) and
+  the renewable share
+* interconnector flows to neighbouring regions, plus price-cap and market-suspension flags
+
+Set your region with `AEMO_REGION` (`NSW1`, `QLD1`, `VIC1`, `SA1` or `TAS1`; default
+`NSW1`), or turn it off with `AEMO_ENABLED=0`. These feeds power AEMO's own NEM data
+dashboard but aren't an officially supported API, so AEMO could change them; if that
+happens only this panel stops, everything else carries on. Wholesale prices are shown in
+c/kWh ($/MWh ÷ 10) and exclude network charges, so they're a guide to when power is
+cheap rather than what you pay.
+
+## 4. Desktop widget app (Windows and Mac)
 
 Built with Tauri (small, native webview; ~10 MB). The installers are built by GitHub
 Actions, so you don't need a Mac and a PC set up for development:
@@ -118,7 +154,8 @@ To build locally instead: install Rust and Node, then `cd desktop && npm install
 | `GET /api/stream` | Same as live, pushed as Server-Sent Events on every poll |
 | `GET /api/history?hours=24` | Bucketed power and SoC series (up to 31 days) |
 | `GET /api/daily?days=30` | Daily kWh totals and net cost |
-| `GET /api/prices?hours=12` | Amber site, current prices, 24 h forecast, recent price history |
+| `GET /api/prices?hours=12` | Retailer (Amber or LocalVolts): current prices, 24 h forecast, recent history |
+| `GET /api/aemo?hours=24` | AEMO wholesale price, forecast, demand, generation mix, interconnectors |
 | `GET /api/health` | `{ok, status, updated}` for monitoring |
 
 Signs: `grid` positive = buying, negative = selling. `battery` positive = charging.
@@ -146,4 +183,6 @@ with copperOstrich.
 
 Register map from Sigenergy's Modbus Protocol (V2.7–V2.9) as implemented by the
 [Sigenergy Local Modbus](https://github.com/TypQxQ/Sigenergy-Local-Modbus) Home Assistant
-integration; Amber endpoints from Amber's public API spec.
+integration; Amber endpoints from Amber's public API spec; LocalVolts fields as used by the
+[Localvolts Home Assistant integration](https://github.com/gurrier/localvolts); AEMO feeds
+as used by [aemonemdata](https://github.com/cabberley/aemonemdata) and AEMO's NEM data dashboard.

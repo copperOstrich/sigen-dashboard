@@ -65,6 +65,7 @@
     live = d;
     if (d.status === "ok") lastOk = Date.now();
     renderStatus();
+    if (d.aemo) aemoSummary = d.aemo;
     if (d.price) renderPriceNow(d.price);
     if (!d.power) return;
     const p = d.power, desc = S.describe(p);
@@ -304,14 +305,19 @@
     drawDaily();
   });
 
-  // ------------------------------------------------------------ Amber prices
+  // ------------------------------------------------------------ retailer prices + AEMO wholesale
   const DESC = {
     extremelyLow: ["Extremely cheap", "cheap"], negative: ["Extremely cheap", "cheap"], veryLow: ["Very cheap", "cheap"],
     low: ["Cheap", "cheap"], neutral: ["Average", ""], high: ["Expensive", "potential"], spike: ["Price spike", "spike"],
   };
-  let priceData = null, priceSummary = null;
+  let priceData = null, priceSummary = null, aemoData = null, aemoSummary = null;
   const cents = (v, d = 1) => (v == null ? "–" : `${v.toFixed(d)}`);
   const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const regionName = (r) => (r || "").replace(/1$/, "");
+  const ESTIMATE_NOTE = {
+    Amber: "Amber locks the price in at the end of the interval",
+    LocalVolts: "LocalVolts' expected price for this 5-minute interval",
+  };
 
   function priceAdvice(p, fc) {
     const tips = [];
@@ -333,36 +339,53 @@
     return tips;
   }
 
+  function wholesaleAdvice(a, fc) {
+    if (!a || a.price_c == null) return [];
+    const now = Date.now() / 1000;
+    const ahead = (fc || []).filter((f) => f.end > now && f.price_c != null);
+    const tips = [];
+    if (a.price_c < 0) tips.push("Wholesale prices are negative right now: there's more power than the grid needs.");
+    const peak = ahead.reduce((m, f) => (!m || f.price_c > m.price_c ? f : m), null);
+    if (peak && peak.price_c > 30) tips.push(`AEMO forecasts wholesale prices peaking around ${clock(peak.t)} at about ${Math.round(peak.price_c)}c/kWh.`);
+    return tips;
+  }
+
+  function setupBox() {
+    return el("div", { class: "setup" },
+      el("p", { style: "margin:0", text: "Connect your retailer to see your own buy and sell prices, spike alerts and what your power is costing." }),
+      el("ul", {},
+        el("li", {}, el("b", { text: "Amber: " }), "add ", el("code", { text: "AMBER_API_KEY" }), " (app.amber.com.au, Developers)."),
+        el("li", {}, el("b", { text: "LocalVolts: " }), "add ", el("code", { text: "LOCALVOLTS_API_KEY" }), " and ",
+          el("code", { text: "LOCALVOLTS_PARTNER_ID" }), " (localvolts.com, My Profile, API Key)."),
+        el("li", { text: "Other retailers: the chart shows the wholesale price from AEMO." })),
+      el("p", { style: "margin:0", text: "Then restart the collector." }));
+  }
+
   function renderPriceNow(p) {
     priceSummary = p;
     const box = $("price-now"), pb = $("price-banner");
     pb.className = "banner spike";
     pb.innerHTML = "";
+    const hasAemo = aemoSummary && aemoSummary.enabled;
     if (!p.enabled) {
-      if (box.dataset.state === "setup") return;
       box.dataset.state = "setup";
       box.innerHTML = "";
-      $("price-chart").innerHTML = "";
-      $("price-sub").textContent = "not connected";
-      box.closest(".price-grid").style.gridTemplateColumns = "1fr";
-      $("price-legend").hidden = true; $("price-chart").parentElement.hidden = true;
-      box.append(el("div", { class: "setup" },
-        el("p", { style: "margin:0", text: "Add your Amber API key to see live buy and sell prices, spike alerts and what your power is costing." }),
-        el("ol", {},
-          el("li", { text: "Sign in at app.amber.com.au and open Developers." }),
-          el("li", { text: "Generate a new API token." }),
-          el("li", {}, "Add ", el("code", { text: "AMBER_API_KEY=your-token" }), " to the collector settings and restart it."))));
+      box.append(setupBox());
+      $("price-sub").textContent = hasAemo ? `wholesale price for ${regionName(aemoSummary.region)},` : "not connected";
+      $("price-chart").parentElement.hidden = !hasAemo;
+      $("price-note").textContent = wholesaleAdvice(aemoSummary, aemoData && aemoData.forecast).join(" ");
       return;
     }
     box.dataset.state = "on";
-    box.closest(".price-grid").style.gridTemplateColumns = "";
-    $("price-legend").hidden = false; $("price-chart").parentElement.hidden = false;
+    $("price-chart").parentElement.hidden = false;
+    const name = p.provider || "Amber";
     if (p.status === "error" && p.buy == null) {
-      box.innerHTML = ""; box.append(el("p", { class: "setup", text: "Waiting for Amber. The collector will keep trying." }));
+      box.innerHTML = ""; box.append(el("p", { class: "setup", text: `Waiting for ${name}. The collector will keep trying.` }));
       return;
     }
     if (p.buy == null) return;
     const [word, cls] = DESC[p.descriptor] || [p.descriptor || "", ""];
+    const ren = p.renewables != null ? p.renewables : hasAemo ? aemoSummary.renewables_pct : null;
     box.innerHTML = "";
     box.append(
       el("div", { class: "pair" },
@@ -370,14 +393,16 @@
           el("div", { class: "big" }, cents(p.buy), el("small", { text: "c/kWh" }))),
         el("div", {}, el("div", { class: "k" }, el("i", { style: "border-color:var(--solar)" }), "Selling"),
           el("div", { class: "big" }, cents(p.sell), el("small", { text: "c/kWh" })))),
-      el("div", { class: "verdict" }, el("span", { class: "tag " + cls, text: word }),
+      el("div", { class: "verdict" }, word ? el("span", { class: "tag " + cls, text: word }) : null,
         p.spike === "potential" ? el("span", { class: "tag potential", text: "Spike possible" }) : null,
-        p.estimate ? el("span", { class: "tag", text: "Estimate", title: "Amber locks the price in at the end of the interval" }) : null),
+        p.estimate ? el("span", { class: "tag", text: "Estimate", title: ESTIMATE_NOTE[name] || "" }) : null),
       el("dl", { class: "facts" },
-        el("dt", { text: "Grid renewables" }), el("dd", { text: p.renewables == null ? "–" : `${Math.round(p.renewables)}%` }),
+        hasAemo && aemoSummary.price_c != null ? el("dt", { text: "Wholesale (AEMO)" }) : null,
+        hasAemo && aemoSummary.price_c != null ? el("dd", { text: `${cents(aemoSummary.price_c)}c/kWh` }) : null,
+        el("dt", { text: p.renewables != null ? `Renewables (${name})` : "Renewables (AEMO)" }), el("dd", { text: ren == null ? "–" : `${Math.round(ren)}%` }),
         el("dt", { text: "This price until" }), el("dd", { text: p.ends ? clock(p.ends) : "–" }),
         p.period ? el("dt", { text: "Network period" }) : null, p.period ? el("dd", { text: p.period }) : null));
-    $("price-sub").textContent = p.mode === "simulator" ? "simulated Amber prices," : "from Amber,";
+    $("price-sub").textContent = p.mode === "simulator" ? `simulated ${name} prices,` : `from ${name},`;
     const tips = priceAdvice(p, priceData && priceData.forecast);
     $("price-note").textContent = tips.join(" ");
     if (p.spike === "spike") {
@@ -387,38 +412,111 @@
   }
 
   function drawPrices() {
-    const d = priceData;
-    if (!d || !d.enabled) return;
+    const d = priceData && priceData.enabled ? priceData : null;
+    const a = aemoData && aemoData.enabled ? aemoData : null;
+    if (!d && !a) return;
     const rows = new Map();
-    for (const h of d.history || []) rows.set(h.t, { t: h.t, buy: h.buy, sell: h.sell });
-    for (const f of d.forecast || []) rows.set(f.t, { t: f.t, buy: f.buy, sell: f.sell, f });
-    const list = [...rows.values()].sort((a, b) => a.t - b.t);
+    const row = (t) => { if (!rows.has(t)) rows.set(t, { t, buy: null, sell: null, ws: null }); return rows.get(t); };
+    if (d) {
+      for (const h of d.history || []) Object.assign(row(h.t), { buy: h.buy, sell: h.sell });
+      for (const f of d.forecast || []) Object.assign(row(f.t), { buy: f.buy, sell: f.sell, f });
+    }
+    if (a) {
+      const since = Date.now() / 1000 - 12 * 3600, half = {};
+      for (const h of a.history || []) {
+        if (h.t < since - 1800) continue;
+        const b = Math.floor(h.t / 1800) * 1800;
+        (half[b] = half[b] || []).push(h.price_c);
+      }
+      for (const [b, v] of Object.entries(half)) row(+b).ws = v.reduce((x, y) => x + y, 0) / v.length;
+      for (const f of a.forecast || []) Object.assign(row(f.t), { ws: f.price_c, wf: true });
+    }
+    const list = [...rows.values()].sort((x, y) => x.t - y.t);
     if (!list.length) return;
-    const last = (d.forecast || []).slice(-1)[0];
+    const ends = [...(d && d.forecast || []), ...(a && a.forecast || [])].map((f) => f.end);
+    const series = [];
+    if (d) {
+      series.push({ key: "buy", label: "Buying", color: "var(--grid)", values: list.map((r) => r.buy) });
+      series.push({ key: "sell", label: "Selling", color: "var(--solar)", values: list.map((r) => r.sell) });
+    }
+    if (a && list.some((r) => r.ws != null)) series.push({ key: "ws", label: `Wholesale (${regionName(a.region)})`, color: "var(--ink-2)", dash: true, values: list.map((r) => r.ws) });
+    const lg = $("price-legend"); lg.innerHTML = "";
+    for (const s of series) {
+      lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw" + (s.dash ? " dash" : ""), style: `border-color:${s.color}` }), s.label));
+    }
+    lg.append(el("span", { class: "sub", text: "past 12 hours and next 24" }));
     C.lineChart($("price-chart"), {
-      t: list.map((r) => r.t), stepped: true, stepEnd: last ? last.end : null, height: 220, markerT: Date.now() / 1000,
-      series: [
-        { key: "buy", label: "Buying", color: "var(--grid)", values: list.map((r) => r.buy) },
-        { key: "sell", label: "Selling", color: "var(--solar)", values: list.map((r) => r.sell) },
-      ],
+      t: list.map((r) => r.t), stepped: true, stepEnd: ends.length ? Math.max(...ends) : null, height: 220,
+      markerT: Date.now() / 1000, series,
       yFmt: (v) => `${Math.round(v)}c`, tipFmt: (v) => (v == null ? "–" : `${v.toFixed(1)}c/kWh`),
       tipTitle: (t) => {
         const r = rows.get(t), when = new Date(t * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
-        if (!r || !r.f) return `${when}, actual`;
-        const w = (DESC[r.f.descriptor] || [""])[0];
+        if (!r || (!r.f && !r.wf)) return `${when}, actual`;
+        const w = r.f ? (DESC[r.f.descriptor] || [""])[0] : "";
         return `${when}, forecast${w ? ", " + w.toLowerCase() : ""}`;
       },
-      ariaLabel: "Amber buy and sell prices, past 12 hours and next 24 hours",
+      ariaLabel: "Electricity prices, past 12 hours and next 24 hours",
     });
     if (priceSummary) renderPriceNow(priceSummary);
   }
-  $("price-legend").append(el("span", { class: "sub", text: "past 12 hours and next 24" }));
+
   async function loadPrices() {
     try {
-      priceData = await S.fetchJSON("/api/prices?hours=12");
-      if (!priceData.enabled) renderPriceNow({ enabled: false });
+      const [p, a] = await Promise.all([S.fetchJSON("/api/prices?hours=12"), S.fetchJSON("/api/aemo?hours=24").catch(() => null)]);
+      priceData = p; aemoData = a;
+      if (a && a.enabled) { renderGrid(a); }
+      $("grid-panel").hidden = !(a && a.enabled);
+      if (!p.enabled) renderPriceNow({ enabled: false });
       drawPrices();
     } catch (e) { /* banner */ }
+  }
+
+  // ------------------------------------------------------------ the grid (AEMO)
+  function renderGrid(a) {
+    const c = a.current || {};
+    $("grid-sub").textContent = `AEMO, ${regionName(a.region)} region` + (c.at ? `, ${clock(c.at)} interval` : "") +
+      (a.mode === "simulator" ? ", simulated" : "");
+    const now = $("grid-now"); now.innerHTML = "";
+    if (a.status === "error" && c.price_c == null) {
+      now.append(el("p", { class: "setup", text: `AEMO data isn't available right now (${a.error || "no data yet"}). The collector keeps retrying every 5 minutes.` }));
+    } else {
+      now.append(
+        el("div", { class: "k", text: "Wholesale price" }),
+        el("div", { class: "big" }, cents(c.price_c), el("small", { text: "c/kWh" })),
+        el("div", { class: "verdict" },
+          el("span", { class: "tag", text: c.rrp == null ? "–" : `$${Math.round(c.rrp).toLocaleString()}/MWh` }),
+          c.price_status && c.price_status !== "FIRM" ? el("span", { class: "tag potential", text: "Not final", title: "AEMO may still revise this price" }) : null,
+          c.apc ? el("span", { class: "tag spike", text: "Price capped" }) : null,
+          c.suspended ? el("span", { class: "tag spike", text: "Market suspended" }) : null),
+        el("dl", { class: "facts" },
+          el("dt", { text: "Demand" }), el("dd", { text: c.demand_mw == null ? "–" : `${Math.round(c.demand_mw).toLocaleString()} MW` }),
+          el("dt", { text: "Renewables" }), el("dd", { text: a.renewables_pct == null ? "–" : `${Math.round(a.renewables_pct)}%` })));
+    }
+    const mix = $("grid-mix"); mix.innerHTML = "";
+    if ((a.fuel || []).length) {
+      const max = Math.max(...a.fuel.map((f) => f.mw));
+      for (const f of a.fuel) {
+        mix.append(el("div", { class: "mix-row" + (f.renewable ? " ren" : "") },
+          el("span", { class: "mix-k", text: f.fuel }),
+          el("span", { class: "mix-bar" }, el("i", { style: `width:${Math.max(1, f.mw / max * 100)}%` })),
+          el("span", { class: "mix-v", text: `${f.mw.toLocaleString()} MW` }),
+          el("span", { class: "mix-p", text: `${Math.round(f.pct)}%` })));
+      }
+    } else mix.append(el("p", { class: "setup", text: "Generation mix not available yet." }));
+    const ic = $("grid-ics"); ic.innerHTML = "";
+    // AEMO reports each interconnector's flow as positive in its "from" to "to" direction
+    const IC = { "NSW1-QLD1": ["NSW1", "QLD1"], "N-Q-MNSP1": ["NSW1", "QLD1", "Directlink"], "VIC1-NSW1": ["VIC1", "NSW1"],
+      "V-SA": ["VIC1", "SA1", "Heywood"], "V-S-MNSP1": ["VIC1", "SA1", "Murraylink"], "T-V-MNSP1": ["TAS1", "VIC1", "Basslink"] };
+    for (const x of a.interconnectors || []) {
+      const m = IC[x.name] || ((x.name || "").split("-").length === 2 ? (x.name || "").split("-") : null);
+      let label = x.name;
+      if (m && x.mw != null) {
+        const [from, to] = x.mw >= 0 ? [m[0], m[1]] : [m[1], m[0]];
+        label = `${regionName(from)} to ${regionName(to)}` + (m[2] ? ` (${m[2]})` : "");
+      }
+      ic.append(el("dt", { text: label, title: x.name }), el("dd", { text: x.mw == null ? "–" : `${Math.abs(Math.round(x.mw)).toLocaleString()} MW` }));
+    }
+    if (!(a.interconnectors || []).length) ic.append(el("dt", { class: "muted", text: "No interconnector data" }), el("dd"));
   }
 
   // ------------------------------------------------------------ settings

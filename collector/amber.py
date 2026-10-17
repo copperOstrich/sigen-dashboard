@@ -73,7 +73,7 @@ class Amber:
         self.site_id = site_id
         self.simulate = simulate and not key
         self.lock = threading.Lock()
-        self.state = {"enabled": bool(self.client) or self.simulate,
+        self.state = {"provider": "Amber", "enabled": bool(self.client) or self.simulate,
                       "mode": "simulator" if self.simulate else "live" if self.client else "off",
                       "status": "starting" if (self.client or self.simulate) else "off",
                       "error": None, "site": None, "current": {}, "forecast": [], "updated": None}
@@ -97,8 +97,8 @@ class Amber:
             cur = self.state.get("current") or {}
             g, f = cur.get("general"), cur.get("feedIn")
             if not g:
-                return {"enabled": self.state["enabled"], "status": self.state["status"]}
-            return {"enabled": True, "status": self.state["status"], "mode": self.state["mode"],
+                return {"provider": "Amber", "enabled": self.state["enabled"], "status": self.state["status"]}
+            return {"provider": "Amber", "enabled": True, "status": self.state["status"], "mode": self.state["mode"],
                     "buy": g["per_kwh"], "sell": -f["per_kwh"] if f and f.get("per_kwh") is not None else None,
                     "descriptor": g["descriptor"], "spike": g["spike"], "renewables": g["renewables"],
                     "estimate": g.get("estimate"), "ends": g["end"], "period": g.get("period")}
@@ -218,6 +218,10 @@ class Amber:
         buy = max(4.0, 17 + spot * 1.1 + (6 if 15 <= h < 21 else 0))
         feed = -(spot * 0.95)  # Amber sign: negative = you're paid
         return round(buy, 2), round(feed, 2), round(spot, 2)
+
+    @staticmethod
+    def descriptor_for(buy):
+        return Amber._descriptor(buy)
 
     @staticmethod
     def _descriptor(buy):

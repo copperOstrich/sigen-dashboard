@@ -262,3 +262,21 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .setup ol { padding-left: 20px; margin: 8px 0; }
 .setup code { font-size: 13px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--rule); }
 .banner.spike { background: color-mix(in srgb, var(--bad) 10%, var(--surface)); }
+
+/* ---------------------------------------------------------------- grid (AEMO) */
+#grid-panel[hidden] { display: none; }
+.grid3 { display: grid; grid-template-columns: 250px minmax(0, 1.4fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 960px) { .grid3 { grid-template-columns: 1fr 1fr; } .grid3 > :first-child { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .grid3 { grid-template-columns: 1fr; } }
+.grid3 .price-now .k { font-size: 13px; color: var(--ink-2); }
+.mix-row { display: grid; grid-template-columns: 92px 1fr 76px 38px; gap: 10px; align-items: center; font-size: 13.5px; padding: 3px 0; }
+.mix-k { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mix-bar { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.mix-bar i { display: block; height: 100%; background: var(--ink-3); border-radius: 4px; }
+.mix-row.ren .mix-bar i { background: var(--ink-2); }
+.mix-v, .mix-p { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.mix-p { color: var(--ink-3); }
+.legend-item { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2); margin-right: 8px; }
+.legend-item .sw { width: 14px; height: 0; border-top: 2.5px solid; border-radius: 2px; }
+.legend-item .sw.dash { border-top-style: dashed; }
+.setup ul { padding-left: 20px; margin: 8px 0; }

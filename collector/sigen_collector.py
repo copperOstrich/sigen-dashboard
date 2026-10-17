@@ -16,8 +16,14 @@ Configuration (environment variables):
   DATA_DIR              where the SQLite database lives           default ./data
   TZ                    local time zone for "today"               default Australia/Sydney
   DEMO_HISTORY_DAYS     days of simulated history to pre-fill     default 14 (simulator only)
+  PRICE_PROVIDER        amber, localvolts or none                 default: whichever has a key
   AMBER_API_KEY         Amber Electric API key (optional)         app.amber.com.au/developers
   AMBER_SITE_ID         Amber site id, if you have more than one  default: first active site
+  LOCALVOLTS_API_KEY    LocalVolts API key (optional)             localvolts.com, My Profile -> API Key
+  LOCALVOLTS_PARTNER_ID LocalVolts Partner ID                     same page
+  LOCALVOLTS_NMI        LocalVolts NMI, if you have more than one default: first on the account
+  AEMO_REGION           NEM region for wholesale data             NSW1, QLD1, VIC1, SA1 or TAS1 (default NSW1)
+  AEMO_ENABLED          0 to turn off AEMO market data            default 1
 """
 import json
 import mimetypes
@@ -34,7 +40,9 @@ from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from aemo import Aemo  # noqa: E402
 from amber import Amber  # noqa: E402
+from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
@@ -55,6 +63,13 @@ DEMO_DAYS = int(ENV("DEMO_HISTORY_DAYS", "14"))
 RETENTION_DAYS = int(ENV("RETENTION_DAYS", "800"))
 AMBER_KEY = ENV("AMBER_API_KEY", "").strip()
 AMBER_SITE = ENV("AMBER_SITE_ID", "").strip() or None
+LV_KEY = ENV("LOCALVOLTS_API_KEY", "").strip()
+LV_PARTNER = ENV("LOCALVOLTS_PARTNER_ID", "").strip()
+LV_NMI = ENV("LOCALVOLTS_NMI", "").strip() or None
+PRICE_PROVIDER = (ENV("PRICE_PROVIDER", "") or "auto").strip().lower()
+AEMO_REGION = (ENV("AEMO_REGION", "") or "NSW1").strip().upper()
+AEMO_ENABLED = ENV("AEMO_ENABLED", "1") != "0"
+AEMO_SIMULATE = ENV("AEMO_SIMULATE", "0") == "1"
 
 COUNTERS = ["total_pv_kwh", "total_load_kwh", "total_import_kwh", "total_export_kwh",
             "total_charge_kwh", "total_discharge_kwh"]
@@ -88,6 +103,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS prices(
               start INTEGER, channel TEXT, end INTEGER, per_kwh REAL, spot REAL, renewables REAL,
               descriptor TEXT, spike TEXT, PRIMARY KEY(start, channel));
+            CREATE TABLE IF NOT EXISTS aemo_prices(
+              start INTEGER, region TEXT, rrp REAL, demand REAL, PRIMARY KEY(start, region));
             CREATE TABLE IF NOT EXISTS amber_days(
               day TEXT PRIMARY KEY, import_kwh REAL, import_cost REAL, export_kwh REAL,
               export_cost REAL, estimated INTEGER);
@@ -121,6 +138,20 @@ class Store:
                 (d, v["import_kwh"], v["import_cost"], v["export_kwh"], v["export_cost"], int(v["estimated"]))
                 for d, v in days.items()])
             self.db.commit()
+
+    def save_aemo(self, rows):
+        with self.lock:
+            self.db.executemany("INSERT OR REPLACE INTO aemo_prices VALUES (?,?,?,?)", rows)
+            self.db.commit()
+
+    def aemo_history(self, region, hours, bucket=300):
+        since = int(time.time() - hours * 3600)
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT (start/?)*? AS b, AVG(rrp), AVG(demand) FROM aemo_prices WHERE region=? AND start>=? "
+                "GROUP BY b ORDER BY b", (bucket, bucket, region, since)).fetchall()
+        return [{"t": b, "rrp": round(r, 2), "price_c": round(r / 10, 2),
+                 "demand_mw": round(d) if d is not None else None} for b, r, d in rows]
 
     def cost_for_day(self, day):
         """Estimated $ from our own minute readings x the Amber price in force at the time."""
@@ -215,9 +246,9 @@ class Store:
                 "SELECT day, import_cost, export_cost, estimated FROM amber_days WHERE day>?", (since,))}
         for e in out:
             b = billed.get(e["day"])
-            if b:  # Amber's meter-based figures win once available
+            if b:  # the retailer's meter-based figures win once available
                 e["cost"] = round((b[1] + b[2]) / 100, 2)
-                e["cost_source"] = "amber-estimated" if b[3] else "amber-billed"
+                e["cost_source"] = "retailer-estimated" if b[3] else "retailer-billed"
             else:
                 c = self.cost_for_day(e["day"])
                 if c:
@@ -227,9 +258,10 @@ class Store:
 
 # ---------------------------------------------------------------- poller
 class Collector:
-    def __init__(self, store, host, port, amber=None):
+    def __init__(self, store, host, port, retailer=None, aemo=None):
         self.store = store
-        self.amber = amber
+        self.retailer = retailer
+        self.aemo = aemo
         self.client = ModbusTCPClient(host, port)
         self.plant = DeviceReader(self.client, PLANT_UNIT, PLANT)
         self.inverter = DeviceReader(self.client, INVERTER_UNIT, INVERTER) if INVERTER_UNIT else None
@@ -362,7 +394,8 @@ class Collector:
             },
             "alarms": alarms,
             "events": self.store.events(12),
-            "price": self.amber.summary() if self.amber else {"enabled": False, "status": "off"},
+            "price": self.retailer.summary() if self.retailer else {"enabled": False, "status": "off"},
+            "aemo": self.aemo.summary() if self.aemo else {"enabled": False, "status": "off"},
         }
         with self.cond:
             state["target"] = self.state["target"]
@@ -376,7 +409,7 @@ class Collector:
             acc = self.minute_acc
             avg = lambda k: sum(a[k] for a in acc) / len(acc)
             last = acc[-1]
-            buy, sell = self.amber.prices_now() if self.amber else (None, None)
+            buy, sell = self.retailer.prices_now() if self.retailer else (None, None)
             self.store.insert([(self.minute_bucket, local_day(self.minute_bucket),
                                 avg("pv"), avg("load"), avg("battery"), avg("grid"), last["soc"],
                                 *[last[c] for c in COUNTERS], buy, sell)])
@@ -405,7 +438,7 @@ def start_simulator(store):
         ts = int(t.replace(tzinfo=TZ).timestamp())
         if fill:
             tot = plant.totals
-            buy, feed, spot = (None, None, None) if AMBER_KEY else Amber.sim_price(ts)
+            buy, feed, spot = (None, None, None) if (AMBER_KEY or LV_KEY) else Amber.sim_price(ts)
             rows.append((ts, t.strftime("%Y-%m-%d"), plant.p["pv"], plant.p["load"], plant.p["battery"],
                          plant.p["grid"], plant.soc, tot["pv"], tot["load"], tot["import"], tot["export"],
                          tot["charge"], tot["discharge"], buy, feed))
@@ -429,7 +462,8 @@ class Api(BaseHTTPRequestHandler):
     server_version = "SigenDash/" + VERSION
     collector = None
     store = None
-    amber = None
+    retailer = None
+    aemo = None
 
     def log_message(self, fmt, *args):
         pass
@@ -464,8 +498,12 @@ class Api(BaseHTTPRequestHandler):
             if url.path == "/api/daily":
                 days = min(800, max(1, int(q.get("days", ["30"])[0])))
                 return self._json(self.store.daily(days))
+            if url.path == "/api/aemo":
+                if not self.aemo:
+                    return self._json({"enabled": False, "status": "off"})
+                return self._json(self.aemo.snapshot(min(48, max(1, float(q.get("hours", ["24"])[0])))))
             if url.path == "/api/prices":
-                a = self.amber.snapshot() if self.amber else {"enabled": False, "status": "off"}
+                a = self.retailer.snapshot() if self.retailer else {"enabled": False, "status": "off"}
                 a["history"] = self.store.price_history(min(48, max(1, float(q.get("hours", ["12"])[0]))))
                 return self._json(a)
             if url.path == "/api/health":
@@ -509,23 +547,43 @@ class Api(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+def make_retailer(store):
+    """Pick the electricity retailer price feed from the settings."""
+    choice = PRICE_PROVIDER
+    if choice == "auto":
+        choice = "localvolts" if LV_KEY else "amber" if (AMBER_KEY or SIMULATE) else "none"
+    if choice == "localvolts":
+        if not (LV_KEY and LV_PARTNER):
+            log("LocalVolts selected but LOCALVOLTS_API_KEY / LOCALVOLTS_PARTNER_ID are missing; prices off")
+            return None
+        return LocalVolts(store, LV_KEY, LV_PARTNER, LV_NMI, tz=TZ, log=log)
+    if choice == "amber":
+        return Amber(store, AMBER_KEY or None, AMBER_SITE, simulate=SIMULATE, log=log)
+    return None
+
+
 def main():
     if not SIMULATE and not HOST:
         sys.exit("Set SIGEN_HOST to your inverter's IP address, or SIGEN_SIMULATE=1 to use the simulator.")
     store = Store(DATA_DIR / ("simulator.db" if SIMULATE else "sigen.db"))
     host, port = (start_simulator(store) if SIMULATE else (HOST, PORT))
-    amber = Amber(store, AMBER_KEY or None, AMBER_SITE, simulate=SIMULATE, log=log)
-    threading.Thread(target=amber.run, daemon=True).start()
-    collector = Collector(store, host, port, amber)
+    retailer = make_retailer(store)
+    if retailer:
+        threading.Thread(target=retailer.run, daemon=True).start()
+    aemo = Aemo(store, AEMO_REGION, enabled=AEMO_ENABLED, simulate=AEMO_SIMULATE, log=log)
+    threading.Thread(target=aemo.run, daemon=True).start()
+    collector = Collector(store, host, port, retailer, aemo)
     if SIMULATE:
         collector.state["target"] = "built-in simulator"
     threading.Thread(target=collector.run, daemon=True).start()
-    Api.collector, Api.store, Api.amber = collector, store, amber
+    Api.collector, Api.store, Api.retailer, Api.aemo = collector, store, retailer, aemo
     httpd = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), Api)
     httpd.daemon_threads = True
     log(f"SigenStor dashboard v{VERSION} on http://0.0.0.0:{HTTP_PORT}  "
         f"(reading {'simulator' if SIMULATE else f'{host}:{port}'}, plant unit {PLANT_UNIT}, "
-        f"inverter unit {INVERTER_UNIT or 'off'}, every {POLL:g}s; Amber: {amber.state['mode']})")
+        f"inverter unit {INVERTER_UNIT or 'off'}, every {POLL:g}s; prices: "
+        f"{(retailer.state['provider'] + ' ' + retailer.state['mode']) if retailer else 'off'}; "
+        f"AEMO: {AEMO_REGION if AEMO_ENABLED else 'off'}{' (simulated)' if AEMO_SIMULATE else ''})")
     httpd.serve_forever()
 
 

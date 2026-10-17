@@ -53,7 +53,7 @@
     <div class="tile" style="border-color:var(--grid);border-left-style:dashed"><span class="k" id="gk">Grid</span><span class="v" id="grid">–</span></div>
   </div>
   <div class="soc"><span>Battery</span><div class="bar"><i id="socbar" style="width:0"></i></div><b id="soc">–</b></div>
-  <div class="price" id="price" hidden><span>Buy</span><b id="buy">–</b><span>Sell</span><b id="sell">–</b><span class="sp"></span><span class="tag" id="ptag"></span></div>
+  <div class="price" id="price" hidden><span id="buy-k">Buy</span><b id="buy">–</b><span id="sell-k">Sell</span><b id="sell">–</b><span class="sp"></span><span class="tag" id="ptag"></span></div>
 </div>
 <script src="common.js"></script>
 <script>
@@ -82,8 +82,16 @@
     const soc = d.battery && d.battery.soc;
     $("soc").textContent = soc == null ? "–" : `${Math.round(soc)}%`;
     $("socbar").style.width = `${soc || 0}%`;
-    const pr = d.price || {};
-    $("price").hidden = pr.buy == null;
+    const pr = d.price || {}, ae = d.aemo || {};
+    const wholesaleOnly = pr.buy == null && ae.price_c != null;
+    $("price").hidden = pr.buy == null && !wholesaleOnly;
+    $("buy-k").textContent = wholesaleOnly ? `Wholesale ${(ae.region || "").replace(/1$/, "")}` : "Buy";
+    $("sell-k").hidden = $("sell").hidden = wholesaleOnly;
+    if (wholesaleOnly) {
+      $("buy").textContent = `${ae.price_c.toFixed(1)}c`;
+      $("ptag").textContent = ae.renewables_pct != null ? `${Math.round(ae.renewables_pct)}% renewable` : "";
+      $("ptag").className = "tag";
+    }
     if (pr.buy != null) {
       $("buy").textContent = `${pr.buy.toFixed(1)}c`;
       $("sell").textContent = pr.sell == null ? "–" : `${pr.sell.toFixed(1)}c`;
