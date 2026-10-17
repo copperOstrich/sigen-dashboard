@@ -88,5 +88,35 @@
     return node;
   };
 
+  // ---------------------------------------------------------------- app updates (desktop only)
+  S.UPDATE_REPO = "copperOstrich/sigen-dashboard";
+  const verParts = (v) => String(v || "0").replace(/^v/, "").split(/[.+-]/).map((x) => parseInt(x, 10) || 0);
+  S.compareVersions = function (a, b) {
+    const x = verParts(a), y = verParts(b);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0) ? 1 : -1;
+    }
+    return 0;
+  };
+  S.checkForUpdate = async function () {
+    if (!S.isDesktop || !window.__TAURI__.app) return null;
+    const current = await window.__TAURI__.app.getVersion();
+    let res;
+    try {
+      res = await fetch(`https://api.github.com/repos/${S.UPDATE_REPO}/releases/latest`,
+        { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
+    } catch (e) { return { current, error: "Can't reach GitHub" }; }
+    if (!res.ok) return { current, error: res.status === 404 ? "No public release found yet" : `GitHub returned ${res.status}` };
+    const rel = await res.json();
+    const latest = String(rel.tag_name || "").replace(/^v/, "");
+    const isWin = /Windows/i.test(navigator.userAgent);
+    const asset = (rel.assets || []).find((a) => (isWin ? /\.msi$/i : /\.dmg$/i).test(a.name));
+    // A release only counts once this platform's installer has been attached (builds take a few minutes)
+    return { current, latest, newer: !!latest && !!asset && S.compareVersions(latest, current) > 0, asset, page: rel.html_url };
+  };
+  S.installUpdate = function (asset) {
+    return window.__TAURI__.core.invoke("install_update", { url: asset.browser_download_url, name: asset.name });
+  };
+
   window.Sigen = S;
 })();

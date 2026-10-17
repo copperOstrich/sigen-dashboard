@@ -152,6 +152,14 @@ Actions, so you don't need a Mac and a PC set up for development:
    (.dmg, Intel and Apple Silicon) from the run's artifacts.
    Pushing a tag such as `v1.0.0` also creates a draft release with them attached.
 
+Each build is published as a numbered GitHub release (1.1.x). The app checks for a newer
+release when it starts and every 6 hours (or from the tray menu, **Check for updates**) and
+offers **Download and install**: on Windows it runs the new installer; on a Mac it opens the
+new disk image to drag into Applications. Update checks need the repository to be public.
+
+Switch between the full window and the compact widget with the **Compact widget** button in
+the dashboard, the expand button on the widget, or a left click on the tray icon.
+
 On first launch the dashboard window asks for the collector address, e.g.
 `http://192.168.1.50:8080`. The widget then appears; drag it by its top bar.
 Tray / menu bar icon: show widget, open dashboard, keep on top, start at login, quit.

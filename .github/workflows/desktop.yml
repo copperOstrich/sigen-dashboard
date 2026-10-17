@@ -1,9 +1,11 @@
 name: Build desktop widget apps
 
-# Builds the Windows installer (.msi + .exe) and macOS app (.dmg, Intel + Apple Silicon).
-# Runs on every push to main that changes the app (installers appear as run artifacts),
-# from the Actions tab ("Run workflow"), or on a tag like v1.0.0, which also attaches
-# the installers to a draft GitHub release.
+# Builds the Windows installer (.msi + .exe) and macOS app (.dmg, Intel + Apple Silicon)
+# and publishes them as a GitHub release. The desktop app checks the latest release and
+# offers to download and install anything newer.
+#
+# Versions: a tag like v1.2.0 builds that version; every other build (push to main or
+# "Run workflow") is numbered 1.1.<run number>, so each new build is a new version.
 on:
   workflow_dispatch:
   push:
@@ -11,8 +13,31 @@ on:
     branches: [main]
     paths: ["desktop/**", "web/**", ".github/workflows/desktop.yml"]
 
+permissions:
+  contents: write
+
 jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="1.1.${GITHUB_RUN_NUMBER}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then exit 0; fi
+          notes="$(git log -1 --pretty=%s)"
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "Home Energy $VERSION" --notes "$notes"
+
   build:
+    needs: release
     strategy:
       fail-fast: false
       matrix:
@@ -38,18 +63,30 @@ jobs:
         with:
           workspaces: desktop/src-tauri -> target
 
+      - name: Set version
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          node -e '
+            const fs = require("fs"), p = "desktop/src-tauri/tauri.conf.json";
+            const c = JSON.parse(fs.readFileSync(p, "utf8")); c.version = process.env.VERSION;
+            fs.writeFileSync(p, JSON.stringify(c, null, 2));'
+          sed -i.bak -E "s/^version = \".*\"/version = \"$VERSION\"/" desktop/src-tauri/Cargo.toml
+
       - name: Install CLI
         working-directory: desktop
         run: npm install
 
-      - name: Build
+      - name: Build and attach to release
         uses: tauri-apps/tauri-action@v0
         with:
           projectPath: desktop
           args: ${{ matrix.args }}
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: "Home Energy ${{ github.ref_name }}"
-          releaseDraft: true
+          tagName: v${{ needs.release.outputs.version }}
+          releaseName: "Home Energy ${{ needs.release.outputs.version }}"
+          releaseDraft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -280,3 +280,6 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .legend-item .sw { width: 14px; height: 0; border-top: 2.5px solid; border-radius: 2px; }
 .legend-item .sw.dash { border-top-style: dashed; }
 .setup ul { padding-left: 20px; margin: 8px 0; }
+
+.banner.update { background: color-mix(in srgb, var(--home) 10%, var(--surface)); border-color: color-mix(in srgb, var(--home) 35%, var(--rule)); }
+.banner.update .spacer { flex: 1; }

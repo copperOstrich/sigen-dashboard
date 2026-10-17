@@ -13,11 +13,13 @@
     <h1>Home energy</h1>
     <span class="pill" id="status"><span class="dot" id="status-dot"></span><span id="status-text">Connecting…</span></span>
     <span class="spacer"></span>
+    <button class="ghost-btn" id="widget-btn" type="button" hidden title="Switch to the small always-on-top widget">Compact widget</button>
     <button class="ghost-btn" id="settings-btn" type="button">Collector address</button>
   </header>
 
   <div class="banner" id="banner" role="alert"></div>
   <div class="banner spike" id="price-banner" role="status"></div>
+  <div class="banner update" id="update-banner" role="status"></div>
 
   <div class="grid">
     <section class="panel span-8" aria-labelledby="flow-h">
@@ -200,6 +202,7 @@
     <p class="muted" style="margin:0;font-size:14px">The computer, Pi or NAS running the collector on your home network.</p>
     <label for="api-input">Address</label>
     <input id="api-input" type="url" placeholder="http://192.168.1.50:8080" required>
+    <p class="muted" id="app-version" style="margin:10px 0 0;font-size:13px"></p>
     <div class="row">
       <button class="ghost-btn" value="cancel" type="submit" formnovalidate>Cancel</button>
       <button class="primary-btn" value="save" type="submit">Save and reconnect</button>

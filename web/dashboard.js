@@ -536,6 +536,59 @@
     sub.restart(); loadHistory(); loadDaily(); loadPrices();
   });
 
+  // ------------------------------------------------------------ desktop: widget switch + updates
+  if (S.isDesktop) {
+    const wb = $("widget-btn");
+    wb.hidden = false;
+    wb.addEventListener("click", () => window.__TAURI__.core.invoke("show_widget"));
+    if (window.__TAURI__.app) window.__TAURI__.app.getVersion().then((v) => { $("app-version").textContent = `Home Energy app version ${v}`; });
+
+    const ub = $("update-banner");
+    const showUpdate = (info, manual) => {
+      ub.innerHTML = ""; ub.className = "banner update";
+      if (!info) return;
+      if (info.error) {
+        if (!manual) return;
+        ub.classList.add("show");
+        ub.append(el("span", { text: `Couldn't check for updates: ${info.error}. You have version ${info.current}.` }),
+          el("span", { class: "spacer" }), el("button", { class: "ghost-btn", type: "button", text: "Close", onclick: () => showUpdate(null) }));
+        return;
+      }
+      if (!info.newer) {
+        if (!manual) return;
+        ub.classList.add("show");
+        ub.append(el("span", { text: `You're on the latest version (${info.current}).` }),
+          el("span", { class: "spacer" }), el("button", { class: "ghost-btn", type: "button", text: "Close", onclick: () => showUpdate(null) }));
+        return;
+      }
+      if (!manual && S.store.get("sigen.skipVersion") === info.latest) return;
+      ub.classList.add("show");
+      const msg = el("span", { text: `Home Energy ${info.latest} is available. You have ${info.current}.` });
+      const install = el("button", { class: "primary-btn", type: "button", text: "Download and install" });
+      install.addEventListener("click", async () => {
+        if (!info.asset) { window.open(info.page, "_blank"); return; }
+        install.disabled = true; install.textContent = "Downloading…";
+        try {
+          await S.installUpdate(info.asset);
+          msg.textContent = /Windows/i.test(navigator.userAgent)
+            ? "Starting the installer…"
+            : "The installer has opened. Drag Home Energy into Applications, then reopen it.";
+          install.remove();
+        } catch (e) {
+          msg.textContent = `The update didn't install: ${e}. You can download it from the releases page instead.`;
+          install.disabled = false; install.textContent = "Open download page";
+          info.asset = null;
+        }
+      });
+      ub.append(msg, el("span", { class: "spacer" }), install,
+        el("button", { class: "ghost-btn", type: "button", text: "Not now", onclick: () => { S.store.set("sigen.skipVersion", info.latest); showUpdate(null); } }));
+    };
+    const check = (manual) => S.checkForUpdate().then((i) => showUpdate(i, manual)).catch(() => {});
+    setTimeout(() => check(false), 4000);
+    setInterval(() => check(false), 6 * 3600 * 1000);
+    if (window.__TAURI__.event) window.__TAURI__.event.listen("check-updates", () => check(true));
+  }
+
   // ------------------------------------------------------------ start
   if (S.isDesktop && !S.store.get("sigen.api")) setTimeout(openSettings, 300);
   const sub = S.subscribe(renderLive, () => { connectFailed = true; renderStatus(); });
