@@ -153,7 +153,10 @@ def decode_alarms(values):
     """Return a list of {source, message, register, bit} for every set alarm bit."""
     out = []
     for key, (source, bits) in ALARM_BITS.items():
-        word = values.get(key)
+        try:
+            word = int(values.get(key) or 0)
+        except (TypeError, ValueError):
+            continue
         if not word:
             continue
         for bit in range(16):

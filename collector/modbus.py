@@ -115,6 +115,13 @@ def encode(dtype, value):
     return [(v >> (16 * (n - 1 - i))) & 0xFFFF for i in range(n)]
 
 
+def scale(raw, dtype, gain):
+    """Apply the register's gain. Gain-1 registers (states, alarm bit-fields, watts) stay integers."""
+    if dtype.startswith("str") or gain == 1:
+        return raw
+    return raw / gain
+
+
 def build_blocks(defs, max_regs=120):
     """Group register definitions into contiguous read blocks.
 
@@ -158,16 +165,14 @@ class DeviceReader:
                 regs = self.client.read_input_registers(self.unit, start, count)
                 for name, addr, dtype, gain, _u in block:
                     off = addr - start
-                    raw = decode(dtype, regs[off:off + reg_count(dtype)])
-                    values[name] = raw if dtype.startswith("str") else raw / gain
+                    values[name] = scale(decode(dtype, regs[off:off + reg_count(dtype)]), dtype, gain)
             except ModbusException:
                 # Fall back to one-by-one so a single unsupported register doesn't
                 # hide the rest of the block.
                 for name, addr, dtype, gain, _u in block:
                     try:
                         regs = self.client.read_input_registers(self.unit, addr, reg_count(dtype))
-                        raw = decode(dtype, regs)
-                        values[name] = raw if dtype.startswith("str") else raw / gain
+                        values[name] = scale(decode(dtype, regs), dtype, gain)
                     except ModbusException:
                         self.unsupported.add(name)
         return values

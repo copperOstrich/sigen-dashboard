@@ -72,7 +72,7 @@ SETTINGS_PATH = load_settings_file()
 from aemo import Aemo  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
-from modbus import DeviceReader, ModbusTCPClient  # noqa: E402
+from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
@@ -316,11 +316,14 @@ class Collector:
             except Exception as e:  # keep running whatever happens
                 self.fail_count += 1
                 msg = f"{type(e).__name__}: {e}"
+                kind = "connection" if isinstance(e, (OSError, ModbusError)) else "internal"
+                if kind == "internal":
+                    traceback.print_exc()
                 if self.state.get("status") != "error":
                     log("Modbus read failed:", msg)
                     self.store.event("connection", f"Lost connection to inverter ({msg})")
                 with self.cond:
-                    self.state.update(status="error", error=msg)
+                    self.state.update(status="error", error=msg, error_kind=kind)
                     self.version += 1
                     self.cond.notify_all()
                 self.client.close()

@@ -201,6 +201,12 @@
       dot.className = "dot bad";
       txt.textContent = "Inverter not responding";
       b.className = "banner show";
+      if (live.error_kind === "internal") {
+        txt.textContent = "Collector error";
+        b.append(el("span", { text: `The collector reached the inverter at ${live.target} but couldn't process its data: ${live.error}. ` +
+          "This is a bug in the dashboard, not your inverter; the details are in the collector's log." }));
+        return;
+      }
       b.append(el("span", { text: `The collector can't read the inverter at ${live.target}: ${live.error}. It keeps retrying` +
         (live.updated ? `; last good reading ${S.ago(live.updated)}.` : ". Check Modbus TCP is enabled and the IP address is right.") }));
     } else if (live === null || stale) {
