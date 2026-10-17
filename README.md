@@ -181,6 +181,7 @@ To build locally instead: install Rust and Node, then `cd desktop && npm install
 | `GET /api/daily?days=30` | Daily kWh totals and net cost |
 | `GET /api/prices?hours=12` | Retailer (Amber or LocalVolts): current prices, 24 h forecast, recent history |
 | `GET /api/aemo?hours=24` | AEMO wholesale price, forecast, demand, generation mix, interconnectors |
+| `GET /api/strings?hours=48&format=csv` | Per-minute voltage and current of each PV string (CSV download or JSON) |
 | `GET /api/health` | `{ok, status, updated}` for monitoring |
 
 Signs: `grid` positive = buying, negative = selling. `battery` positive = charging.

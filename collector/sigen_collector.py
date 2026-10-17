@@ -132,6 +132,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS prices(
               start INTEGER, channel TEXT, end INTEGER, per_kwh REAL, spot REAL, renewables REAL,
               descriptor TEXT, spike TEXT, PRIMARY KEY(start, channel));
+            CREATE TABLE IF NOT EXISTS string_samples(
+              ts INTEGER, n INTEGER, v REAL, a REAL, PRIMARY KEY(ts, n));
             CREATE TABLE IF NOT EXISTS aemo_prices(
               start INTEGER, region TEXT, rrp REAL, demand REAL, PRIMARY KEY(start, region));
             CREATE TABLE IF NOT EXISTS amber_days(
@@ -167,6 +169,17 @@ class Store:
                 (d, v["import_kwh"], v["import_cost"], v["export_kwh"], v["export_cost"], int(v["estimated"]))
                 for d, v in days.items()])
             self.db.commit()
+
+    def save_strings(self, rows):
+        with self.lock:
+            self.db.executemany("INSERT OR REPLACE INTO string_samples VALUES (?,?,?,?)", rows)
+            self.db.commit()
+
+    def strings(self, hours):
+        since = int(time.time() - hours * 3600)
+        with self.lock:
+            return self.db.execute(
+                "SELECT ts, n, v, a FROM string_samples WHERE ts>=? ORDER BY ts, n", (since,)).fetchall()
 
     def save_aemo(self, rows):
         with self.lock:
@@ -351,7 +364,7 @@ class Collector:
         if was == "error":
             self.store.event("connection", "Connection to inverter restored")
             log("Connection restored")
-        self.record(p, now)
+        self.record(p, now, inv)
 
     def state_from(self, p, inv, now):
         day = local_day(now)
@@ -446,10 +459,18 @@ class Collector:
             self.version += 1
             self.cond.notify_all()
 
-    def record(self, p, now):
+    def record(self, p, now, inv=None):
         minute = int(now // 60) * 60
         if self.minute_bucket is not None and minute != self.minute_bucket and self.minute_acc:
             acc = self.minute_acc
+            srows = []
+            for n in range(1, 5):  # per-string minute averages (for orientation analysis)
+                vs = [a[f"pv{n}_v"] for a in acc if a.get(f"pv{n}_v") is not None]
+                cs = [a[f"pv{n}_a"] for a in acc if a.get(f"pv{n}_a") is not None]
+                if vs and cs:
+                    srows.append((self.minute_bucket, n, sum(vs) / len(vs), sum(cs) / len(cs)))
+            if srows:
+                self.store.save_strings(srows)
             avg = lambda k: sum(a[k] for a in acc) / len(acc)
             last = acc[-1]
             buy, sell = self.retailer.prices_now() if self.retailer else (None, None)
@@ -462,7 +483,9 @@ class Collector:
         self.minute_bucket = minute
         self.minute_acc.append({"pv": p.get("pv_power", 0), "load": p.get("load_power", 0),
                                 "battery": p.get("battery_power", 0), "grid": p.get("grid_power", 0),
-                                "soc": p.get("battery_soc"), **{c: p.get(c) for c in COUNTERS}})
+                                "soc": p.get("battery_soc"), **{c: p.get(c) for c in COUNTERS},
+                                **{f"pv{n}_{k}": (inv or {}).get(f"pv{n}_{f}") for n in range(1, 5)
+                                   for k, f in (("v", "voltage"), ("a", "current"))}})
 
 
 # ---------------------------------------------------------------- simulator wiring
@@ -549,6 +572,20 @@ class Api(BaseHTTPRequestHandler):
                 a = self.retailer.snapshot() if self.retailer else {"enabled": False, "status": "off"}
                 a["history"] = self.store.price_history(min(48, max(1, float(q.get("hours", ["12"])[0]))))
                 return self._json(a)
+            if url.path == "/api/strings":
+                hours = min(24 * 31, max(1, float(q.get("hours", ["48"])[0])))
+                rows = self.store.strings(hours)
+                if q.get("format", [""])[0] == "csv":
+                    lines = ["timestamp_utc,local_time,string,voltage_v,current_a,power_w"]
+                    for ts, n, v, a in rows:
+                        lt = datetime.fromtimestamp(ts, TZ).strftime("%Y-%m-%d %H:%M")
+                        lines.append(f"{ts},{lt},PV{n},{v:.1f},{a:.2f},{v * a:.0f}")
+                    body = ("\n".join(lines) + "\n").encode()
+                    self._headers(200, "text/csv", {"Content-Length": str(len(body)),
+                                                    "Content-Disposition": 'attachment; filename="pv-strings.csv"'})
+                    self.wfile.write(body)
+                    return
+                return self._json([{"t": ts, "string": n, "v": round(v, 1), "a": round(a, 2)} for ts, n, v, a in rows])
             if url.path == "/api/debug":
                 raw = json.loads(json.dumps(self.collector.raw, default=str))
                 for dev in ("plant", "inverter"):
