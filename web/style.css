@@ -127,7 +127,8 @@ button { font: inherit; color: inherit; }
 .flow-caption { margin: 6px 0 0; color: var(--ink-2); font-size: 14px; min-height: 1.5em; }
 
 /* ---------------------------------------------------------------- battery */
-.batt { display: grid; grid-template-columns: 92px 1fr; gap: 20px; align-items: stretch; }
+.batt { display: grid; grid-template-columns: 122px 1fr; gap: 20px; align-items: stretch; }
+.batt .cell { margin-left: 30px; } /* room for the reserve label to the left of the cell */
 .cell { position: relative; border: 2.5px solid var(--ink-2); border-radius: 12px; min-height: 220px; padding: 5px; }
 .cell::before { content: ""; position: absolute; top: -9px; left: 50%; width: 30px; height: 7px; margin-left: -15px;
   background: var(--ink-2); border-radius: 3px 3px 0 0; }
@@ -226,7 +227,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
   .flow .unit { font-size: 22px; }
   .flow .lbl { font-size: 21px; }
   .flow .hub-label { font-size: 14px; }
-  .batt { grid-template-columns: 64px 1fr; gap: 16px; }
+  .batt { grid-template-columns: 94px 1fr; gap: 16px; }
   .cell { min-height: 180px; }
 }
 .cell { max-height: 300px; }
@@ -283,3 +284,14 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 
 .banner.update { background: color-mix(in srgb, var(--home) 10%, var(--surface)); border-color: color-mix(in srgb, var(--home) 35%, var(--rule)); }
 .banner.update .spacer { flex: 1; }
+
+.daily-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-2); margin: -4px 0 8px; }
+.daily-legend[hidden] { display: none; }
+.daily-legend .grp { display: inline-flex; gap: 12px; align-items: center; }
+.daily-legend .grp b { font-weight: 500; color: var(--ink-3); }
+.daily-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.chart .bar-seg { transition: opacity .15s; }
+.chart .bar-seg.dim { opacity: .35; }
+
+.seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.seg button { white-space: nowrap; flex: none; }

@@ -169,10 +169,11 @@
     <section class="panel span-8" aria-labelledby="daily-h">
       <div class="panel-head">
         <h2 id="daily-h">Daily energy</h2>
-        <span class="sub">last 30 days, <span id="daily-unit">kWh per day</span></span>
+        <span class="sub">last 30 days, <span id="daily-unit">kWh per day, energy in above zero and out below</span></span>
         <span class="spacer"></span>
         <div class="seg" id="daily-metric" role="group" aria-label="Daily measure">
-          <button type="button" data-k="pv" aria-pressed="true">Solar</button>
+          <button type="button" data-k="all" aria-pressed="true">All</button>
+          <button type="button" data-k="pv" aria-pressed="false">Solar</button>
           <button type="button" data-k="load" aria-pressed="false">Home</button>
           <button type="button" data-k="import" aria-pressed="false">Bought</button>
           <button type="button" data-k="export" aria-pressed="false">Sold</button>
@@ -180,6 +181,7 @@
           <button type="button" data-k="cost" aria-pressed="false">Cost</button>
         </div>
       </div>
+      <div class="daily-legend" id="daily-legend"></div>
       <div class="chart" id="daily-chart"></div>
     </section>
 

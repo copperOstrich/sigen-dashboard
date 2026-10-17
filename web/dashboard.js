@@ -3,7 +3,7 @@
   const $ = (id) => document.getElementById(id);
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-  let live = null, lastOk = 0, hours = 24, dailyKey = "pv", historyData = null, dailyData = [];
+  let live = null, lastOk = 0, hours = 24, dailyKey = "all", historyData = null, dailyData = [];
   const hidden = new Set();
 
   // ------------------------------------------------------------ power flow
@@ -285,17 +285,45 @@
     cost: ["Net cost", "var(--grid)"],
   };
   const money = (v) => (v == null ? "–" : v < 0 ? `$${(-v).toFixed(2)} credit` : `$${v.toFixed(2)}`);
+  const ALL_IN = [["pv", "Solar"], ["import", "Bought"], ["discharge", "From battery"]];
+  const ALL_OUT = [["load", "Home"], ["export", "Sold"], ["charge", "To battery"]];
+  const ALL_COLOR = { pv: "var(--solar)", import: "var(--grid)", discharge: "var(--battery)", load: "var(--home)", export: "var(--grid)", charge: "var(--battery)" };
+  (function buildDailyLegend() {
+    const lg = $("daily-legend");
+    const grp = (title, items) => el("span", { class: "grp" }, el("b", { text: title }),
+      ...items.map(([k, l]) => el("span", {}, el("i", { style: `background:${ALL_COLOR[k]}` }), l)));
+    lg.append(grp("In", ALL_IN), grp("Out", ALL_OUT));
+  })();
+
   function drawDaily() {
     const d = dailyData;
     const label = (day) => new Date(day + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" });
+    const title = (i) => new Date(d[i].day + "T12:00:00").toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+    $("daily-legend").hidden = dailyKey !== "all";
+    if (dailyKey === "all") {
+      const series = [...ALL_IN.map(([k, l]) => ({ key: k, label: l, color: ALL_COLOR[k], values: d.map((r) => r[k] || 0) })),
+        ...ALL_OUT.map(([k, l]) => ({ key: k, label: l, color: ALL_COLOR[k], values: d.map((r) => -(r[k] || 0)) }))];
+      C.stackedBarChart($("daily-chart"), {
+        labels: d.map((r) => label(r.day)), series, height: 280, yFmt: (v) => `${v}`, title,
+        ariaLabel: "Daily energy in (solar, bought, from battery) above zero and out (home, sold, to battery) below zero, kWh",
+        tip: (i) => {
+          const r = d[i], sum = (ks) => ks.reduce((a, [k]) => a + (r[k] || 0), 0);
+          const rows = [["Energy in", S.kwh(sum(ALL_IN)), null], ...ALL_IN.map(([k, l]) => [l, S.kwh(r[k]), ALL_COLOR[k]]),
+            ["Energy out", S.kwh(sum(ALL_OUT)), null], ...ALL_OUT.map(([k, l]) => [l, S.kwh(r[k]), ALL_COLOR[k]])];
+          if (r.cost != null) rows.push([r.cost_source === "calculated" ? "Net cost (est.)" : "Net cost (retailer)", money(r.cost), null]);
+          return rows;
+        },
+      });
+      return;
+    }
     C.barChart($("daily-chart"), {
       labels: d.map((r) => label(r.day)), values: d.map((r) => r[dailyKey] ?? null), color: DAILY[dailyKey][1], height: 230,
       allowNegative: dailyKey === "cost",
       yFmt: (v) => (dailyKey === "cost" ? (v < 0 ? `-$${-v}` : `$${v}`) : `${v}`), ariaLabel: `${DAILY[dailyKey][0]} per day`,
-      title: (i) => new Date(d[i].day + "T12:00:00").toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }),
+      title,
       tip: (i) => {
         const rows = ["pv", "load", "import", "export", "charge", "discharge"].map((k) => [DAILY[k][0], S.kwh(d[i][k]), DAILY[k][1]]);
-        if (d[i].cost != null) rows.push([d[i].cost_source === "calculated" ? "Net cost (est.)" : "Net cost (Amber)", money(d[i].cost), "var(--grid)"]);
+        if (d[i].cost != null) rows.push([d[i].cost_source === "calculated" ? "Net cost (est.)" : "Net cost (retailer)", money(d[i].cost), "var(--grid)"]);
         return rows;
       },
     });
@@ -306,7 +334,8 @@
   $("daily-metric").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
     dailyKey = b.dataset.k;
-    $("daily-unit").textContent = dailyKey === "cost" ? "dollars per day, below zero is a credit" : "kWh per day";
+    $("daily-unit").textContent = dailyKey === "cost" ? "dollars per day, below zero is a credit"
+      : dailyKey === "all" ? "kWh per day, energy in above zero and out below" : "kWh per day";
     $("daily-metric").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
     drawDaily();
   });

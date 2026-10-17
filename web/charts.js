@@ -213,5 +213,73 @@
     hit.addEventListener("pointerleave", () => { bars.forEach((b) => b.classList.remove("dim")); tip.style.display = "none"; });
   }
 
-  window.SigenCharts = { lineChart, barChart };
+  /**
+   * Diverging stacked bars: positive series stack up from zero, negative ones down.
+   * opts: { labels:[], series:[{key,label,color,values:[signed]}], height, yFmt, title(i), tip(i) }
+   */
+  function stackedBarChart(wrap, opts) {
+    wrap.innerHTML = "";
+    const n = opts.labels.length;
+    if (!n) { wrap.append(el("div", { class: "empty", text: "No daily totals yet. The first full day appears tomorrow." })); return; }
+    const W = Math.max(280, wrap.clientWidth), H = opts.height || 260;
+    const m = { l: 46, r: 6, t: 10, b: 26 };
+    let hi0 = 0, lo0 = 0;
+    for (let i = 0; i < n; i++) {
+      let up = 0, dn = 0;
+      for (const s of opts.series) { const v = s.values[i] || 0; if (v > 0) up += v; else dn += v; }
+      hi0 = Math.max(hi0, up); lo0 = Math.min(lo0, dn);
+    }
+    const ticks = niceTicks(lo0, hi0 || 1, 6), hi = ticks[ticks.length - 1], lo = ticks[0];
+    const y = (v) => m.t + (1 - (v - lo) / (hi - lo || 1)) * (H - m.t - m.b);
+    const slot = (W - m.l - m.r) / n, bw = Math.max(3, Math.min(26, slot - 4));
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": opts.ariaLabel || "Stacked bar chart" });
+    for (const tv of ticks) {
+      svg.append(el("line", { class: tv === 0 ? "zero" : "gridline", x1: m.l, x2: W - m.r, y1: y(tv), y2: y(tv) }));
+      svg.append(el("text", { class: "axis-label", x: m.l - 8, y: y(tv) + 4, "text-anchor": "end", text: opts.yFmt ? opts.yFmt(tv) : tv }));
+    }
+    const every = Math.ceil(n / Math.max(1, Math.floor((W - m.l) / 64)));
+    const cols = [];
+    for (let i = 0; i < n; i++) {
+      const g = el("g", {}), cx = m.l + slot * i + slot / 2, x0 = cx - bw / 2;
+      let up = 0, dn = 0;
+      const segs = opts.series.map((s) => ({ s, v: s.values[i] || 0 })).filter((o) => Math.abs(o.v) > 0.0001);
+      const lastUp = [...segs].reverse().find((o) => o.v > 0), lastDn = [...segs].reverse().find((o) => o.v < 0);
+      for (const o of segs) {
+        const a = o.v > 0 ? up : dn, b = a + o.v;
+        if (o.v > 0) up = b; else dn = b;
+        const top = y(Math.max(a, b)), bot = y(Math.min(a, b)), h = bot - top;
+        if (h < 0.5) continue;
+        const outer = o === lastUp || o === lastDn, r = outer ? Math.min(3, bw / 2, h) : 0;
+        let d;
+        if (r && o.v > 0) d = `M${x0},${bot}V${top + r}Q${x0},${top} ${x0 + r},${top}H${x0 + bw - r}Q${x0 + bw},${top} ${x0 + bw},${top + r}V${bot}Z`;
+        else if (r) d = `M${x0},${top}V${bot - r}Q${x0},${bot} ${x0 + r},${bot}H${x0 + bw - r}Q${x0 + bw},${bot} ${x0 + bw},${bot - r}V${top}Z`;
+        else d = `M${x0},${top}H${x0 + bw}V${bot}H${x0}Z`;
+        // 1px surface gap between stacked segments keeps adjacent colours distinct
+        g.append(el("path", { class: "bar-seg", d, fill: o.s.color, stroke: "var(--surface)", "stroke-width": 1 }));
+      }
+      svg.append(g); cols.push(g);
+      if (i % every === 0 || (i === n - 1 && n < 10)) {
+        svg.append(el("text", { class: "axis-label", x: cx, y: H - 6, "text-anchor": "middle", text: opts.labels[i] }));
+      }
+    }
+    const tip = el("div", { class: "tip", role: "status" });
+    const hit = el("rect", { x: m.l, y: 0, width: W - m.l - m.r, height: H, fill: "transparent" });
+    svg.append(hit);
+    wrap.append(svg, tip);
+    hit.addEventListener("pointermove", (e) => {
+      const r = svg.getBoundingClientRect();
+      const px = ((e.clientX - r.left) / r.width) * W;
+      const i = Math.min(n - 1, Math.max(0, Math.floor((px - m.l) / slot)));
+      cols.forEach((g, k) => g.querySelectorAll(".bar-seg").forEach((p) => p.classList.toggle("dim", k !== i)));
+      tip.innerHTML = "";
+      tip.append(el("div", { class: "t", text: opts.title ? opts.title(i) : opts.labels[i] }));
+      for (const [label, value, color] of opts.tip(i)) {
+        tip.append(el("div", { class: "r" }, el("span", {}, color ? el("i", { style: `background:${color}` }) : null, label), el("b", { text: value })));
+      }
+      tipPosition(tip, wrap, m.l + slot * i + slot / 2, 0);
+    });
+    hit.addEventListener("pointerleave", () => { cols.forEach((g) => g.querySelectorAll(".bar-seg").forEach((p) => p.classList.remove("dim"))); tip.style.display = "none"; });
+  }
+
+  window.SigenCharts = { lineChart, barChart, stackedBarChart };
 })();
