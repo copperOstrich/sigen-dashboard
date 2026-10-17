@@ -40,6 +40,35 @@ from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+
+def load_settings_file():
+    """Read KEY=value lines from sigen.env in the data folder (or SETTINGS_FILE).
+
+    Read on every start, so on a NAS you can edit the file and just restart the
+    container. Values in the file override the container's environment.
+    """
+    data_dir = Path(os.environ.get("DATA_DIR") or Path(__file__).resolve().parent.parent / "data")
+    path = Path(os.environ.get("SETTINGS_FILE") or data_dir / "sigen.env")
+    if not path.is_file():
+        return None
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if key.startswith("export "):
+            key = key[7:].strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        elif " #" in value:
+            value = value.split(" #", 1)[0].rstrip()
+        os.environ[key] = value
+    return path
+
+
+SETTINGS_PATH = load_settings_file()
 from aemo import Aemo  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
@@ -579,6 +608,8 @@ def main():
     Api.collector, Api.store, Api.retailer, Api.aemo = collector, store, retailer, aemo
     httpd = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), Api)
     httpd.daemon_threads = True
+    if SETTINGS_PATH:
+        log(f"Settings read from {SETTINGS_PATH}")
     log(f"SigenStor dashboard v{VERSION} on http://0.0.0.0:{HTTP_PORT}  "
         f"(reading {'simulator' if SIMULATE else f'{host}:{port}'}, plant unit {PLANT_UNIT}, "
         f"inverter unit {INVERTER_UNIT or 'off'}, every {POLL:g}s; prices: "

@@ -57,6 +57,10 @@ On a QNAP:
 History is kept in `/share/Container/sigen-dashboard`. To change a setting later, edit
 `sigen.env` and restart the container.
 
+Any Docker host can do the same: every setting can go in a `sigen.env` file in the data
+folder (mounted at `/data`), which is read on each start and overrides the container's
+environment.
+
 ### Until Modbus TCP is available
 
 Leave `SIGEN_SIMULATE=1`. A built-in simulator of an example home system (10 kWp solar,
