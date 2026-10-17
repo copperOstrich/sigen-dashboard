@@ -6,6 +6,11 @@ Live retailer prices from **Amber Electric** or **LocalVolts** add buy/sell pric
 warnings, forecasts and what your power is costing, and free **AEMO** market data shows
 the wholesale price, demand and generation mix for your region.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/power-flow-dark.png">
+  <img alt="Live power flow between solar, battery, home and grid, with battery detail" src="docs/screenshots/power-flow-light.png">
+</picture>
+
 ```
                                           ┌── Amber or LocalVolts API (optional)
 SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) ◀── AEMO market data
@@ -25,6 +30,61 @@ SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) �
 
 It never writes to the inverter. The Modbus client has no write functions, so it can't
 interfere with retailer battery control such as Amber SmartShift or a VPP.
+
+## Screenshots
+
+Screenshots switch between light and dark to match your GitHub theme; both versions are in
+[`docs/screenshots`](docs/screenshots). They were taken with the built-in simulator, so the
+numbers are realistic but not from a real home.
+
+**Live prices and the grid**: your retailer's buy and sell price with a 24-hour forecast,
+AEMO's wholesale price, and the region's generation mix.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/prices-grid-dark.png">
+  <img alt="Electricity price chart with Amber buy and sell prices and AEMO wholesale price, and the grid generation mix" src="docs/screenshots/prices-grid-light.png">
+</picture>
+
+**History**: power flows and battery charge over 24 hours to 30 days, with a crosshair to
+read any moment.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/history-dark.png">
+  <img alt="Power history chart with tooltip, and battery charge over 24 hours" src="docs/screenshots/history-light.png">
+</picture>
+
+**Daily energy and system status**: each day's energy in (solar, bought, from battery) and
+out (home, sold, to battery), plus inverter status and alarms.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/daily-system-dark.png">
+  <img alt="Daily energy balance chart and system status panel" src="docs/screenshots/daily-system-light.png">
+</picture>
+
+**Desktop widget and phone**: the always-on-top widget for Windows and Mac, and the
+dashboard on a phone.
+
+<p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/widget-dark.png">
+  <img alt="Compact desktop widget showing solar, home, battery and grid" src="docs/screenshots/widget-light.png" width="360">
+</picture>
+&nbsp;
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/phone-dark.png">
+  <img alt="Dashboard on a phone" src="docs/screenshots/phone-light.png" width="300">
+</picture>
+</p>
+
+<details>
+<summary>The whole dashboard</summary>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
+  <img alt="The complete dashboard" src="docs/screenshots/dashboard-light.png">
+</picture>
+
+</details>
 
 ## 1. Run the collector
 
