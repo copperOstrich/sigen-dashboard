@@ -47,10 +47,15 @@ SIGEN_HOST=192.168.1.60 python3 collector/sigen_collector.py   # real system
 ### Ready-made image (QNAP, Synology, Unraid, Portainer)
 
 GitHub builds an image for Intel/AMD and ARM: `ghcr.io/copperostrich/sigen-dashboard:latest`.
-[`qnap/docker-compose.yml`](qnap/docker-compose.yml) is ready to paste into
-**Container Station → Applications → Create**: fill in the values marked `EDIT`, then open
-`http://<NAS-IP>:8088`. It uses port 8088 because QTS's own admin page is on 8080, and it
-keeps its history in `/share/Container/sigen-dashboard`.
+On a QNAP:
+1. With File Station, save [`qnap/sigen.env.example`](qnap/sigen.env.example) as
+   `/share/Container/sigen-dashboard/sigen.env` and fill it in.
+2. Paste [`qnap/docker-compose.yml`](qnap/docker-compose.yml) into
+   **Container Station → Applications → Create**.
+3. Open `http://<NAS-IP>:8088`. It uses port 8088 because QTS's own admin page is on 8080.
+
+History is kept in `/share/Container/sigen-dashboard`. To change a setting later, edit
+`sigen.env` and restart the container.
 
 ### Until Modbus TCP is available
 

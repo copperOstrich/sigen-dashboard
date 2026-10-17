@@ -1,6 +1,8 @@
-# QNAP Container Station: Applications -> Create, paste this, fill in the values marked EDIT.
-# The dashboard will be at http://<your-NAS-IP>:8088
-# (QTS itself uses port 8080, so this container is published on 8088 instead.)
+# QNAP Container Station: Applications -> Create, paste this.
+# Settings live in /share/Container/sigen-dashboard/sigen.env (copy sigen.env.example there
+# with File Station and fill it in). To change a setting later, edit that file and restart
+# the container; no need to recreate the application.
+# The dashboard will be at http://<your-NAS-IP>:8088 (QTS itself uses port 8080).
 services:
   sigen-dashboard:
     image: ghcr.io/copperostrich/sigen-dashboard:latest
@@ -10,21 +12,5 @@ services:
       - "8088:8080"
     volumes:
       - /share/Container/sigen-dashboard:/data
-    environment:
-      TZ: Australia/Sydney                 # EDIT if you're not on Sydney time
-
-      # SigenStor: keep SIGEN_SIMULATE "1" until Modbus TCP is enabled, then set it to "0"
-      # and put your inverter's fixed IP address in SIGEN_HOST.
-      SIGEN_SIMULATE: "1"
-      SIGEN_HOST: "192.168.1.60"           # EDIT
-      SIGEN_PORT: "502"
-      SIGEN_PLANT_UNIT: "247"
-      SIGEN_INVERTER_UNIT: "1"
-
-      # Retailer prices (optional, pick one)
-      AMBER_API_KEY: ""                    # EDIT: app.amber.com.au -> Developers
-      LOCALVOLTS_API_KEY: ""
-      LOCALVOLTS_PARTNER_ID: ""
-
-      # AEMO wholesale data: NSW1, QLD1, VIC1, SA1 or TAS1
-      AEMO_REGION: "NSW1"                  # EDIT
+    env_file:
+      - /share/Container/sigen-dashboard/sigen.env
