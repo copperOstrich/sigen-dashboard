@@ -406,7 +406,7 @@
       box.dataset.state = "setup";
       box.innerHTML = "";
       box.append(setupBox());
-      $("price-sub").textContent = hasAemo ? `wholesale price for ${regionName(aemoSummary.region)},` : "not connected";
+      $("price-sub").textContent = hasAemo ? `wholesale price for ${regionName(aemoSummary.region)}` : "not connected";
       $("price-chart").parentElement.hidden = !hasAemo;
       $("price-note").textContent = wholesaleAdvice(aemoSummary, aemoData && aemoData.forecast).join(" ");
       return;
@@ -437,7 +437,7 @@
         el("dt", { text: p.renewables != null ? `Renewables (${name})` : "Renewables (AEMO)" }), el("dd", { text: ren == null ? "–" : `${Math.round(ren)}%` }),
         el("dt", { text: "This price until" }), el("dd", { text: p.ends ? clock(p.ends) : "–" }),
         p.period ? el("dt", { text: "Network period" }) : null, p.period ? el("dd", { text: p.period }) : null));
-    $("price-sub").textContent = p.mode === "simulator" ? `simulated ${name} prices,` : `from ${name},`;
+    $("price-sub").textContent = p.mode === "simulator" ? `simulated ${name} prices` : `from ${name}`;
     const tips = priceAdvice(p, priceData && priceData.forecast);
     $("price-note").textContent = tips.join(" ");
     if (p.spike === "spike") {
@@ -451,7 +451,8 @@
     const a = aemoData && aemoData.enabled ? aemoData : null;
     if (!d && !a) return;
     const rows = new Map();
-    const row = (t) => { if (!rows.has(t)) rows.set(t, { t, buy: null, sell: null, ws: null }); return rows.get(t); };
+    // Key everything to its half-hour so retailer and AEMO points share rows (sources differ by a second or so)
+    const row = (t0) => { const t = Math.floor((t0 + 30) / 1800) * 1800; if (!rows.has(t)) rows.set(t, { t, buy: null, sell: null, ws: null }); return rows.get(t); };
     if (d) {
       for (const h of d.history || []) Object.assign(row(h.t), { buy: h.buy, sell: h.sell });
       for (const f of d.forecast || []) Object.assign(row(f.t), { buy: f.buy, sell: f.sell, f });

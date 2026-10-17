@@ -55,8 +55,12 @@ def _slim(iv):
     if not iv:
         return None
     adv = iv.get("advancedPrice") or {}
+    # Amber's startTime is one second past the boundary (e.g. 02:00:01Z); use end - duration
+    # so intervals line up with AEMO's and with our own half-hour buckets.
+    end = _ts(iv["endTime"])
+    start = end - int(iv.get("duration") or 30) * 60 if iv.get("duration") else round(_ts(iv["startTime"]) / 60) * 60
     return {
-        "start": _ts(iv["startTime"]), "end": _ts(iv["endTime"]), "type": iv.get("type"),
+        "start": start, "end": end, "type": iv.get("type"),
         "per_kwh": iv.get("perKwh"), "spot": iv.get("spotPerKwh"), "renewables": iv.get("renewables"),
         "descriptor": iv.get("descriptor"), "spike": iv.get("spikeStatus"), "estimate": iv.get("estimate"),
         "period": (iv.get("tariffInformation") or {}).get("period"),
