@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy widget</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  html, body { background: transparent; height: 100%; overflow: hidden; user-select: none; -webkit-user-select: none; }
+  body.browser { background: var(--page); display: grid; place-items: center; }
+  .w {
+    width: 100%; height: 100%; max-width: 360px; max-height: 262px; display: flex; flex-direction: column;
+    background: color-mix(in srgb, var(--surface) 96%, transparent); border: 1px solid var(--rule-strong);
+    border-radius: 16px; padding: 10px 12px 12px; overflow: hidden;
+  }
+  .w-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); cursor: default; min-height: 24px; }
+  .w-head .t { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .w-head button { border: 0; background: none; padding: 2px 4px; border-radius: 6px; cursor: pointer; color: var(--ink-3); line-height: 0; }
+  .w-head button:hover { background: var(--surface-2); color: var(--ink); }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin: 6px 0 10px; flex: 1; }
+  .tile { display: flex; flex-direction: column; justify-content: center; padding: 2px 0 2px 10px; border-left: 3px solid; }
+  .tile .k { font-size: 12.5px; color: var(--ink-2); }
+  .tile .v { font: 600 24px/1.1 var(--font-num); font-variant-numeric: tabular-nums; }
+  .tile .v small { font-size: 13px; font-weight: 500; color: var(--ink-2); margin-left: 2px; }
+  .soc { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-2); }
+  .bar { flex: 1; height: 8px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--rule); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--battery); border-radius: 3px; transition: width 1s ease; }
+  .soc b { font: 600 15px var(--font-num); color: var(--ink); font-variant-numeric: tabular-nums; }
+  .price { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+  .price b { font: 600 15px var(--font-num); color: var(--ink); font-variant-numeric: tabular-nums; }
+  .price .sp { flex: 1; }
+  .price[hidden] { display: none; }
+  .price .tag { font-size: 11.5px; padding: 0 7px; }
+  .w.stale .tiles, .w.stale .soc, .w.stale .price { opacity: .45; }
+</style>
+</head>
+<body>
+<div class="w" id="w">
+  <div class="w-head" data-tauri-drag-region>
+    <span class="dot" id="dot" data-tauri-drag-region></span>
+    <span class="t" id="head" data-tauri-drag-region>Connecting…</span>
+    <button type="button" id="open" title="Open dashboard" aria-label="Open dashboard">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2" y="2" width="12" height="12" rx="2.5"/><path d="M2 6.5h12M6.5 6.5V14"/></svg>
+    </button>
+    <button type="button" id="hide" title="Hide widget" aria-label="Hide widget">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+    </button>
+  </div>
+  <div class="tiles">
+    <div class="tile" style="border-color:var(--solar)"><span class="k">Solar</span><span class="v" id="pv">–</span></div>
+    <div class="tile" style="border-color:var(--home)"><span class="k">Home</span><span class="v" id="load">–</span></div>
+    <div class="tile" style="border-color:var(--battery)"><span class="k" id="bk">Battery</span><span class="v" id="batt">–</span></div>
+    <div class="tile" style="border-color:var(--grid);border-left-style:dashed"><span class="k" id="gk">Grid</span><span class="v" id="grid">–</span></div>
+  </div>
+  <div class="soc"><span>Battery</span><div class="bar"><i id="socbar" style="width:0"></i></div><b id="soc">–</b></div>
+  <div class="price" id="price" hidden><span>Buy</span><b id="buy">–</b><span>Sell</span><b id="sell">–</b><span class="sp"></span><span class="tag" id="ptag"></span></div>
+</div>
+<script src="common.js"></script>
+<script>
+(function () {
+  const S = window.Sigen, $ = (id) => document.getElementById(id);
+  const T = window.__TAURI__;
+  if (!T) document.body.classList.add("browser");
+  let lastOk = 0, live = null;
+
+  function val(id, w) {
+    const n = $(id), a = Math.abs(w || 0);
+    n.innerHTML = "";
+    if (w == null) { n.textContent = "–"; return; }
+    n.append(a < 1000 ? String(Math.round(a)) : (a / 1000).toFixed(a >= 10000 ? 1 : 2));
+    n.append(S.el("small", { text: a < 1000 ? "W" : "kW" }));
+  }
+  function render(d) {
+    live = d;
+    if (d.status === "ok") lastOk = Date.now();
+    status();
+    if (!d.power) return;
+    const p = d.power, desc = S.describe(p);
+    val("pv", p.pv); val("load", p.load); val("batt", p.battery); val("grid", p.grid);
+    $("bk").textContent = desc.battery === "Idle" ? "Battery, idle" : `Battery, ${desc.battery.toLowerCase()}`;
+    $("gk").textContent = desc.grid === "Balanced" ? "Grid" : desc.grid === "Buying" ? "Grid, buying" : "Grid, selling";
+    const soc = d.battery && d.battery.soc;
+    $("soc").textContent = soc == null ? "–" : `${Math.round(soc)}%`;
+    $("socbar").style.width = `${soc || 0}%`;
+    const pr = d.price || {};
+    $("price").hidden = pr.buy == null;
+    if (pr.buy != null) {
+      $("buy").textContent = `${pr.buy.toFixed(1)}c`;
+      $("sell").textContent = pr.sell == null ? "–" : `${pr.sell.toFixed(1)}c`;
+      const t = { extremelyLow: ["Very cheap", "cheap"], negative: ["Very cheap", "cheap"], veryLow: ["Very cheap", "cheap"],
+        low: ["Cheap", "cheap"], neutral: ["Average", ""], high: ["Expensive", "potential"], spike: ["Spike", "spike"] }[pr.descriptor] || ["", ""];
+      $("ptag").textContent = pr.spike === "potential" && pr.descriptor !== "spike" ? "Spike possible" : t[0];
+      $("ptag").className = "tag " + (pr.spike === "potential" ? "potential" : t[1]);
+    }
+  }
+  function status() {
+    const fresh = lastOk && Date.now() - lastOk < 30000 && live && live.status === "ok";
+    $("w").classList.toggle("stale", !fresh);
+    $("dot").className = "dot " + (fresh ? "ok" : live && live.status === "error" ? "bad" : "warn");
+    $("head").textContent = fresh
+      ? (live.mode === "simulator" ? "Simulated, " : "") + new Date(live.updated * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : live && live.status === "error" ? "Inverter not responding" : live ? `No data ${S.ago(live.updated)}` : "Can't reach collector";
+  }
+  let base = S.apiBase();
+  setInterval(() => { // pick up an address saved in the dashboard window
+    if (S.apiBase() !== base) { base = S.apiBase(); lastOk = 0; live = null; sub.restart(); }
+    status();
+  }, 5000);
+  const sub = S.subscribe(render, () => status());
+  // The dashboard window saves the collector address; reconnect when it changes.
+  window.addEventListener("storage", (e) => { if (e.key === "sigen.api") { lastOk = 0; live = null; sub.restart(); } });
+
+  async function invoke(cmd) {
+    if (T && T.core) return T.core.invoke(cmd);
+    if (cmd === "open_dashboard") window.open("index.html", "_blank");
+  }
+  $("open").addEventListener("click", () => invoke("open_dashboard"));
+  $("hide").addEventListener("click", () => invoke("hide_widget"));
+  document.querySelector(".tiles").addEventListener("dblclick", () => invoke("open_dashboard"));
+  $("head").addEventListener("click", () => { if (!live || live.status !== "ok") invoke("open_dashboard"); });
+  if (T && !S.store.get("sigen.api")) invoke("open_dashboard"); // first run: ask for the collector address
+})();
+</script>
+</body>
+</html>

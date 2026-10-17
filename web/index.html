@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home energy</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <h1>Home energy</h1>
+    <span class="pill" id="status"><span class="dot" id="status-dot"></span><span id="status-text">Connecting…</span></span>
+    <span class="spacer"></span>
+    <button class="ghost-btn" id="settings-btn" type="button">Collector address</button>
+  </header>
+
+  <div class="banner" id="banner" role="alert"></div>
+  <div class="banner spike" id="price-banner" role="status"></div>
+
+  <div class="grid">
+    <section class="panel span-8" aria-labelledby="flow-h">
+      <div class="panel-head">
+        <h2 id="flow-h">Right now</h2>
+        <span class="sub" id="flow-sub"></span>
+      </div>
+      <div class="flow" id="flow">
+        <svg viewBox="0 0 640 400" aria-hidden="true">
+          <g id="wires"></g>
+          <rect class="hub" x="290" y="178" width="60" height="44" rx="10"/>
+          <text class="hub-label" x="320" y="204">Inverter</text>
+
+          <!-- Solar -->
+          <g transform="translate(320 64)">
+            <circle class="node-ring" r="38" style="stroke:var(--solar)"/>
+            <g class="icon" style="stroke:var(--solar)">
+              <circle r="9"/>
+              <path d="M0-20v5M0 15v5M-20 0h5M15 0h5M-14-14l3.5 3.5M10.5 10.5l3.5 3.5M14-14l-3.5 3.5M-10.5 10.5l-3.5 3.5"/>
+            </g>
+            <text class="lbl side" x="58" y="-8" style="text-anchor:start">Solar</text>
+            <text class="val side" x="58" y="24" style="text-anchor:start"><tspan id="v-pv">–</tspan><tspan class="unit" dx="4" id="u-pv">kW</tspan></text>
+          </g>
+
+          <!-- Grid -->
+          <g transform="translate(86 200)">
+            <circle class="node-ring" r="38" style="stroke:var(--grid)"/>
+            <g class="icon" style="stroke:var(--grid)">
+              <path d="M-9 18l9-36 9 36M-6 6h12M-4-4h8M-16-10h32M-12-18h24"/>
+            </g>
+            <text class="val" x="0" y="80"><tspan id="v-grid">–</tspan><tspan class="unit" dx="4" id="u-grid">kW</tspan></text>
+            <text class="lbl below" x="0" y="102" id="l-grid">Grid</text>
+          </g>
+
+          <!-- Home -->
+          <g transform="translate(554 200)">
+            <circle class="node-ring" r="38" style="stroke:var(--home)"/>
+            <g class="icon" style="stroke:var(--home)">
+              <path d="M-15-2L0-15l15 13M-11-5v18h22V-5M-4 13V3h8v10"/>
+            </g>
+            <text class="val" x="0" y="80"><tspan id="v-load">–</tspan><tspan class="unit" dx="4" id="u-load">kW</tspan></text>
+            <text class="lbl below" x="0" y="102">Home</text>
+          </g>
+
+          <!-- Battery -->
+          <g transform="translate(320 336)">
+            <circle class="node-ring" r="38" style="stroke:var(--battery)"/>
+            <g class="icon" style="stroke:var(--battery)">
+              <rect x="-10" y="-15" width="20" height="30" rx="3"/>
+              <path d="M-4-19h8"/>
+              <rect id="batt-icon-fill" x="-6" y="-11" width="12" height="22" rx="1" style="fill:var(--battery);stroke:none"/>
+            </g>
+            <text class="lbl side" x="58" y="-8" style="text-anchor:start" id="l-batt">Battery</text>
+            <text class="val side" x="58" y="24" style="text-anchor:start"><tspan id="v-batt">–</tspan><tspan class="unit" dx="4" id="u-batt">kW</tspan></text>
+          </g>
+        </svg>
+      </div>
+      <p class="flow-caption" id="caption" aria-live="polite"></p>
+    </section>
+
+    <section class="panel span-4" aria-labelledby="batt-h">
+      <div class="panel-head"><h2 id="batt-h">Battery</h2><span class="sub" id="batt-sub"></span></div>
+      <div class="batt">
+        <div class="cell" aria-hidden="true">
+          <div class="cell-fill" id="cell-fill" style="height:0"></div>
+          <div class="cell-mark" id="cell-mark"><span id="cell-mark-l"></span></div>
+        </div>
+        <div>
+          <div class="soc-big num"><span id="soc">–</span><small>%</small></div>
+          <div class="batt-state" id="batt-state">&nbsp;</div>
+          <dl class="facts">
+            <dt>Energy stored</dt><dd id="f-avail">–</dd>
+            <dt>Room to charge</dt><dd id="f-room">–</dd>
+            <dt>Health</dt><dd id="f-soh">–</dd>
+            <dt>Cell temperature</dt><dd id="f-temp">–</dd>
+            <dt>Cell voltage</dt><dd id="f-volt">–</dd>
+            <div class="sep"></div>
+            <dt>Reserve kept</dt><dd id="f-cut">–</dd>
+            <dt>Max charge / discharge</dt><dd id="f-max">–</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel span-12" aria-labelledby="today-h">
+      <div class="panel-head"><h2 id="today-h">Today so far</h2><span class="sub" id="today-sub"></span></div>
+      <div class="today">
+        <div><div class="k"><i style="background:var(--solar)"></i>Solar made</div><div class="v num" id="t-pv">–</div></div>
+        <div><div class="k"><i style="background:var(--home)"></i>Home used</div><div class="v num" id="t-load">–</div></div>
+        <div><div class="k"><i style="background:var(--grid)"></i>Bought</div><div class="v num" id="t-imp">–</div></div>
+        <div><div class="k"><i style="background:var(--grid)"></i>Sold</div><div class="v num" id="t-exp">–</div></div>
+        <div><div class="k"><i style="background:var(--battery)"></i>Charged</div><div class="v num" id="t-chg">–</div></div>
+        <div><div class="k"><i style="background:var(--battery)"></i>Discharged</div><div class="v num" id="t-dis">–</div></div>
+        <div><div class="k">Self-sufficient</div><div class="v num" id="t-self">–</div></div>
+        <div><div class="k">Net cost</div><div class="v num" id="t-cost">–</div></div>
+      </div>
+    </section>
+
+    <section class="panel span-12" aria-labelledby="price-h" id="price-panel">
+      <div class="panel-head">
+        <h2 id="price-h">Electricity price</h2>
+        <span class="sub" id="price-sub"></span>
+        <div class="legend" id="price-legend"></div>
+      </div>
+      <div class="price-grid">
+        <div class="price-now" id="price-now"></div>
+        <div>
+          <div class="chart" id="price-chart"></div>
+          <p class="chart-note" id="price-note"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel span-12" aria-labelledby="hist-h">
+      <div class="panel-head">
+        <h2 id="hist-h">Power</h2>
+        <div class="legend" id="legend"></div>
+        <span class="spacer"></span>
+        <div class="seg" id="range" role="group" aria-label="Time range">
+          <button type="button" data-h="24" aria-pressed="true">24 h</button>
+          <button type="button" data-h="72" aria-pressed="false">3 days</button>
+          <button type="button" data-h="168" aria-pressed="false">7 days</button>
+          <button type="button" data-h="720" aria-pressed="false">30 days</button>
+        </div>
+      </div>
+      <div class="chart" id="power-chart"></div>
+      <p class="chart-note">Battery above zero is charging, below is discharging. Grid above zero is buying, below is selling.</p>
+      <div class="panel-head" style="margin:18px 0 6px"><h2>Battery charge</h2></div>
+      <div class="chart" id="soc-chart"></div>
+    </section>
+
+    <section class="panel span-8" aria-labelledby="daily-h">
+      <div class="panel-head">
+        <h2 id="daily-h">Daily energy</h2>
+        <span class="sub">last 30 days, <span id="daily-unit">kWh per day</span></span>
+        <span class="spacer"></span>
+        <div class="seg" id="daily-metric" role="group" aria-label="Daily measure">
+          <button type="button" data-k="pv" aria-pressed="true">Solar</button>
+          <button type="button" data-k="load" aria-pressed="false">Home</button>
+          <button type="button" data-k="import" aria-pressed="false">Bought</button>
+          <button type="button" data-k="export" aria-pressed="false">Sold</button>
+          <button type="button" data-k="discharge" aria-pressed="false">Discharged</button>
+          <button type="button" data-k="cost" aria-pressed="false">Cost</button>
+        </div>
+      </div>
+      <div class="chart" id="daily-chart"></div>
+    </section>
+
+    <section class="panel span-4" aria-labelledby="sys-h">
+      <div class="panel-head"><h2 id="sys-h">System</h2><span class="sub" id="sys-sub"></span></div>
+      <div id="alarms"></div>
+      <dl class="facts" id="sys-facts"></dl>
+      <details class="more">
+        <summary>Solar strings and recent events</summary>
+        <table class="strings" id="strings"></table>
+        <ul class="events" id="events" style="margin-top:12px"></ul>
+      </details>
+    </section>
+  </div>
+</div>
+
+<dialog id="settings">
+  <form method="dialog" id="settings-form">
+    <h2 style="margin:0 0 4px;font-size:17px">Collector address</h2>
+    <p class="muted" style="margin:0;font-size:14px">The computer, Pi or NAS running the collector on your home network.</p>
+    <label for="api-input">Address</label>
+    <input id="api-input" type="url" placeholder="http://192.168.1.50:8080" required>
+    <div class="row">
+      <button class="ghost-btn" value="cancel" type="submit" formnovalidate>Cancel</button>
+      <button class="primary-btn" value="save" type="submit">Save and reconnect</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="common.js"></script>
+<script src="charts.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>

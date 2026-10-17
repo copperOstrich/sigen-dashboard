@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Home Energy",
+  "version": "1.0.0",
+  "identifier": "au.home.sigen-energy",
+  "build": {
+    "frontendDist": "../../web"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "label": "widget",
+        "title": "Home Energy widget",
+        "url": "widget.html",
+        "width": 360,
+        "height": 262,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visibleOnAllWorkspaces": true,
+        "focus": false
+      },
+      {
+        "label": "dashboard",
+        "title": "Home Energy",
+        "url": "index.html",
+        "width": 1320,
+        "height": 920,
+        "minWidth": 420,
+        "minHeight": 500,
+        "visible": false,
+        "center": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "shortDescription": "SigenStor solar and battery dashboard",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
