@@ -28,6 +28,7 @@ Configuration (environment variables):
 import json
 import mimetypes
 import os
+import signal
 import sqlite3
 import sys
 import threading
@@ -169,6 +170,11 @@ class Store:
                 (d, v["import_kwh"], v["import_cost"], v["export_kwh"], v["export_cost"], int(v["estimated"]))
                 for d, v in days.items()])
             self.db.commit()
+
+    def close(self):
+        with self.lock:
+            self.db.commit()
+            self.db.close()
 
     def save_strings(self, rows):
         with self.lock:
@@ -316,6 +322,8 @@ class Collector:
         self.fail_count = 0
         self.first_seen = {}
         self.last_ignored = {}
+        self.rec_lock = threading.Lock()
+        self.stopping = threading.Event()
         self.raw = {"plant": {}, "inverter": {}}
 
     def snapshot(self):
@@ -459,25 +467,36 @@ class Collector:
             self.version += 1
             self.cond.notify_all()
 
+    def flush_minute(self):
+        """Write the readings collected so far for the current minute (also used on shutdown)."""
+        if self.minute_bucket is None or not self.minute_acc:
+            return
+        acc = self.minute_acc
+        srows = []
+        for n in range(1, 5):  # per-string minute averages (for orientation analysis)
+            vs = [a[f"pv{n}_v"] for a in acc if a.get(f"pv{n}_v") is not None]
+            cs = [a[f"pv{n}_a"] for a in acc if a.get(f"pv{n}_a") is not None]
+            if vs and cs:
+                srows.append((self.minute_bucket, n, sum(vs) / len(vs), sum(cs) / len(cs)))
+        if srows:
+            self.store.save_strings(srows)
+        avg = lambda k: sum(a[k] for a in acc) / len(acc)
+        last = acc[-1]
+        buy, sell = self.retailer.prices_now() if self.retailer else (None, None)
+        self.store.insert([(self.minute_bucket, local_day(self.minute_bucket),
+                            avg("pv"), avg("load"), avg("battery"), avg("grid"), last["soc"],
+                            *[last[c] for c in COUNTERS], buy, sell)])
+        self.minute_acc = []
+
     def record(self, p, now, inv=None):
+        with self.rec_lock:
+            if not self.stopping.is_set():
+                self._record(p, now, inv)
+
+    def _record(self, p, now, inv=None):
         minute = int(now // 60) * 60
         if self.minute_bucket is not None and minute != self.minute_bucket and self.minute_acc:
-            acc = self.minute_acc
-            srows = []
-            for n in range(1, 5):  # per-string minute averages (for orientation analysis)
-                vs = [a[f"pv{n}_v"] for a in acc if a.get(f"pv{n}_v") is not None]
-                cs = [a[f"pv{n}_a"] for a in acc if a.get(f"pv{n}_a") is not None]
-                if vs and cs:
-                    srows.append((self.minute_bucket, n, sum(vs) / len(vs), sum(cs) / len(cs)))
-            if srows:
-                self.store.save_strings(srows)
-            avg = lambda k: sum(a[k] for a in acc) / len(acc)
-            last = acc[-1]
-            buy, sell = self.retailer.prices_now() if self.retailer else (None, None)
-            self.store.insert([(self.minute_bucket, local_day(self.minute_bucket),
-                                avg("pv"), avg("load"), avg("battery"), avg("grid"), last["soc"],
-                                *[last[c] for c in COUNTERS], buy, sell)])
-            self.minute_acc = []
+            self.flush_minute()
             if minute % 86400 == 0:
                 self.store.prune()
         self.minute_bucket = minute
@@ -674,7 +693,26 @@ def main():
         f"inverter unit {INVERTER_UNIT or 'off'}, every {POLL:g}s; prices: "
         f"{(retailer.state['provider'] + ' ' + retailer.state['mode']) if retailer else 'off'}; "
         f"AEMO: {AEMO_REGION if AEMO_ENABLED else 'off'}{' (simulated)' if AEMO_SIMULATE else ''})")
-    httpd.serve_forever()
+
+    def stop(signum, _frame):
+        # Inside a container this process is PID 1, which ignores SIGTERM unless it
+        # installs a handler, so `docker stop` would otherwise wait 10 s and kill it.
+        log(f"Stopping ({signal.Signals(signum).name})")
+        threading.Thread(target=httpd.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    try:
+        httpd.serve_forever(poll_interval=0.5)
+    finally:
+        try:
+            with collector.rec_lock:
+                collector.stopping.set()
+                collector.flush_minute()
+            store.close()
+        except Exception as e:  # never block shutdown
+            log("Error while saving on shutdown:", e)
+        log("Stopped cleanly")
 
 
 if __name__ == "__main__":
