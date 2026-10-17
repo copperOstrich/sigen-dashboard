@@ -150,8 +150,15 @@ ALARM_BITS = {
 
 
 def decode_alarms(values):
-    """Return a list of {source, message, register, bit} for every set alarm bit."""
-    out = []
+    """Decode the alarm bit-fields.
+
+    Returns (alarms, ignored): alarms is a list of {source, message, register, bit};
+    ignored maps register -> raw value for words that were skipped because they have
+    bits set that the protocol doesn't define. Firmware that doesn't implement an alarm
+    register returns a filler value (often 0xFFFF); taking it at face value would show a
+    wall of bogus faults, so such a word is treated as "not supported" instead.
+    """
+    out, ignored = [], {}
     for key, (source, bits) in ALARM_BITS.items():
         try:
             word = int(values.get(key) or 0)
@@ -159,8 +166,11 @@ def decode_alarms(values):
             continue
         if not word:
             continue
+        defined = sum(1 << b for b in bits)
+        if word & ~defined & 0xFFFF:
+            ignored[key] = word
+            continue
         for bit in range(16):
             if word & (1 << bit):
-                out.append({"source": source, "message": bits.get(bit, f"Unknown alarm (bit {bit})"),
-                            "register": key, "bit": bit})
-    return out
+                out.append({"source": source, "message": bits[bit], "register": key, "bit": bit})
+    return out, ignored

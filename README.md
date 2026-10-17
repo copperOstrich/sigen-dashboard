@@ -186,6 +186,10 @@ Signs: `grid` positive = buying, negative = selling. `battery` positive = chargi
   see `SIGEN_INVERTER_UNIT`.
 * `exception code 2` in logs means a register your firmware doesn't expose; it's
   skipped automatically.
+* **Diagnostics:** `http://<collector>:8080/api/debug` (8088 on a QNAP) shows the raw values
+  read from the inverter, including alarm registers in hex and any registers your firmware
+  doesn't support. Alarm registers with bits set that Sigenergy's protocol doesn't define
+  are treated as unsupported filler values and ignored (they're listed in the log).
 * **Widget says "Can't reach collector"**: click its status text to open the dashboard and
   fix the address. The collector must be reachable from that computer on port 8080.
 

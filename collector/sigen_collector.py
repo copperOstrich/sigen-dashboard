@@ -302,6 +302,8 @@ class Collector:
         self.last_alarm_set = set()
         self.fail_count = 0
         self.first_seen = {}
+        self.last_ignored = {}
+        self.raw = {"plant": {}, "inverter": {}}
 
     def snapshot(self):
         with self.cond:
@@ -340,6 +342,9 @@ class Collector:
                 inv = self.inverter.read()
             except Exception as e:  # inverter unit id may be wrong - plant data still useful
                 inv = {"_error": str(e)}
+        self.raw = {"plant": p, "inverter": inv, "read_at": time.time(),
+                    "unsupported": {"plant": sorted(self.plant.unsupported),
+                                    "inverter": sorted(self.inverter.unsupported) if self.inverter else []}}
         now = time.time()
         was = self.state.get("status")
         self.state_from(p, inv, now)
@@ -370,7 +375,12 @@ class Collector:
         if load_today and imp is not None and load_today > 0.1:
             self_suff = round(max(0.0, min(100.0, (1 - imp / load_today) * 100)), 1)
 
-        alarms = decode_alarms(p)
+        alarms, ignored = decode_alarms(p)
+        if ignored != self.last_ignored:
+            if ignored:
+                log("Ignoring alarm registers with undefined bits set (likely not supported by this firmware): " +
+                    ", ".join(f"{k}=0x{v:04X}" for k, v in ignored.items()))
+            self.last_ignored = ignored
         keys = {(a["register"], a["bit"]) for a in alarms}
         for a in alarms:
             if (a["register"], a["bit"]) not in self.last_alarm_set:
@@ -425,6 +435,7 @@ class Collector:
                 "max_active_power": r(p.get("max_active_power")),
             },
             "alarms": alarms,
+            "alarm_registers_ignored": {k: f"0x{v:04X}" for k, v in ignored.items()},
             "events": self.store.events(12),
             "price": self.retailer.summary() if self.retailer else {"enabled": False, "status": "off"},
             "aemo": self.aemo.summary() if self.aemo else {"enabled": False, "status": "off"},
@@ -538,6 +549,14 @@ class Api(BaseHTTPRequestHandler):
                 a = self.retailer.snapshot() if self.retailer else {"enabled": False, "status": "off"}
                 a["history"] = self.store.price_history(min(48, max(1, float(q.get("hours", ["12"])[0]))))
                 return self._json(a)
+            if url.path == "/api/debug":
+                raw = json.loads(json.dumps(self.collector.raw, default=str))
+                for dev in ("plant", "inverter"):
+                    for k, v in list((raw.get(dev) or {}).items()):
+                        if k.startswith("alarm") and isinstance(v, (int, float)):
+                            raw[dev][k] = f"0x{int(v):04X}"
+                raw["version"] = VERSION
+                return self._json(raw)
             if url.path == "/api/health":
                 s = self.collector.snapshot()
                 return self._json({"ok": s.get("status") == "ok", "status": s.get("status"),
