@@ -1,11 +1,14 @@
 name: Build desktop widget apps
 
-# Builds the Windows installer (.msi + .exe) and macOS app (.dmg, Intel + Apple Silicon)
-# and publishes them as a GitHub release. The desktop app checks the latest release and
-# offers to download and install anything newer.
+# Builds the Windows installer (.msi + .exe) and macOS app (.dmg, Intel + Apple Silicon).
 #
-# Versions: a tag like v1.2.0 builds that version; every other build (push to main or
-# "Run workflow") is numbered 1.1.<run number>, so each new build is a new version.
+# - Push a tag like v1.2.0 to publish a release. The desktop app offers the latest
+#   release as an update, so only tagged versions reach users.
+# - Pushes to main (and "Run workflow") just build the installers and keep them as run
+#   artifacts for testing; they don't publish a release.
+#
+# The version comes from the tag, or from desktop/src-tauri/tauri.conf.json otherwise.
+# Release notes come from that version's section of CHANGELOG.md.
 on:
   workflow_dispatch:
   push:
@@ -17,27 +20,37 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  prepare:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
     steps:
       - uses: actions/checkout@v7
       - id: v
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="1.1.${GITHUB_RUN_NUMBER}"; fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"; echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Create release
+        if: steps.v.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.v.outputs.version }}
         run: |
           if gh release view "v$VERSION" >/dev/null 2>&1; then exit 0; fi
-          notes="$(git log -1 --pretty=%s)"
-          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "Home Energy $VERSION" --notes "$notes"
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[?v?" v "\\]?([ ]|$)" {on=1; next}
+            on && /^## / {exit}
+            on {print}' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Home Energy $VERSION" > notes.md
+          gh release create "v$VERSION" --verify-tag --title "Home Energy $VERSION" --notes-file notes.md --latest
 
   build:
-    needs: release
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -66,7 +79,7 @@ jobs:
       - name: Set version
         shell: bash
         env:
-          VERSION: ${{ needs.release.outputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           node -e '
             const fs = require("fs"), p = "desktop/src-tauri/tauri.conf.json";
@@ -78,13 +91,13 @@ jobs:
         working-directory: desktop
         run: npm install
 
-      - name: Build and attach to release
+      - name: Build (and attach to the release for tags)
         uses: tauri-apps/tauri-action@v0
         with:
           projectPath: desktop
           args: ${{ matrix.args }}
-          tagName: v${{ needs.release.outputs.version }}
-          releaseName: "Home Energy ${{ needs.release.outputs.version }}"
+          tagName: ${{ needs.prepare.outputs.release == 'true' && format('v{0}', needs.prepare.outputs.version) || '' }}
+          releaseName: "Home Energy ${{ needs.prepare.outputs.version }}"
           releaseDraft: false
           prerelease: false
         env:

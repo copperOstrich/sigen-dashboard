@@ -1,5 +1,10 @@
 # Home Energy: SigenStor dashboard
 
+[![Latest release](https://img.shields.io/github/v/release/copperOstrich/sigen-dashboard?label=release)](https://github.com/copperOstrich/sigen-dashboard/releases/latest)
+[![Docker image](https://img.shields.io/badge/docker-ghcr.io-2496ED?logo=docker&logoColor=white)](https://github.com/copperOstrich/sigen-dashboard/pkgs/container/sigen-dashboard)
+[![Collector image build](https://img.shields.io/github/actions/workflow/status/copperOstrich/sigen-dashboard/docker.yml?label=image%20build)](https://github.com/copperOstrich/sigen-dashboard/actions/workflows/docker.yml)
+[![Licence: MIT](https://img.shields.io/github/license/copperOstrich/sigen-dashboard)](LICENSE)
+
 A local dashboard and desktop widget for a SigenStor system that reads the inverter
 directly over **Modbus TCP**, so it keeps working when Sigenergy's cloud is down.
 Live retailer prices from **Amber Electric** or **LocalVolts** add buy/sell prices, spike
@@ -30,6 +35,41 @@ SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) �
 
 It never writes to the inverter. The Modbus client has no write functions, so it can't
 interfere with retailer battery control such as Amber SmartShift or a VPP.
+
+## Quick start
+
+You need a machine on your home network that stays on (a NAS, Raspberry Pi or mini PC)
+with Docker installed.
+
+```sh
+mkdir sigen-dashboard && cd sigen-dashboard
+docker run -d --name sigen-dashboard --restart unless-stopped \
+  -p 8080:8080 -v "$PWD/data:/data" \
+  -e SIGEN_SIMULATE=1 -e AEMO_REGION=NSW1 \
+  ghcr.io/copperostrich/sigen-dashboard:latest
+```
+
+Open `http://<that-machine>:8080`. It starts on simulated data so you can look around.
+Then point it at your inverter and add your retailer, either with `-e` settings or in a
+`data/sigen.env` file (copy [`qnap/sigen.env.example`](qnap/sigen.env.example)):
+
+```sh
+SIGEN_SIMULATE=0
+SIGEN_HOST=192.168.1.60      # your inverter's IP address (Modbus TCP must be enabled)
+AMBER_API_KEY=...            # or LOCALVOLTS_API_KEY and LOCALVOLTS_PARTNER_ID
+```
+
+Restart the container after changing `sigen.env`. Desktop apps for Windows and Mac are on
+the [releases page](https://github.com/copperOstrich/sigen-dashboard/releases/latest).
+On a QNAP, see [the ready-made setup](#ready-made-image-qnap-synology-unraid-portainer).
+
+## Keep it on your home network
+
+The dashboard has no login, and anyone who can reach it can see your energy data. Don't
+forward its port on your router or expose it to the internet. To check in when you're
+away, use a VPN to your home network (Tailscale, WireGuard, or your router's built-in VPN).
+The collector only ever reads from the inverter, so the dashboard can't change any
+settings, but your usage pattern is still personal information.
 
 ## Screenshots
 
@@ -203,19 +243,14 @@ cheap rather than what you pay.
 
 ## 4. Desktop widget app (Windows and Mac)
 
-Built with Tauri (small, native webview; ~10 MB). The installers are built by GitHub
-Actions, so you don't need a Mac and a PC set up for development:
+Download the installer from the
+[latest release](https://github.com/copperOstrich/sigen-dashboard/releases/latest):
+the `.msi` (or `-setup.exe`) for Windows, the `.dmg` for Mac (Intel and Apple Silicon).
+It's built with Tauri, so it's small (about 10 MB) and uses the system's own web view.
 
-1. Push this folder to a GitHub repository.
-2. **Actions → Build desktop widget apps → Run workflow.**
-3. Download `home-energy-windows-latest` (.msi / .exe) and `home-energy-macos-latest`
-   (.dmg, Intel and Apple Silicon) from the run's artifacts.
-   Pushing a tag such as `v1.0.0` also creates a draft release with them attached.
-
-Each build is published as a numbered GitHub release (1.1.x). The app checks for a newer
-release when it starts and every 6 hours (or from the tray menu, **Check for updates**) and
-offers **Download and install**: on Windows it runs the new installer; on a Mac it opens the
-new disk image to drag into Applications. Update checks need the repository to be public.
+The app checks for a new release when it starts and every 6 hours (or from the tray menu,
+**Check for updates**) and offers **Download and install**: on Windows it runs the new
+installer; on a Mac it opens the new disk image to drag into Applications.
 
 Switch between the full window and the compact widget with the **Compact widget** button in
 the dashboard, the expand button on the widget, or a left click on the tray icon.
@@ -229,7 +264,11 @@ The apps aren't code-signed, so the first time:
 * **Windows**: SmartScreen → More info → Run anyway.
 * **macOS**: right-click the app → Open → Open (or System Settings → Privacy & Security → Open Anyway).
 
-To build locally instead: install Rust and Node, then `cd desktop && npm install && npm run build`.
+**Building it yourself:** the installers are built by GitHub Actions
+(`.github/workflows/desktop.yml`). In a fork, **Actions → Build desktop widget apps → Run
+workflow** builds them as run artifacts; pushing a tag like `v1.2.1` publishes a release
+with notes from that version's section of [CHANGELOG.md](CHANGELOG.md). To build locally,
+install Rust and Node, then `cd desktop && npm install && npm run build`.
 
 ## API
 

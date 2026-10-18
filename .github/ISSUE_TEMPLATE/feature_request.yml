@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest something new
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: Describe what you're trying to see or do, rather than a particular solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How might it work?
+      description: Optional. Sketches, examples from other apps, or the data it would need.
+  - type: input
+    id: hardware
+    attributes:
+      label: Your setup
+      description: Optional, if it matters (e.g. three-phase inverter, AC charger, retailer).

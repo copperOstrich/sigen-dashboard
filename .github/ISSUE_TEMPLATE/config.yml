@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup help and questions
+    url: https://github.com/copperOstrich/sigen-dashboard/discussions/categories/q-a
+    about: Ask in Discussions, where other users can help too.
+  - name: Share your setup
+    url: https://github.com/copperOstrich/sigen-dashboard/discussions/categories/show-and-tell
+    about: Screenshots, tips and interesting things in your data.
