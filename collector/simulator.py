@@ -173,14 +173,44 @@ class SimPlant:
             v[f"alarm{i}"] = alarms.get(f"alarm{i}", 0)
         return v
 
+    # Example roof: four strings on three roof faces, so the simulated strings peak at
+    # different times of day (like a real east/north/west install).
+    #   (name, panels, solar-time offset of the face's peak in hours)
+    LAYOUTS = {
+        1: [("north", 18, 0.0)],
+        2: [("east", 9, -2.6), ("west", 9, 2.6)],
+        3: [("east", 8, -2.6), ("north", 10, 0.0), ("west", 8, 2.6)],
+        4: [("east", 8, -2.6), ("north", 10, 0.0), ("north", 6, 0.0), ("west", 8, 2.6)],
+    }
+    _n = max(1, min(36, int(os.environ.get("SIM_PV_STRINGS") or 4)))
+    STRINGS = LAYOUTS.get(_n) or [(("east", "north", "west")[i % 3], 8 + (i % 4), (-2.6, 0.0, 2.6)[i % 3])
+                                  for i in range(_n)]
+
+    def string_values(self):
+        """[(volts, amps)] for PV1..PV4 from the current PV power and time of day."""
+        pv = self.p["pv"]
+        h = self.t.hour + self.t.minute / 60
+        noon = 12.5
+        weights = []
+        for _name, panels, offset in self.STRINGS:
+            x = (h - (noon + offset)) / 7.5  # angle away from this face's best time
+            facing = max(0.0, math.cos(math.pi / 2 * min(1.0, abs(x)))) ** 1.3
+            weights.append(panels * (0.15 + 0.85 * facing))  # diffuse light still reaches every face
+        total = sum(weights) or 1
+        out = []
+        for (_name, panels, _o), w in zip(self.STRINGS, weights):
+            share = pv * w / total
+            if pv < 30:
+                out.append((0.0, 0.0))
+                continue
+            vmp = panels * 41.5 * (0.93 + 0.07 * min(1.0, share / (panels * 380)))
+            out.append((round(vmp, 1), share / vmp))
+        return out
+
     def inverter_values(self):
         p = self.p
         pv = p["pv"]
-        strings = []
-        for i in range(4):
-            share = pv / 4 * (1 + 0.04 * (i - 1.5))
-            volts = 380 + 20 * i if pv > 50 else 0.0
-            strings.append((volts, share / volts if volts else 0.0))
+        strings = self.string_values()
         v = {
             "model": "SigenStor (simulated)", "serial": "SIM00000000000001",
             "firmware": "SIMULATOR", "rated_power": INVERTER_W,
@@ -192,8 +222,8 @@ class SimPlant:
             "battery_max_cell_voltage": 3.34, "battery_min_cell_voltage": 3.29,
             "grid_frequency": 49.98 + 0.04 * math.sin(time.time() / 13), "pcs_temp": 38 + pv / 1500,
             "phase_a_voltage": 241.3 + 2 * math.sin(time.time() / 29),
-            "phase_a_current": (pv - p["battery"]) / 241.3, "pack_count": max(1, round(BATTERY_KWH / 8)), "pv_string_count": 4,
-            "mppt_count": 4, "pv_power": pv, "insulation_resistance": 3.2, "daily_pv_kwh": self.daily["pv"],
+            "phase_a_current": (pv - p["battery"]) / 241.3, "pack_count": max(1, round(BATTERY_KWH / 8)), "pv_string_count": len(self.STRINGS),
+            "mppt_count": min(4, len(self.STRINGS)), "pv_power": pv, "insulation_resistance": 3.2, "daily_pv_kwh": self.daily["pv"],
         }
         for i, (vv, ii) in enumerate(strings, 1):
             v[f"pv{i}_voltage"], v[f"pv{i}_current"] = vv, ii

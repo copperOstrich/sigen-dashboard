@@ -12,6 +12,7 @@ Sign conventions (plant):
 """
 
 PLANT_UNIT_ID = 247  # "plant" address: whole-system values
+MAX_PV_STRINGS = 36  # the protocol defines PV1..PV36; register 31025 says how many exist
 
 # name, address, data type, gain (raw / gain = value), unit
 # Data types: u16, s16, u32, s32, u64, str (count given separately for str)
@@ -97,6 +98,8 @@ INVERTER = [
     ("pv4_voltage",            31033, "s16", 10,   "V"),
     ("pv4_current",            31034, "s16", 100,  "A"),
     ("pv_power",               31035, "s32", 1,    "W"),
+    *[(f"pv{n}_{k}", 31042 + (n - 5) * 2 + i, "s16", g, u)
+      for n in range(5, 37) for i, (k, g, u) in enumerate((("voltage", 10, "V"), ("current", 100, "A")))],
     ("insulation_resistance",  31037, "u16", 1000, "MΩ"),
     ("daily_pv_kwh",           31509, "u32", 100,  "kWh"),
 ]

@@ -93,6 +93,15 @@ read any moment.
   <img alt="Power history chart with tooltip, and battery charge over 24 hours" src="docs/screenshots/history-light.png">
 </picture>
 
+**Solar strings**: power, voltage and current for each PV string your inverter reports,
+with each string's energy, share and peak for the day. Handy for spotting shading or a
+faulty panel, and for telling which roof face is on which string.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/strings-dark.png">
+  <img alt="Chart of power from four PV strings over 24 hours, with today's energy and peak for each string" src="docs/screenshots/strings-light.png">
+</picture>
+
 **Daily energy and system status**: each day's energy in (solar, bought, from battery) and
 out (home, sold, to battery), plus inverter status and alarms.
 

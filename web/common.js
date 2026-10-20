@@ -52,6 +52,8 @@
     if (a < 1000 && !opts.forceKw) return `${Math.round(a)} W`;
     return `${(a / 1000).toFixed(a >= 10000 ? 1 : opts.digits ?? 1)} kW`;
   };
+  // Axis labels: whole kW where the tick is whole, one decimal otherwise (2.5 kW, not "3 kW")
+  S.kwAxis = (w) => { const k = Math.round(w / 100) / 10; return `${Number.isInteger(k) ? k : k.toFixed(1)} kW`; };
   S.kwNum = (w) => (w == null ? "–" : (Math.abs(w) / 1000).toFixed(Math.abs(w) >= 10000 ? 1 : 2));
   S.kwh = (v, d = 1) => (v == null ? "–" : `${Number(v).toFixed(d)} kWh`);
   S.pct = (v, d = 0) => (v == null ? "–" : `${Number(v).toFixed(d)}%`);

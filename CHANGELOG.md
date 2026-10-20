@@ -15,6 +15,8 @@ The first public release.
 - Power and battery history from 24 hours to 30 days, with a crosshair tooltip
 - Daily energy for the last 30 days, including an **All** view that balances energy in
   (solar, bought, from battery) against energy out (home, sold, to battery), plus a cost view
+- Solar strings chart: power, voltage and current for every PV string the inverter reports
+  (1 to 36), with each string's energy, share, peak and peak time for the day
 - System status, alarms decoded from Sigenergy's Modbus protocol, PV strings and an event log
 - Light and dark mode, and a layout that works on a phone
 

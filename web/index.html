@@ -166,6 +166,28 @@
       <div class="chart" id="soc-chart"></div>
     </section>
 
+    <section class="panel span-12" aria-labelledby="pv-h" id="pv-panel" hidden>
+      <div class="panel-head">
+        <h2 id="pv-h">Solar strings</h2>
+        <div class="legend" id="pv-legend"></div>
+        <span class="spacer"></span>
+        <div class="seg" id="pv-measure" role="group" aria-label="Measure">
+          <button type="button" data-m="w" aria-pressed="true">Power</button>
+          <button type="button" data-m="v" aria-pressed="false">Voltage</button>
+          <button type="button" data-m="a" aria-pressed="false">Current</button>
+        </div>
+        <div class="seg" id="pv-range" role="group" aria-label="Time range">
+          <button type="button" data-h="24" aria-pressed="true">24 h</button>
+          <button type="button" data-h="72" aria-pressed="false">3 days</button>
+          <button type="button" data-h="168" aria-pressed="false">7 days</button>
+        </div>
+      </div>
+      <div class="chart" id="pv-chart"></div>
+      <table class="strings pv-today" id="pv-today"></table>
+      <p class="chart-note">Strings facing east peak in the morning, north around midday and west in the afternoon.
+        Voltage depends mostly on how many panels are in the string.</p>
+    </section>
+
     <section class="panel span-8" aria-labelledby="daily-h">
       <div class="panel-head">
         <h2 id="daily-h">Daily energy</h2>

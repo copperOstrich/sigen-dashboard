@@ -296,3 +296,8 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 
 .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .seg button { white-space: nowrap; flex: none; }
+
+.pv-today { margin-top: 14px; }
+.pv-today td:first-child { display: flex; align-items: center; gap: 8px; }
+.pv-today svg { flex: none; }
+.legend .swl { display: inline-block; vertical-align: middle; }

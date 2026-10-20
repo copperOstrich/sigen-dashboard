@@ -259,7 +259,7 @@
     };
     C.lineChart($("power-chart"), {
       t: h.t, series: SERIES.map((s) => ({ ...s, values: h[s.key] })), hidden, height: 280,
-      gapSeconds: h.bucket_seconds * 5, yFmt: (v) => `${(v / 1000).toFixed(Math.abs(v) < 1000 && v ? 1 : 0)} kW`,
+      gapSeconds: h.bucket_seconds * 5, yFmt: S.kwAxis,
       tipFmt: (v, s) => signed(s.key, v, s), tipTitle, ariaLabel: "Power over time for solar, home, battery and grid",
     });
     C.lineChart($("soc-chart"), {
@@ -338,6 +338,76 @@
       : dailyKey === "all" ? "kWh per day, energy in above zero and out below" : "kWh per day";
     $("daily-metric").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
     drawDaily();
+  });
+
+  // ------------------------------------------------------------ solar strings
+  // Validated categorical colours; each string also gets its own line pattern so they stay
+  // distinguishable for colour-blind readers and when there are more than four strings.
+  const PV_COLORS = ["var(--solar)", "var(--home)", "var(--battery)", "var(--grid)"];
+  const PV_DASHES = [null, "7 4", "2 3", "8 3 2 3"];
+  const pvStyle = (i) => ({ color: PV_COLORS[i % 4], dash: PV_DASHES[(i + Math.floor(i / 4)) % 4] });
+  const PV_MEASURE = { w: ["Power", (v) => S.kw(v)], v: ["Voltage", (v) => `${Math.round(v)} V`], a: ["Current", (v) => `${v.toFixed(1)} A`] };
+  let pvData = null, pvHours = 24, pvMeasure = "w";
+  const pvHidden = new Set();
+  const swatch = (st) => el("svg", { class: "swl", width: 22, height: 8, "aria-hidden": "true" },
+    el("line", { x1: 1, x2: 21, y1: 4, y2: 4, stroke: st.color, "stroke-width": 2.5, "stroke-linecap": "round", "stroke-dasharray": st.dash }));
+
+  function drawStrings() {
+    const d = pvData;
+    const ids = d ? Object.keys(d.strings || {}).map(Number).sort((a, b) => a - b) : [];
+    $("pv-panel").hidden = !ids.length;
+    if (!ids.length) return;
+    const lg = $("pv-legend");
+    if (lg.dataset.ids !== ids.join(",")) {
+      lg.dataset.ids = ids.join(","); lg.innerHTML = "";
+      ids.forEach((n, i) => {
+        const b = el("button", { type: "button", "aria-pressed": pvHidden.has(n) ? "false" : "true" }, swatch(pvStyle(i)), `PV${n}`);
+        b.addEventListener("click", () => {
+          pvHidden.has(n) ? pvHidden.delete(n) : pvHidden.add(n);
+          b.setAttribute("aria-pressed", pvHidden.has(n) ? "false" : "true");
+          drawStrings();
+        });
+        lg.append(b);
+      });
+    }
+    const [label, fmt] = PV_MEASURE[pvMeasure];
+    const series = ids.map((n, i) => ({ key: n, label: `PV${n}`, ...pvStyle(i), values: d.strings[n][pvMeasure] }));
+    const hidden = new Set([...pvHidden]);
+    C.lineChart($("pv-chart"), {
+      t: d.t, series, hidden, height: 250, gapSeconds: d.bucket_seconds * 5, yMin: 0,
+      yFmt: pvMeasure === "w" ? S.kwAxis : pvMeasure === "v" ? (v) => `${v} V` : (v) => `${v} A`,
+      tipFmt: (v) => (v == null ? "–" : fmt(v)),
+      tipTitle: (t) => new Date(t * 1000).toLocaleString([], pvHours > 30
+        ? { weekday: "short", day: "numeric", hour: "numeric", minute: "2-digit" } : { hour: "numeric", minute: "2-digit" }),
+      ariaLabel: `${label} of each PV string over time`,
+    });
+    const today = d.today || [], total = today.reduce((a, r) => a + r.kwh, 0);
+    const tb = $("pv-today"); tb.innerHTML = "";
+    tb.append(el("tr", {}, el("th", { text: "Today" }), el("th", { text: "Energy" }), el("th", { text: "Share" }),
+      el("th", { text: "Peak" }), el("th", { text: "Peak at" }), el("th", { text: "Max voltage" })));
+    ids.forEach((n, i) => {
+      const r = today.find((x) => x.string === n) || {};
+      tb.append(el("tr", {}, el("td", {}, swatch(pvStyle(i)), `PV${n}`), el("td", { text: S.kwh(r.kwh) }),
+        el("td", { text: total > 0 ? `${Math.round((r.kwh || 0) / total * 100)}%` : "–" }),
+        el("td", { text: r.peak_w ? S.kw(r.peak_w) : "–" }),
+        el("td", { text: r.peak_at && r.peak_w ? clock(r.peak_at) : "–" }),
+        el("td", { text: r.max_v ? `${Math.round(r.max_v)} V` : "–" })));
+    });
+  }
+  async function loadStrings() {
+    try { pvData = await S.fetchJSON(`/api/string-history?hours=${pvHours}`); drawStrings(); } catch (e) { /* banner */ }
+  }
+  $("pv-range").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    pvHours = +b.dataset.h;
+    $("pv-range").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    loadStrings();
+  });
+  $("pv-measure").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    pvMeasure = b.dataset.m;
+    $("pv-measure").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    drawStrings();
   });
 
   // ------------------------------------------------------------ retailer prices + AEMO wholesale
@@ -563,7 +633,7 @@
   dlg.addEventListener("close", () => {
     if (dlg.returnValue !== "save") return;
     S.setApiBase($("api-input").value.trim());
-    sub.restart(); loadHistory(); loadDaily(); loadPrices();
+    sub.restart(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
   });
 
   // ------------------------------------------------------------ desktop: widget switch + updates
@@ -622,12 +692,13 @@
   // ------------------------------------------------------------ start
   if (S.isDesktop && !S.store.get("sigen.api")) setTimeout(openSettings, 300);
   const sub = S.subscribe(renderLive, () => { connectFailed = true; renderStatus(); });
-  loadHistory(); loadDaily(); loadPrices();
+  loadHistory(); loadDaily(); loadPrices(); loadStrings();
+  setInterval(loadStrings, 60000);
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);
   setInterval(loadDaily, 10 * 60000);
   let rt;
-  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); if (dailyData.length) drawDaily(); }, 120); })
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); drawStrings(); if (dailyData.length) drawDaily(); }, 120); })
     .observe(document.querySelector(".wrap"));
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawHistory(); drawDaily(); });
 })();

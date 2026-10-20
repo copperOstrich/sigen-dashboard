@@ -74,7 +74,7 @@ from aemo import Aemo  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
-from registers import (EMS_WORK_MODE, INVERTER, ON_OFF_GRID, PLANT,  # noqa: E402
+from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
 VERSION = "1.2.0"
@@ -186,6 +186,37 @@ class Store:
         with self.lock:
             return self.db.execute(
                 "SELECT ts, n, v, a FROM string_samples WHERE ts>=? ORDER BY ts, n", (since,)).fetchall()
+
+    def string_history(self, hours):
+        """Per-string power, voltage and current, averaged into ~480 points over the range."""
+        since = int(time.time() - hours * 3600)
+        bucket = max(60, int(hours * 3600 / 480) // 60 * 60)
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT (ts/?)*? AS b, n, AVG(v*a), AVG(v), AVG(a) FROM string_samples WHERE ts>=? "
+                "GROUP BY b, n ORDER BY b", (bucket, bucket, since)).fetchall()
+        times = sorted({r[0] for r in rows})
+        idx = {t: i for i, t in enumerate(times)}
+        strings = {}
+        for b, n, w, v, a in rows:
+            s = strings.setdefault(n, {"w": [None] * len(times), "v": [None] * len(times), "a": [None] * len(times)})
+            i = idx[b]
+            s["w"][i], s["v"][i], s["a"][i] = round(w), round(v, 1), round(a, 2)
+        return {"t": times, "bucket_seconds": bucket, "strings": strings}
+
+    def string_day(self, day):
+        """Energy, peak power and peak time per string for one local day."""
+        start = int(datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=TZ).timestamp())
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT n, SUM(v*a)/60000.0, MAX(v*a), MAX(v) FROM string_samples WHERE ts>=? AND ts<? GROUP BY n",
+                (start, start + 86400)).fetchall()
+            peaks = {n: t for n, t in self.db.execute(
+                "SELECT s.n, s.ts FROM string_samples s JOIN (SELECT n, MAX(v*a) AS m FROM string_samples "
+                "WHERE ts>=? AND ts<? GROUP BY n) p ON s.n=p.n AND s.v*s.a=p.m WHERE s.ts>=? AND s.ts<?",
+                (start, start + 86400, start, start + 86400)).fetchall()}
+        return [{"string": n, "kwh": round(kwh or 0, 2), "peak_w": round(pw or 0), "peak_at": peaks.get(n),
+                 "max_v": round(mv or 0, 1)} for n, kwh, pw, mv in rows]
 
     def save_aemo(self, rows):
         with self.lock:
@@ -313,6 +344,11 @@ class Collector:
         self.client = ModbusTCPClient(host, port)
         self.plant = DeviceReader(self.client, PLANT_UNIT, PLANT)
         self.inverter = DeviceReader(self.client, INVERTER_UNIT, INVERTER) if INVERTER_UNIT else None
+        # Strings beyond PV4 are only read once the inverter says it has them (register 31025)
+        self.extra_strings = {f"pv{n}_{k}" for n in range(5, MAX_PV_STRINGS + 1) for k in ("voltage", "current")}
+        if self.inverter:
+            self.inverter.unsupported |= self.extra_strings
+        self.string_count = None
         self.state = {"status": "connecting", "mode": "simulator" if SIMULATE else "live",
                       "target": f"{host}:{port}", "updated": None, "error": None}
         self.cond = threading.Condition()
@@ -361,6 +397,15 @@ class Collector:
         if self.inverter:
             try:
                 inv = self.inverter.read()
+                count = int(inv.get("pv_string_count") or 0)
+                if 0 < count <= MAX_PV_STRINGS and count != self.string_count:
+                    self.string_count = count
+                    wanted = {f"pv{n}_{k}" for n in range(5, count + 1) for k in ("voltage", "current")}
+                    self.inverter.unsupported -= wanted
+                    self.inverter.unsupported |= self.extra_strings - wanted
+                    if count > 4:
+                        inv = self.inverter.read()  # pick up the extra strings straight away
+                    log(f"Inverter reports {count} PV string{'s' if count != 1 else ''}")
             except Exception as e:  # inverter unit id may be wrong - plant data still useful
                 inv = {"_error": str(e)}
         self.raw = {"plant": p, "inverter": inv, "read_at": time.time(),
@@ -412,7 +457,7 @@ class Collector:
 
         strings = []
         n = int(inv.get("pv_string_count") or 0) or 4
-        for i in range(1, min(n, 4) + 1):
+        for i in range(1, min(n, MAX_PV_STRINGS) + 1):
             v, a = inv.get(f"pv{i}_voltage"), inv.get(f"pv{i}_current")
             if v is not None and a is not None:
                 strings.append({"n": i, "v": round(v, 1), "a": round(a, 2), "w": round(v * a)})
@@ -473,11 +518,10 @@ class Collector:
             return
         acc = self.minute_acc
         srows = []
-        for n in range(1, 5):  # per-string minute averages (for orientation analysis)
-            vs = [a[f"pv{n}_v"] for a in acc if a.get(f"pv{n}_v") is not None]
-            cs = [a[f"pv{n}_a"] for a in acc if a.get(f"pv{n}_a") is not None]
-            if vs and cs:
-                srows.append((self.minute_bucket, n, sum(vs) / len(vs), sum(cs) / len(cs)))
+        for n in sorted({k for a in acc for k in a.get("strings", {})}):  # per-string minute averages
+            vals = [a["strings"][n] for a in acc if n in a.get("strings", {})]
+            srows.append((self.minute_bucket, n, sum(v for v, _ in vals) / len(vals),
+                          sum(c for _, c in vals) / len(vals)))
         if srows:
             self.store.save_strings(srows)
         avg = lambda k: sum(a[k] for a in acc) / len(acc)
@@ -503,8 +547,17 @@ class Collector:
         self.minute_acc.append({"pv": p.get("pv_power", 0), "load": p.get("load_power", 0),
                                 "battery": p.get("battery_power", 0), "grid": p.get("grid_power", 0),
                                 "soc": p.get("battery_soc"), **{c: p.get(c) for c in COUNTERS},
-                                **{f"pv{n}_{k}": (inv or {}).get(f"pv{n}_{f}") for n in range(1, 5)
-                                   for k, f in (("v", "voltage"), ("a", "current"))}})
+                                "strings": self._strings_now(inv)})
+
+    def _strings_now(self, inv):
+        inv = inv or {}
+        count = min(int(inv.get("pv_string_count") or 0) or 4, MAX_PV_STRINGS)
+        out = {}
+        for n in range(1, count + 1):
+            v, a = inv.get(f"pv{n}_voltage"), inv.get(f"pv{n}_current")
+            if v is not None and a is not None:
+                out[n] = (v, a)
+        return out
 
 
 # ---------------------------------------------------------------- simulator wiring
@@ -516,7 +569,7 @@ def start_simulator(store):
         hour=0, minute=0, second=0, microsecond=0)
     plant.t = start
     fill = store.empty() and DEMO_DAYS > 0
-    t, rows, prices = start, [], []
+    t, rows, prices, srows = start, [], [], []
     while t < now:
         t += timedelta(minutes=1)
         plant.step(t)
@@ -527,11 +580,15 @@ def start_simulator(store):
             rows.append((ts, t.strftime("%Y-%m-%d"), plant.p["pv"], plant.p["load"], plant.p["battery"],
                          plant.p["grid"], plant.soc, tot["pv"], tot["load"], tot["import"], tot["export"],
                          tot["charge"], tot["discharge"], buy, feed))
+            for n, (v, a) in enumerate(plant.string_values(), 1):
+                srows.append((ts, n, v, a))
             if buy is not None and ts % 1800 == 0:
                 prices.append((ts, "general", ts + 1800, buy, spot, None, Amber._descriptor(buy), None))
                 prices.append((ts, "feedIn", ts + 1800, feed, spot, None, None, None))
     if prices:
         store.save_prices(prices)
+    if srows:
+        store.save_strings(srows)
     if rows:
         store.insert(rows)
         log(f"Pre-filled {DEMO_DAYS} days of simulated history ({len(rows)} samples)")
@@ -591,6 +648,11 @@ class Api(BaseHTTPRequestHandler):
                 a = self.retailer.snapshot() if self.retailer else {"enabled": False, "status": "off"}
                 a["history"] = self.store.price_history(min(48, max(1, float(q.get("hours", ["12"])[0]))))
                 return self._json(a)
+            if url.path == "/api/string-history":
+                hours = min(24 * 31, max(1, float(q.get("hours", ["24"])[0])))
+                h = self.store.string_history(hours)
+                h["today"] = self.store.string_day(datetime.now(TZ).strftime("%Y-%m-%d"))
+                return self._json(h)
             if url.path == "/api/strings":
                 hours = min(24 * 31, max(1, float(q.get("hours", ["48"])[0])))
                 rows = self.store.strings(hours)

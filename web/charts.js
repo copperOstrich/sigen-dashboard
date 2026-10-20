@@ -111,7 +111,7 @@
       if (s.area) {
         svg.append(el("path", { class: "area", fill: s.color, d: d + `L${x(t1)},${y(Math.max(lo, 0))}L${x(t0)},${y(Math.max(lo, 0))}Z` }));
       }
-      svg.append(el("path", { class: "series", stroke: s.color, d, "stroke-dasharray": s.dash ? "5 4" : null }));
+      svg.append(el("path", { class: "series", stroke: s.color, d, "stroke-dasharray": s.dash ? (typeof s.dash === "string" ? s.dash : "5 4") : null }));
     }
 
     const hover = el("g", { style: "display:none" });
