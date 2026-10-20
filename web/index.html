@@ -64,6 +64,17 @@
             <text class="lbl below" x="0" y="102">Home</text>
           </g>
 
+          <!-- Car (only when an AC charger is found) -->
+          <g transform="translate(86 64)" id="ev-node" hidden>
+            <circle class="node-ring" r="38" style="stroke:var(--ev)"/>
+            <g class="icon" style="stroke:var(--ev)">
+              <path d="M-17 6V0l5-9h24l5 9v6zM-10 0h20"/>
+              <circle cx="-9" cy="8" r="3"/><circle cx="9" cy="8" r="3"/>
+            </g>
+            <text class="lbl side" x="58" y="-8" style="text-anchor:start" id="l-ev">Car</text>
+            <text class="val side" x="58" y="24" style="text-anchor:start"><tspan id="v-ev">–</tspan><tspan class="unit" dx="4" id="u-ev">kW</tspan></text>
+          </g>
+
           <!-- Battery -->
           <g transform="translate(320 336)">
             <circle class="node-ring" r="38" style="stroke:var(--battery)"/>
@@ -113,8 +124,27 @@
         <div><div class="k"><i style="background:var(--grid)"></i>Sold</div><div class="v num" id="t-exp">–</div></div>
         <div><div class="k"><i style="background:var(--battery)"></i>Charged</div><div class="v num" id="t-chg">–</div></div>
         <div><div class="k"><i style="background:var(--battery)"></i>Discharged</div><div class="v num" id="t-dis">–</div></div>
+        <div id="t-ev-tile" hidden><div class="k"><i style="background:var(--ev)"></i>Car</div><div class="v num" id="t-ev">–</div></div>
         <div><div class="k">Self-sufficient</div><div class="v num" id="t-self">–</div></div>
         <div><div class="k">Net cost</div><div class="v num" id="t-cost">–</div></div>
+      </div>
+    </section>
+
+    <section class="panel span-12" aria-labelledby="ev-h" id="ev-panel" hidden>
+      <div class="panel-head"><h2 id="ev-h">Car charging</h2><span class="sub" id="ev-sub"></span></div>
+      <div class="ev-grid">
+        <div id="ev-now"></div>
+        <div>
+          <p class="ev-sub">Last 48 hours</p>
+          <div class="ev-timeline" id="ev-timeline"></div>
+          <div class="ev-key">
+            <span><i style="background:var(--ev)"></i>Charging</span>
+            <span><i style="background:color-mix(in srgb, var(--ev) 30%, var(--surface));border:1px solid var(--ev)"></i>Plugged in, not charging</span>
+            <span><i style="background:var(--bad)"></i>Fault</span>
+          </div>
+          <table class="strings ev-sessions" id="ev-sessions"></table>
+          <div class="ev-links" id="ev-links"></div>
+        </div>
       </div>
     </section>
 
@@ -200,6 +230,7 @@
           <button type="button" data-k="import" aria-pressed="false">Bought</button>
           <button type="button" data-k="export" aria-pressed="false">Sold</button>
           <button type="button" data-k="discharge" aria-pressed="false">Discharged</button>
+          <button type="button" data-k="ev" aria-pressed="false" id="daily-ev-btn" hidden>Car</button>
           <button type="button" data-k="cost" aria-pressed="false">Cost</button>
         </div>
       </div>

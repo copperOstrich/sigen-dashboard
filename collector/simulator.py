@@ -15,6 +15,9 @@ Settings (environment variables):
   SIM_INVERTER_KW       inverter rating, kW                      default 10
   SIM_EXPORT_LIMIT_KW   grid export limit, kW                    default 5
   SIM_ALARMS            e.g. "alarm6:1,alarm1:9" sets alarm bits so you can see the alarm UI
+  SIM_EV_CHARGER        1 = include a Sigen AC charger and a car   default 1
+  SIM_CHARGER_UNIT      the charger's Modbus unit id                default 3
+  SIM_EV_KW             charger rating, kW                          default 7
 """
 import argparse
 import hashlib
@@ -28,7 +31,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from modbus import encode
-from registers import INVERTER, PLANT, PLANT_UNIT_ID, reg_count
+from registers import CHARGER, CHARGER_SET_CURRENT, INVERTER, PLANT, PLANT_UNIT_ID, reg_count
 
 def _env_float(name, default):
     try:
@@ -41,6 +44,9 @@ PV_KWP = _env_float("SIM_PV_KWP", 10)
 BATTERY_KWH = _env_float("SIM_BATTERY_KWH", 16)
 INVERTER_W = _env_float("SIM_INVERTER_KW", 10) * 1000
 EXPORT_LIMIT_W = _env_float("SIM_EXPORT_LIMIT_KW", 5) * 1000
+EV_ON = os.environ.get("SIM_EV_CHARGER", "1") != "0"
+EV_W = _env_float("SIM_EV_KW", 7) * 1000
+CHARGER_UNIT = int(os.environ.get("SIM_CHARGER_UNIT") or 3)
 MAX_BATT_W = min(INVERTER_W, BATTERY_KWH * 1000 * 0.5)  # ~0.5C, capped by the inverter
 MIN_SOC, MAX_SOC = 5.0, 100.0
 LOCAL_TZ = ZoneInfo(os.environ.get("TZ") or "Australia/Sydney")
@@ -100,6 +106,37 @@ def load_w(t: datetime):
     return w
 
 
+def ev_plan(t: datetime):
+    """(charger state, wanted power W) for an example household car.
+
+    Weeknights: plugged in after work, the charger waits for cheap overnight power, charges
+    from 00:30 until the car has what it needs, then sits offering power to a full car.
+    Saturdays: plugged in late morning and charged from the sun.
+    """
+    m = t.hour * 60 + t.minute
+    for d, off in ((t.date(), 0), (t.date() - timedelta(days=1), 1440)):
+        key, mm = d.isoformat(), m + off
+        if d.weekday() < 5:
+            arrive = 17 * 60 + 25 + int(50 * _rand(key, "arrive"))
+            leave = 1440 + 7 * 60 + 15 + int(20 * _rand(key, "leave"))
+            if arrive <= mm < leave:
+                need_min = int(60 * (6 + 12 * _rand(key, "kwh")) / (EV_W / 1000))
+                start = 1440 + 30
+                if mm < start:
+                    return 2, 0.0          # B1: plugged in, charger waiting for its schedule
+                if mm < start + need_min:
+                    return 5, EV_W         # C2: charging
+                return 3, 0.0              # B2: car full, power still offered
+        elif d.weekday() == 5 and off == 0:
+            if 10 * 60 + 5 <= mm < 15 * 60 + 40:
+                if mm < 10 * 60 + 12:
+                    return 3, 0.0
+                if mm < 14 * 60 + 50:
+                    return 5, -1.0         # charge from solar surplus
+                return 3, 0.0
+    return 1, 0.0                          # A: no car
+
+
 class SimPlant:
     def __init__(self, start=None, soc=55.0):
         self.t = start or local_now()
@@ -108,21 +145,25 @@ class SimPlant:
                        "import": 1640.0, "export": 4380.0}
         self.daily = {"pv": 0.0, "load": 0.0, "charge": 0.0, "discharge": 0.0}
         self.yesterday_pv = 61.3
-        self.p = {"pv": 0.0, "load": 0.0, "battery": 0.0, "grid": 0.0}
+        self.p = {"pv": 0.0, "load": 0.0, "battery": 0.0, "grid": 0.0, "ev": 0.0}
+        self.ev_state, self.ev_total = 1, 2316.4
         self.lock = threading.Lock()
 
-    def _dispatch(self, t, pv, load):
-        """Self-consumption with an export limit and an Amber-style evening export event."""
+    def _dispatch(self, t, pv, load, ev=0.0):
+        """Self-consumption with an export limit and an Amber-style evening export event.
+
+        The battery covers the home but not the car, as most people set it up.
+        """
         h = t.hour + t.minute / 60
-        surplus = pv - load
+        surplus = pv - load - ev
         if surplus >= 0:
             batt = min(surplus, MAX_BATT_W) if self.soc < MAX_SOC - 0.05 else 0.0
         else:
-            batt = max(surplus, -MAX_BATT_W) if self.soc > MIN_SOC + 0.05 else 0.0
+            batt = -min(max(0.0, load - pv), MAX_BATT_W) if self.soc > MIN_SOC + 0.05 else 0.0
         # Price spike export window on some days (what Amber SmartShift does)
         if 18.0 <= h < 18.5 and _rand(t.date().isoformat(), "spike-export") > 0.45 and self.soc > 35:
             batt = -min(MAX_BATT_W, load + EXPORT_LIMIT_W)
-        grid = load + batt - pv
+        grid = load + ev + batt - pv
         if grid < -EXPORT_LIMIT_W:  # export limited -> curtail PV
             pv -= (-grid - EXPORT_LIMIT_W)
             grid = -EXPORT_LIMIT_W
@@ -137,7 +178,14 @@ class SimPlant:
                 self.daily = {k: 0.0 for k in self.daily}
             self.t = now
             pv_raw, load = solar_w(now), load_w(now)
-            pv, batt, grid = self._dispatch(now, pv_raw, load)
+            state, ev = ev_plan(now) if EV_ON else (1, 0.0)
+            if ev < 0:  # solar-following: whatever the home isn't using, 1.4 kW minimum
+                ev = min(EV_W, max(1400.0, pv_raw - load))
+            ev *= 0.985 + 0.03 * _smooth_noise(now.date().isoformat(), now.hour * 60 + now.minute, 4) if ev else 0
+            pv, batt, grid = self._dispatch(now, pv_raw, load, ev)
+            self.ev_state = state
+            self.ev_total += ev * dt / 3.6e6
+            load += ev  # the plant's "total load" includes the car
             kwh = lambda w: max(w, 0) * dt / 3.6e6
             self.totals["pv"] += kwh(pv); self.daily["pv"] += kwh(pv)
             self.totals["load"] += kwh(load); self.daily["load"] += kwh(load)
@@ -146,7 +194,7 @@ class SimPlant:
             self.totals["import"] += kwh(grid); self.totals["export"] += kwh(-grid)
             self.soc += (batt * dt / 3.6e6) / BATTERY_KWH * 100 * (0.96 if batt > 0 else 1.0)
             self.soc = min(MAX_SOC, max(MIN_SOC, self.soc))
-            self.p = {"pv": pv, "load": load, "battery": batt, "grid": grid}
+            self.p = {"pv": pv, "load": load, "battery": batt, "grid": grid, "ev": ev}
 
     # ---- register images ---------------------------------------------------
     def plant_values(self, alarms):
@@ -166,7 +214,7 @@ class SimPlant:
             "total_load_kwh": self.totals["load"], "total_charge_kwh": self.totals["charge"],
             "total_discharge_kwh": self.totals["discharge"], "total_import_kwh": self.totals["import"],
             "total_export_kwh": self.totals["export"], "daily_pv_kwh": self.daily["pv"],
-            "yesterday_pv_kwh": self.yesterday_pv, "general_load_power": p["load"],
+            "yesterday_pv_kwh": self.yesterday_pv, "general_load_power": p["load"] - p["ev"],
             "load_power": p["load"], "battery_avg_cell_temp": 24.5 + abs(p["battery"]) / 2500,
         }
         for i in range(1, 8):
@@ -206,6 +254,11 @@ class SimPlant:
             vmp = panels * 41.5 * (0.93 + 0.07 * min(1.0, share / (panels * 380)))
             out.append((round(vmp, 1), share / vmp))
         return out
+
+    def charger_values(self):
+        return {"state": self.ev_state, "total_kwh": self.ev_total, "power": self.p["ev"],
+                "rated_power": EV_W, "rated_current": 32, "rated_voltage": 230, "breaker_current": 40,
+                "alarm1": 0, "alarm2": 0, "alarm3": 0, "set_current": 32}
 
     def inverter_values(self):
         p = self.p
@@ -279,6 +332,8 @@ class Handler(socketserver.BaseRequestHandler):
                 regs = register_image(PLANT, plant.plant_values(self.server.alarms))
             elif unit == inverter_unit:
                 regs = register_image(INVERTER, plant.inverter_values())
+            elif EV_ON and unit == CHARGER_UNIT:
+                regs = register_image(CHARGER + [CHARGER_SET_CURRENT], plant.charger_values())
             else:
                 continue  # real devices time out for unknown unit ids
             if any((addr + i) not in regs for i in range(count)):

@@ -104,6 +104,56 @@ INVERTER = [
     ("daily_pv_kwh",           31509, "u32", 100,  "kWh"),
 ]
 
+# Sigen EVAC AC charger, read at the charger's own Modbus unit id (set by the installer;
+# the collector finds it by scanning). Protocol section 5.5, all one contiguous block.
+CHARGER = [
+    ("state",                  32000, "u16", 1,    ""),
+    ("total_kwh",              32001, "u32", 100,  "kWh"),
+    ("power",                  32003, "s32", 1,    "W"),   # protocol: kW with gain 1000, i.e. raw W
+    ("rated_power",            32005, "u32", 1,    "W"),
+    ("rated_current",          32007, "s32", 100,  "A"),
+    ("rated_voltage",          32009, "u16", 10,   "V"),
+    ("breaker_current",        32010, "s32", 100,  "A"),
+    ("alarm1",                 32012, "u16", 1,    ""),
+    ("alarm2",                 32013, "u16", 1,    ""),
+    ("alarm3",                 32014, "u16", 1,    ""),
+]
+# Holding register (function 0x03): the current the charger is set to offer the car. Read only.
+CHARGER_SET_CURRENT = ("set_current", 42001, "u32", 100, "A")
+
+# IEC 61851-1 control pilot states (protocol appendix 7).
+#   (short code, plain-language label, car plugged in?)
+CHARGER_STATE = {
+    0: ("Init", "Starting up", False),
+    1: ("A", "Not plugged in", False),
+    2: ("B1", "Plugged in, charger waiting", True),
+    3: ("B2", "Plugged in, car not drawing power", True),
+    4: ("C1", "Car ready to charge, charger waiting", True),
+    5: ("C2", "Charging", True),
+    6: ("F", "Charger unavailable", False),
+    7: ("E", "Pilot signal error", True),
+}
+CHARGER_ALARM_BITS = {
+    "alarm1": ("EV charger", {
+        0: "Grid over-voltage", 1: "Grid under-voltage", 2: "Overload", 3: "Short circuit",
+        4: "Charging output over-current", 5: "Leakage current out of limit", 6: "Grounding fault",
+        7: "Abnormal phase sequence of grid wiring", 8: "PEN fault"}),
+    "alarm2": ("EV charger", {
+        0: "Leakage current detection circuit fault", 1: "Relay stuck", 2: "Pilot circuit fault",
+        3: "Auxiliary power supply fault", 4: "Electric lock fault", 5: "Lamp panel communication fault"}),
+    "alarm3": ("EV charger", {0: "Internal temperature too high", 1: "Charging cable fault",
+                              2: "Meter communication fault"}),
+}
+
+
+def looks_like_charger(v):
+    """True if a block read from 32000 is plausibly a Sigen AC charger (not filler from another device)."""
+    try:
+        return (int(v["state"]) in CHARGER_STATE and 1000 <= v["rated_power"] <= 50000
+                and 100 <= v["rated_voltage"] <= 500 and 0 < v["rated_current"] <= 100)
+    except (KeyError, TypeError, ValueError):
+        return False
+
 
 def reg_count(dtype):
     if dtype.startswith("str"):
@@ -152,7 +202,7 @@ ALARM_BITS = {
 }
 
 
-def decode_alarms(values):
+def decode_alarms(values, table=None):
     """Decode the alarm bit-fields.
 
     Returns (alarms, ignored): alarms is a list of {source, message, register, bit};
@@ -162,7 +212,7 @@ def decode_alarms(values):
     wall of bogus faults, so such a word is treated as "not supported" instead.
     """
     out, ignored = [], {}
-    for key, (source, bits) in ALARM_BITS.items():
+    for key, (source, bits) in (table or ALARM_BITS).items():
         try:
             word = int(values.get(key) or 0)
         except (TypeError, ValueError):

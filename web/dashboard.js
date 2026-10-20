@@ -12,6 +12,7 @@
     load: { from: [350, 200], to: [516, 200], color: "--home" },       // hub -> home
     battery: { from: [320, 222], to: [320, 298], color: "--battery" }, // hub -> battery (charging)
     grid: { from: [124, 200], to: [290, 200], color: "--grid", dash: true }, // grid -> hub (buying)
+    ev: { from: [292, 180], to: [119, 83], color: "--ev", optional: true },  // hub -> car
   };
   const wireEls = {};
   (function buildWires() {
@@ -21,8 +22,10 @@
       g.append(el("path", { class: "wire-bed", d, "stroke-width": 3, "stroke-dasharray": w.dash ? "6 6" : null }));
       const wire = el("path", { class: "wire idle", d, style: `stroke:var(${w.color})`, "stroke-dasharray": w.dash ? "6 6" : null });
       const pulse = el("path", { class: "pulse idle", d, style: `stroke:var(${w.color})` });
+      const bed = g.lastChild;
       g.append(wire, pulse);
-      wireEls[k] = { wire, pulse };
+      wireEls[k] = { wire, pulse, bed };
+      if (w.optional) [bed, wire, pulse].forEach((n) => n.setAttribute("hidden", ""));
     }
   })();
 
@@ -46,7 +49,7 @@
   }
 
   function caption(p) {
-    const pv = p.pv || 0, b = p.battery || 0, g = p.grid || 0, I = S.IDLE_W;
+    const pv = p.pv || 0, b = p.battery || 0, g = p.grid || 0, ev = p.ev || 0, I = S.IDLE_W;
     const parts = [];
     if (pv > I) parts.push(`Solar is making ${S.kw(pv)}`);
     else parts.push("No solar right now");
@@ -57,7 +60,7 @@
     let s = parts[0];
     if (parts.length === 2) s += " and " + parts[1];
     if (parts.length === 3) s += ", " + parts[1] + " and " + parts[2];
-    return s + ".";
+    return s + (ev > I ? `. The car is charging at ${S.kw(ev)}.` : ".");
   }
 
   // ------------------------------------------------------------ live render
@@ -78,12 +81,15 @@
     setWire("battery", p.battery, (p.battery || 0) < 0);
     setWire("grid", p.grid, (p.grid || 0) < 0);
     $("caption").textContent = caption(p);
+    renderEvNode(d.ev, p);
     const bt = d.battery || {};
     $("batt-icon-fill").setAttribute("height", (22 * (bt.soc || 0) / 100).toFixed(1));
     $("batt-icon-fill").setAttribute("y", (-11 + 22 * (1 - (bt.soc || 0) / 100)).toFixed(1));
     renderBattery(bt, p);
     renderToday(d.today || {});
     renderSystem(d);
+    renderEv(d.ev);
+    if (evOn(d.ev) && !evData) loadEv();
   }
 
   function hhmm(hoursF) {
@@ -127,6 +133,10 @@
   function renderToday(t) {
     kwhCell("t-pv", t.pv); kwhCell("t-load", t.load); kwhCell("t-imp", t.import); kwhCell("t-exp", t.export);
     kwhCell("t-chg", t.charge); kwhCell("t-dis", t.discharge);
+    const hasEv = t.ev != null;
+    $("t-ev-tile").hidden = !hasEv;
+    $("t-ev-tile").parentElement.classList.toggle("has-ev", hasEv);
+    if (hasEv) kwhCell("t-ev", t.ev);
     const n = $("t-self"); n.innerHTML = "";
     n.append(t.self_sufficiency == null ? "–" : Math.round(t.self_sufficiency));
     if (t.self_sufficiency != null) n.append(el("small", { text: "%" }));
@@ -165,6 +175,7 @@
       ["Inverter temperature", s.pcs_temp != null ? `${s.pcs_temp.toFixed(1)} °C` : null],
       ["Insulation", s.insulation_mohm != null ? `${s.insulation_mohm} MΩ` : null],
       ["Model", s.model], ["Firmware", s.firmware],
+      ["EV charger", evFact(d.ev)],
     ];
     const f = $("sys-facts"); f.innerHTML = "";
     for (const [k, v] of rows) if (v != null && v !== "") f.append(el("dt", { text: k }), el("dd", { text: v, style: "font-family:var(--font);font-size:14px" }));
@@ -183,6 +194,145 @@
         el("span", { text: e.message })));
     }
     if (!(d.events || []).length) ev.append(el("li", {}, el("span", { class: "muted", text: "No events recorded" })));
+  }
+
+  // ------------------------------------------------------------ car charging (Sigen AC charger)
+  const evOn = (e) => !!(e && e.enabled && e.unit != null && e.state_code != null);
+  const EV_PLUGGED_WAIT = "color-mix(in srgb, var(--ev) 30%, var(--surface))";
+  const dur = (sec) => {
+    const m = Math.round((sec || 0) / 60);
+    return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+  };
+  const dayTime = (ts) => new Date(ts * 1000).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  let evData = null;
+
+  function evFact(e) {
+    if (!e || !e.enabled) return null;
+    if (e.unit == null) {
+      if (e.status === "scanning") return e.scan ? `Looking for one (${e.scan.checked} of ${e.scan.of})` : "Looking for one";
+      if (e.status === "not found") return "None found";
+      return null;
+    }
+    return e.status === "offline" ? `Not answering (unit ${e.unit})` : `Sigen, Modbus unit ${e.unit}`;
+  }
+
+  function renderEvNode(e, p) {
+    const on = evOn(e);
+    $("ev-node").toggleAttribute("hidden", !on);
+    const w = wireEls.ev;
+    [w.bed, w.wire, w.pulse].forEach((n) => n.toggleAttribute("hidden", !on));
+    if (!on) return;
+    setVal("ev", p.ev);
+    setWire("ev", p.ev, false);
+    const narrow = window.innerWidth < 560;
+    $("l-ev").textContent = e.charging ? (narrow ? "Charging" : "Car, charging") : e.plugged ? (narrow ? "Plugged in" : "Car, plugged in") : "Car";
+  }
+
+  function renderEv(e) {
+    const panel = $("ev-panel");
+    panel.hidden = !evOn(e);
+    if (panel.hidden) return;
+    const box = $("ev-now"); box.innerHTML = "";
+    const fault = e.state === "E" || e.state === "F" || (e.alarms || []).length;
+    const dotCls = fault ? "fault" : e.charging ? "charging" : e.plugged ? "plugged" : "";
+    box.append(el("div", { class: "ev-state" }, el("span", { class: "dot " + dotCls }), el("span", { text: e.state_label })));
+    if (e.since) {
+      const sameDay = new Date(e.since * 1000).toDateString() === new Date().toDateString();
+      box.append(el("div", { class: "ev-since", text: `since ${sameDay ? S.time(e.since) : dayTime(e.since)}` }));
+    }
+    const ses = e.session;
+    if (e.charging) {
+      box.append(el("div", { class: "ev-big num" }, S.kwNum(e.power), el("small", { text: "kW" })));
+    } else if (ses) {
+      box.append(el("div", { class: "ev-big num" }, (ses.kwh || 0).toFixed(1), el("small", { text: "kWh this session" })));
+    }
+    for (const a of e.alarms || []) {
+      box.append(el("div", { class: "alarm" }, icon("bad"), el("div", {}, el("b", { text: a.message }), el("div", { class: "muted", style: "font-size:13px", text: a.source }))));
+    }
+    const facts = el("dl", { class: "facts" });
+    const add = (k, v) => { if (v != null && v !== "") facts.append(el("dt", { text: k }), el("dd", { text: v })); };
+    if (ses) {
+      add("Plugged in", `${S.time(ses.start)}, ${dur(ses.seconds)} ago`);
+      add("Charging time", ses.charging_s ? dur(ses.charging_s) : "not yet");
+      add("Energy this session", S.kwh(ses.kwh));
+      add("From the grid", ses.cost != null ? `${S.kwh(ses.grid_kwh)}, $${ses.cost.toFixed(2)}` : S.kwh(ses.grid_kwh));
+      facts.append(el("div", { class: "sep" }));
+    }
+    add("Charger", e.rated_power ? `${S.kw(e.rated_power, { forceKw: true })}, ${Math.round(e.rated_current)} A` : null);
+    add("Current offered to the car", e.set_current != null ? `${e.set_current.toFixed(0)} A` : null);
+    add("Supply breaker", e.breaker_current ? `${Math.round(e.breaker_current)} A` : null);
+    add("Delivered in total", e.total_kwh != null ? `${Math.round(e.total_kwh).toLocaleString()} kWh` : null);
+    box.append(facts);
+    $("ev-sub").textContent = e.status === "offline" ? "charger not answering" : `Sigen AC charger, Modbus unit ${e.unit}`;
+  }
+
+  function drawEvTimeline() {
+    const box = $("ev-timeline");
+    if (!evData || $("ev-panel").hidden) return;
+    const W = Math.max(280, box.clientWidth || 600), H = 46, top = 4, bh = 22;
+    const now = Date.now() / 1000, t0 = now - 48 * 3600;
+    const x = (t) => ((Math.max(t0, Math.min(now, t)) - t0) / (now - t0)) * W;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
+      "aria-label": "Charger state over the last 48 hours: when the car was plugged in and when it was charging" });
+    svg.append(el("rect", { class: "track", x: 0, y: top, width: W, height: bh, rx: 4 }));
+    const log = evData.log || [];
+    for (let i = 0; i < log.length; i++) {
+      const a = log[i], end = i + 1 < log.length ? log[i + 1].t : now;
+      if (end <= t0) continue;
+      const code = a.state_code;
+      const fill = code === 5 ? "var(--ev)" : code === 6 || code === 7 ? "var(--bad)" : [2, 3, 4].includes(code) ? EV_PLUGGED_WAIT : null;
+      if (!fill) continue;
+      const r = el("rect", { x: x(a.t), y: top, width: Math.max(1.5, x(end) - x(a.t)), height: bh, fill,
+        stroke: [2, 3, 4].includes(code) ? "var(--ev)" : null, "stroke-width": 0.75 });
+      r.append(el("title", { text: `${clock(Math.max(a.t, t0))} to ${clock(end)}: ${a.label || a.state}` }));
+      svg.append(r);
+    }
+    for (let h = Math.ceil(t0 / 3600) * 3600; h <= now; h += 3600) {
+      const d = new Date(h * 1000);
+      if (d.getHours() % (W < 520 ? 12 : 6)) continue;
+      const lbl = d.getHours() === 0 ? d.toLocaleDateString([], { weekday: "short" }) : d.toLocaleTimeString([], { hour: "numeric" });
+      svg.append(el("line", { x1: x(h), x2: x(h), y1: top + bh, y2: top + bh + 4, stroke: "var(--rule-strong)" }),
+        el("text", { class: "tick", x: x(h), y: H - 2, "text-anchor": "middle", text: lbl }));
+    }
+    box.innerHTML = "";
+    box.append(svg);
+  }
+
+  function renderEvSessions() {
+    const tb = $("ev-sessions"); tb.innerHTML = "";
+    const list = (evData && evData.sessions || []).slice(0, 8);
+    tb.append(el("tr", {}, el("th", { text: "Plugged in" }), el("th", { text: "For" }), el("th", { text: "Charging" }),
+      el("th", { text: "Energy" }), el("th", { class: "hide-sm", text: "From grid" }), el("th", { class: "hide-sm", text: "Grid cost" })));
+    if (!list.length) {
+      tb.append(el("tr", {}, el("td", { colspan: 6, class: "muted", style: "font-family:var(--font)", text: "No charging sessions recorded yet." })));
+    }
+    for (const r of list) {
+      const open = r.end == null;
+      const span = (open ? Date.now() / 1000 : r.end) - r.start;
+      tb.append(el("tr", {},
+        el("td", { style: "font-family:var(--font)", text: dayTime(r.start) }),
+        el("td", { text: open ? `${dur(span)} so far` : dur(span) }),
+        el("td", {}, r.charging_s ? dur(r.charging_s) : el("span", { class: "tag warn", text: open ? "not yet" : "never charged" })),
+        el("td", { text: S.kwh(r.kwh) }),
+        el("td", { class: "hide-sm", text: S.kwh(r.grid_kwh) }),
+        el("td", { class: "hide-sm", text: r.cost == null ? "–" : `$${r.cost.toFixed(2)}` })));
+    }
+    const links = $("ev-links"); links.innerHTML = "";
+    const base = S.apiBase();
+    links.append(
+      el("a", { href: `${base}/api/ev-sessions?format=csv&days=800`, download: "ev-charging-sessions.csv", target: "_blank", text: "Download all sessions (CSV)" }),
+      el("a", { href: `${base}/api/ev-log?format=csv&days=800`, download: "ev-charger-states.csv", target: "_blank", text: "Download the charger's state log (CSV)" }));
+  }
+
+  async function loadEv() {
+    if (!evOn(live && live.ev)) return;
+    try {
+      evData = await S.fetchJSON("/api/ev?days=30");
+      const labels = { 0: "starting up", 1: "not plugged in", 2: "plugged in, charger waiting", 3: "plugged in, car not drawing power",
+        4: "car ready, charger waiting", 5: "charging", 6: "charger unavailable", 7: "pilot signal error" };
+      for (const a of evData.log || []) a.label = labels[a.state_code] || a.state;
+      drawEvTimeline(); renderEvSessions();
+    } catch (e) { /* banner */ }
   }
 
   // ------------------------------------------------------------ status / banner
@@ -223,17 +373,20 @@
   setInterval(renderStatus, 5000);
 
   // ------------------------------------------------------------ history
-  const SERIES = [
+  const SERIES_ALL = [
     { key: "pv", label: "Solar", color: "var(--solar)" },
     { key: "load", label: "Home", color: "var(--home)" },
     { key: "battery", label: "Battery", color: "var(--battery)" },
     { key: "grid", label: "Grid", color: "var(--grid)", dash: true },
+    { key: "ev", label: "Car", color: "var(--ev)", dash: "1.5 4", dot: true },
   ];
-  (function buildLegend() {
+  let SERIES = SERIES_ALL.filter((s) => s.key !== "ev");
+  function buildLegend() {
     const lg = $("legend");
+    lg.innerHTML = "";
     for (const s of SERIES) {
-      const b = el("button", { type: "button", "aria-pressed": "true" },
-        el("span", { class: "sw" + (s.dash ? " dash" : ""), style: `border-color:${s.color}` }), s.label);
+      const b = el("button", { type: "button", "aria-pressed": hidden.has(s.key) ? "false" : "true" },
+        el("span", { class: "sw" + (s.dot ? " dot" : s.dash ? " dash" : ""), style: `border-color:${s.color}` }), s.label);
       b.addEventListener("click", () => {
         hidden.has(s.key) ? hidden.delete(s.key) : hidden.add(s.key);
         b.setAttribute("aria-pressed", hidden.has(s.key) ? "false" : "true");
@@ -241,7 +394,8 @@
       });
       lg.append(b);
     }
-  })();
+  }
+  buildLegend();
 
   function tipTitle(t) {
     return new Date(t * 1000).toLocaleString([], hours > 30
@@ -251,6 +405,8 @@
   function drawHistory() {
     const h = historyData;
     if (!h) return;
+    const want = SERIES_ALL.filter((s) => s.key !== "ev" || h.ev);
+    if (want.length !== SERIES.length) { SERIES = want; buildLegend(); }
     const signed = (k, v, s) => {
       if (v == null) return "–";
       if (s.key === "battery") return Math.abs(v) < S.IDLE_W ? "idle" : `${S.kw(v)} ${v > 0 ? "in" : "out"}`;
@@ -260,7 +416,7 @@
     C.lineChart($("power-chart"), {
       t: h.t, series: SERIES.map((s) => ({ ...s, values: h[s.key] })), hidden, height: 280,
       gapSeconds: h.bucket_seconds * 5, yFmt: S.kwAxis,
-      tipFmt: (v, s) => signed(s.key, v, s), tipTitle, ariaLabel: "Power over time for solar, home, battery and grid",
+      tipFmt: (v, s) => signed(s.key, v, s), tipTitle, ariaLabel: `Power over time for solar, home, battery and grid${h.ev ? ", and car charging" : ""}`,
     });
     C.lineChart($("soc-chart"), {
       t: h.t, series: [{ key: "soc", label: "Charge", color: "var(--battery)", values: h.soc, area: true }],
@@ -282,30 +438,37 @@
   const DAILY = {
     pv: ["Solar made", "var(--solar)"], load: ["Home used", "var(--home)"], import: ["Bought", "var(--grid)"],
     export: ["Sold", "var(--grid)"], discharge: ["Battery discharged", "var(--battery)"], charge: ["Battery charged", "var(--battery)"],
-    cost: ["Net cost", "var(--grid)"],
+    ev: ["Car charged", "var(--ev)"], cost: ["Net cost", "var(--grid)"],
   };
   const money = (v) => (v == null ? "–" : v < 0 ? `$${(-v).toFixed(2)} credit` : `$${v.toFixed(2)}`);
   const ALL_IN = [["pv", "Solar"], ["import", "Bought"], ["discharge", "From battery"]];
-  const ALL_OUT = [["load", "Home"], ["export", "Sold"], ["charge", "To battery"]];
-  const ALL_COLOR = { pv: "var(--solar)", import: "var(--grid)", discharge: "var(--battery)", load: "var(--home)", export: "var(--grid)", charge: "var(--battery)" };
-  (function buildDailyLegend() {
+  const OUT_BASE = [["load", "Home"], ["export", "Sold"], ["charge", "To battery"]];
+  let ALL_OUT = OUT_BASE;
+  const ALL_COLOR = { pv: "var(--solar)", import: "var(--grid)", discharge: "var(--battery)", load: "var(--home)", export: "var(--grid)", charge: "var(--battery)", ev: "var(--ev)" };
+  function buildDailyLegend() {
     const lg = $("daily-legend");
+    lg.innerHTML = "";
     const grp = (title, items) => el("span", { class: "grp" }, el("b", { text: title }),
       ...items.map(([k, l]) => el("span", {}, el("i", { style: `background:${ALL_COLOR[k]}` }), l)));
     lg.append(grp("In", ALL_IN), grp("Out", ALL_OUT));
-  })();
+  }
+  buildDailyLegend();
 
   function drawDaily() {
     const d = dailyData;
     const label = (day) => new Date(day + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" });
     const title = (i) => new Date(d[i].day + "T12:00:00").toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+    const hasEv = d.some((r) => r.ev != null);
+    $("daily-ev-btn").hidden = !hasEv;
+    const out = hasEv ? [OUT_BASE[0], ["ev", "Car"], ...OUT_BASE.slice(1)] : OUT_BASE;
+    if (out.length !== ALL_OUT.length) { ALL_OUT = out; buildDailyLegend(); }
     $("daily-legend").hidden = dailyKey !== "all";
     if (dailyKey === "all") {
       const series = [...ALL_IN.map(([k, l]) => ({ key: k, label: l, color: ALL_COLOR[k], values: d.map((r) => r[k] || 0) })),
         ...ALL_OUT.map(([k, l]) => ({ key: k, label: l, color: ALL_COLOR[k], values: d.map((r) => -(r[k] || 0)) }))];
       C.stackedBarChart($("daily-chart"), {
         labels: d.map((r) => label(r.day)), series, height: 280, yFmt: (v) => `${v}`, title,
-        ariaLabel: "Daily energy in (solar, bought, from battery) above zero and out (home, sold, to battery) below zero, kWh",
+        ariaLabel: `Daily energy in (solar, bought, from battery) above zero and out (${ALL_OUT.map((x) => x[1].toLowerCase()).join(", ")}) below zero, kWh`,
         tip: (i) => {
           const r = d[i], sum = (ks) => ks.reduce((a, [k]) => a + (r[k] || 0), 0);
           const rows = [["Energy in", S.kwh(sum(ALL_IN)), null], ...ALL_IN.map(([k, l]) => [l, S.kwh(r[k]), ALL_COLOR[k]]),
@@ -322,7 +485,8 @@
       yFmt: (v) => (dailyKey === "cost" ? (v < 0 ? `-$${-v}` : `$${v}`) : `${v}`), ariaLabel: `${DAILY[dailyKey][0]} per day`,
       title,
       tip: (i) => {
-        const rows = ["pv", "load", "import", "export", "charge", "discharge"].map((k) => [DAILY[k][0], S.kwh(d[i][k]), DAILY[k][1]]);
+        const rows = ["pv", "load", "ev", "import", "export", "charge", "discharge"].filter((k) => k !== "ev" || d[i].ev != null)
+          .map((k) => [DAILY[k][0], S.kwh(d[i][k]), DAILY[k][1]]);
         if (d[i].cost != null) rows.push([d[i].cost_source === "calculated" ? "Net cost (est.)" : "Net cost (retailer)", money(d[i].cost), "var(--grid)"]);
         return rows;
       },
@@ -633,7 +797,7 @@
   dlg.addEventListener("close", () => {
     if (dlg.returnValue !== "save") return;
     S.setApiBase($("api-input").value.trim());
-    sub.restart(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
+    sub.restart(); evData = null; loadHistory(); loadDaily(); loadPrices(); loadStrings();
   });
 
   // ------------------------------------------------------------ desktop: widget switch + updates
@@ -694,11 +858,12 @@
   const sub = S.subscribe(renderLive, () => { connectFailed = true; renderStatus(); });
   loadHistory(); loadDaily(); loadPrices(); loadStrings();
   setInterval(loadStrings, 60000);
+  setInterval(loadEv, 60000);
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);
   setInterval(loadDaily, 10 * 60000);
   let rt;
-  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); drawStrings(); if (dailyData.length) drawDaily(); }, 120); })
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); if (dailyData.length) drawDaily(); }, 120); })
     .observe(document.querySelector(".wrap"));
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawHistory(); drawDaily(); });
 })();

@@ -9,7 +9,8 @@ A local dashboard and desktop widget for a SigenStor system that reads the inver
 directly over **Modbus TCP**, so it keeps working when Sigenergy's cloud is down.
 Live retailer prices from **Amber Electric** or **LocalVolts** add buy/sell prices, spike
 warnings, forecasts and what your power is costing, and free **AEMO** market data shows
-the wholesale price, demand and generation mix for your region.
+the wholesale price, demand and generation mix for your region. If you have a **Sigen AC
+charger**, it shows the car charging too, with a log of every session.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/power-flow-dark.png">
@@ -28,7 +29,8 @@ SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) �
   Polls every 5 s, keeps minute history for ~2 years, serves the dashboard on port 8080.
 * **Dashboard** (`web/`): live power flow, battery detail, today's totals and cost,
   power and battery history, daily energy and cost, retailer and wholesale prices
-  with forecasts, the grid's generation mix, system status and alarms. Light and dark mode, works on a phone.
+  with forecasts, the grid's generation mix, solar strings, car charging, system status and
+  alarms. Light and dark mode, works on a phone.
 * **Desktop app** (`desktop/`): one app for Windows and macOS. A small always-on-top
   widget plus the full dashboard window, living in the tray / menu bar, with
   "Start at login".
@@ -100,6 +102,14 @@ faulty panel, and for telling which roof face is on which string.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/strings-dark.png">
   <img alt="Chart of power from four PV strings over 24 hours, with today's energy and peak for each string" src="docs/screenshots/strings-light.png">
+</picture>
+
+**Car charging** (with a Sigen AC charger): the charger's state, this session's energy
+and cost, a 48-hour timeline and recent sessions.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/ev-charging-dark.png">
+  <img alt="Car charging panel: charging at 7 kW, session details, a 48-hour timeline of plug-ins and charging, and a table of recent sessions" src="docs/screenshots/ev-charging-light.png">
 </picture>
 
 **Daily energy and system status**: each day's energy in (solar, bought, from battery) and
@@ -196,6 +206,31 @@ Defaults match Sigenergy's protocol: port 502, plant unit **247** (whole-system 
 inverter unit **1** (battery cells, PV strings, temperatures). If you also have a
 Sigen AC charger, the inverter is often unit 2; set `SIGEN_INVERTER_UNIT=2`.
 
+### Sigen AC charger
+
+A Sigen EVAC charger connected to the system is read through the same Modbus TCP
+connection, at the charger's own unit id. That id isn't shown in the mySigen app, so the
+collector looks for it: it checks one id per poll alongside the normal readings (about
+20 minutes for all 246), then logs `Found an AC charger at Modbus unit N`. Put that number
+in `SIGEN_CHARGER_UNIT` to skip the search next time, or set `SIGEN_CHARGER_UNIT=0` if you
+don't have a charger. If none is found it looks again every 12 hours.
+
+Once found, the dashboard shows:
+
+* the car in the power flow, and its charging on the power and daily energy charts
+  (the home figures then leave the car out)
+* the charger's state in plain words (not plugged in, plugged in and waiting, charging,
+  plugged in but the car isn't drawing power, faults) and the current it's offering
+* each session: when the car was plugged in, how long it actually charged, energy, how
+  much came from the grid and what that cost at your retailer's price
+* a 48-hour timeline of plug-ins and charging, and the charger's alarms in the event log
+
+The sessions and every state change can be downloaded as CSV from the panel, or from
+`/api/ev-sessions?format=csv` and `/api/ev-log?format=csv`. The states are the standard
+IEC 61851 ones (A, B1, B2, C2, E, F), so the log is a precise record of what the charger
+offered and what the car did, which is useful if a car won't charge. As with everything
+else, the charger is only read, never controlled.
+
 ## 2. Add your retailer's prices (optional)
 
 Pick one. The keys stay on the collector; the desktop apps never see them.
@@ -290,6 +325,9 @@ install Rust and Node, then `cd desktop && npm install && npm run build`.
 | `GET /api/prices?hours=12` | Retailer (Amber or LocalVolts): current prices, 24 h forecast, recent history |
 | `GET /api/aemo?hours=24` | AEMO wholesale price, forecast, demand, generation mix, interconnectors |
 | `GET /api/strings?hours=48&format=csv` | Per-minute voltage and current of each PV string (CSV download or JSON) |
+| `GET /api/ev?days=30` | AC charger: live state, charging sessions and the last two days of state changes |
+| `GET /api/ev-sessions?days=30&format=csv` | Charging sessions (CSV download or JSON) |
+| `GET /api/ev-log?days=30&format=csv` | Every charger state change with power and offered current (CSV or JSON) |
 | `GET /api/health` | `{ok, status, updated}` for monitoring |
 
 Signs: `grid` positive = buying, negative = selling. `battery` positive = charging.
@@ -307,6 +345,9 @@ Signs: `grid` positive = buying, negative = selling. `battery` positive = chargi
   read from the inverter, including alarm registers in hex and any registers your firmware
   doesn't support. Alarm registers with bits set that Sigenergy's protocol doesn't define
   are treated as unsupported filler values and ignored (they're listed in the log).
+* **AC charger not found**: the `charger` section of `/api/debug` lists which unit ids
+  answered during the search. If your installer knows the charger's id, set
+  `SIGEN_CHARGER_UNIT` to it.
 * **Widget says "Can't reach collector"**: click its status text to open the dashboard and
   fix the address. The collector must be reachable from that computer on port 8080.
 

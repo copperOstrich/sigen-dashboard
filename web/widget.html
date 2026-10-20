@@ -31,7 +31,11 @@
   .price .sp { flex: 1; }
   .price[hidden] { display: none; }
   .price .tag { font-size: 11.5px; padding: 0 7px; }
-  .w.stale .tiles, .w.stale .soc, .w.stale .price { opacity: .45; }
+  .car { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+  .car[hidden] { display: none; }
+  .car i { width: 3px; height: 14px; background: var(--ev); border-radius: 1px; }
+  .car b { font: 600 15px var(--font-num); color: var(--ink); font-variant-numeric: tabular-nums; margin-left: auto; }
+  .w.stale .tiles, .w.stale .soc, .w.stale .price, .w.stale .car { opacity: .45; }
 </style>
 </head>
 <body>
@@ -54,6 +58,7 @@
     <div class="tile" style="border-color:var(--grid);border-left-style:dashed"><span class="k" id="gk">Grid</span><span class="v" id="grid">–</span></div>
   </div>
   <div class="soc"><span>Battery</span><div class="bar"><i id="socbar" style="width:0"></i></div><b id="soc">–</b></div>
+  <div class="car" id="car" hidden><i></i><span id="car-k">Car</span><b id="car-v"></b></div>
   <div class="price" id="price" hidden><span id="buy-k">Buy</span><b id="buy">–</b><span id="sell-k">Sell</span><b id="sell">–</b><span class="sp"></span><span class="tag" id="ptag"></span></div>
 </div>
 <script src="common.js"></script>
@@ -80,6 +85,12 @@
     val("pv", p.pv); val("load", p.load); val("batt", p.battery); val("grid", p.grid);
     $("bk").textContent = desc.battery === "Idle" ? "Battery, idle" : `Battery, ${desc.battery.toLowerCase()}`;
     $("gk").textContent = desc.grid === "Balanced" ? "Grid" : desc.grid === "Buying" ? "Grid, buying" : "Grid, selling";
+    const ev = d.ev || {};
+    $("car").hidden = !(ev.unit != null && ev.plugged);
+    if (ev.plugged) {
+      $("car-k").textContent = ev.charging ? "Car charging" : `Car plugged in${ev.session ? `, ${ev.session.kwh.toFixed(1)} kWh` : ""}`;
+      $("car-v").textContent = ev.charging ? S.kw(ev.power) : "";
+    }
     const soc = d.battery && d.battery.soc;
     $("soc").textContent = soc == null ? "–" : `${Math.round(soc)}%`;
     $("socbar").style.width = `${soc || 0}%`;

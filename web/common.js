@@ -78,7 +78,7 @@
   };
 
   S.el = function (tag, attrs = {}, ...children) {
-    const svg = ["svg", "g", "path", "line", "rect", "circle", "text", "polyline", "defs", "clipPath", "tspan"].includes(tag);
+    const svg = ["svg", "g", "path", "line", "rect", "circle", "text", "polyline", "defs", "clipPath", "tspan", "title"].includes(tag);
     const node = svg ? document.createElementNS("http://www.w3.org/2000/svg", tag) : document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
       if (v == null || v === false) continue;

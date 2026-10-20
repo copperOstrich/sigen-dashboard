@@ -24,6 +24,7 @@ Configuration (environment variables):
   LOCALVOLTS_NMI        LocalVolts NMI, if you have more than one default: first on the account
   AEMO_REGION           NEM region for wholesale data             NSW1, QLD1, VIC1, SA1 or TAS1 (default NSW1)
   AEMO_ENABLED          0 to turn off AEMO market data            default 1
+  SIGEN_CHARGER_UNIT    Sigen AC charger's Modbus unit id         default auto (scan for it); 0 = none
 """
 import json
 import mimetypes
@@ -71,13 +72,14 @@ def load_settings_file():
 
 SETTINGS_PATH = load_settings_file()
 from aemo import Aemo  # noqa: E402
+from charger import ChargerWatch  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -100,6 +102,7 @@ PRICE_PROVIDER = (ENV("PRICE_PROVIDER", "") or "auto").strip().lower()
 AEMO_REGION = (ENV("AEMO_REGION", "") or "NSW1").strip().upper()
 AEMO_ENABLED = ENV("AEMO_ENABLED", "1") != "0"
 AEMO_SIMULATE = ENV("AEMO_SIMULATE", "0") == "1"
+CHARGER_SETTING = (ENV("SIGEN_CHARGER_UNIT", "") or "auto").strip()
 
 COUNTERS = ["total_pv_kwh", "total_load_kwh", "total_import_kwh", "total_export_kwh",
             "total_charge_kwh", "total_discharge_kwh"]
@@ -137,12 +140,19 @@ class Store:
               ts INTEGER, n INTEGER, v REAL, a REAL, PRIMARY KEY(ts, n));
             CREATE TABLE IF NOT EXISTS aemo_prices(
               start INTEGER, region TEXT, rrp REAL, demand REAL, PRIMARY KEY(start, region));
+            CREATE TABLE IF NOT EXISTS ev_sessions(
+              start INTEGER PRIMARY KEY, end INTEGER, start_kwh REAL, kwh REAL, grid_kwh REAL, cost REAL,
+              peak_w REAL, charging_s INTEGER, states TEXT, priced INTEGER);
+            CREATE TABLE IF NOT EXISTS ev_log(
+              ts INTEGER, state INTEGER, code TEXT, power REAL, set_current REAL);
+            CREATE INDEX IF NOT EXISTS ev_log_ts ON ev_log(ts);
             CREATE TABLE IF NOT EXISTS amber_days(
               day TEXT PRIMARY KEY, import_kwh REAL, import_cost REAL, export_kwh REAL,
               export_cost REAL, estimated INTEGER);
             """)
             cols = {r[1] for r in self.db.execute("PRAGMA table_info(samples)")}
-            for c in ("buy_c", "sell_c"):  # Amber price (c/kWh, Amber sign) in force that minute
+            # buy_c/sell_c: retailer price (c/kWh, Amber sign) in force that minute; ev: AC charger W
+            for c in ("buy_c", "sell_c", "ev"):
                 if c not in cols:
                     self.db.execute(f"ALTER TABLE samples ADD COLUMN {c} REAL")
             self.db.commit()
@@ -155,8 +165,8 @@ class Store:
         with self.lock:
             self.db.executemany(
                 "INSERT OR REPLACE INTO samples (ts, day, pv, load, battery, grid, soc, total_pv_kwh, total_load_kwh, "
-                "total_import_kwh, total_export_kwh, total_charge_kwh, total_discharge_kwh, buy_c, sell_c) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+                "total_import_kwh, total_export_kwh, total_charge_kwh, total_discharge_kwh, buy_c, sell_c, ev) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
             self.db.commit()
 
     def save_prices(self, rows):
@@ -217,6 +227,56 @@ class Store:
                 (start, start + 86400, start, start + 86400)).fetchall()}
         return [{"string": n, "kwh": round(kwh or 0, 2), "peak_w": round(pw or 0), "peak_at": peaks.get(n),
                  "max_v": round(mv or 0, 1)} for n, kwh, pw, mv in rows]
+
+    # ---- AC charger
+    EV_COLS = ["start", "end", "start_kwh", "kwh", "grid_kwh", "cost", "peak_w", "charging_s", "states", "priced"]
+
+    def open_ev_session(self):
+        with self.lock:
+            r = self.db.execute(f"SELECT {','.join(self.EV_COLS)} FROM ev_sessions WHERE end IS NULL "
+                                "ORDER BY start DESC LIMIT 1").fetchone()
+        return dict(zip(self.EV_COLS, r)) if r else None
+
+    def save_ev_session(self, s):
+        with self.lock:
+            self.db.execute(f"INSERT OR REPLACE INTO ev_sessions ({','.join(self.EV_COLS)}) VALUES "
+                            f"({','.join('?' * len(self.EV_COLS))})", [s.get(c) for c in self.EV_COLS])
+            self.db.commit()
+
+    def ev_log(self, ts, state, code, power, set_current):
+        with self.lock:
+            self.db.execute("INSERT INTO ev_log VALUES (?,?,?,?,?)", (int(ts), state, code, power, set_current))
+            self.db.commit()
+
+    def last_ev_state(self):
+        with self.lock:
+            return self.db.execute("SELECT ts, state FROM ev_log ORDER BY ts DESC LIMIT 1").fetchone()
+
+    def ev_sessions(self, days):
+        since = int(time.time() - days * 86400)
+        with self.lock:
+            rows = self.db.execute(f"SELECT {','.join(self.EV_COLS)} FROM ev_sessions WHERE start>=? OR end IS NULL "
+                                   "ORDER BY start DESC", (since,)).fetchall()
+        out = []
+        for r in rows:
+            s = dict(zip(self.EV_COLS, r))
+            s.pop("start_kwh", None)
+            s["cost"] = round(s["cost"], 2) if s.pop("priced") else None
+            s["kwh"], s["grid_kwh"] = round(s["kwh"] or 0, 2), round(s["grid_kwh"] or 0, 2)
+            s["peak_w"] = round(s["peak_w"] or 0)
+            out.append(s)
+        return out
+
+    def ev_states(self, days):
+        since = int(time.time() - days * 86400)
+        with self.lock:
+            return self.db.execute("SELECT ts, state, code, power, set_current FROM ev_log WHERE ts>=? ORDER BY ts",
+                                   (since,)).fetchall()
+
+    def ev_day(self, day):
+        with self.lock:
+            r = self.db.execute("SELECT SUM(ev)/60000.0, COUNT(ev) FROM samples WHERE day=?", (day,)).fetchone()
+        return round(r[0] or 0, 2) if r and r[1] else None
 
     def save_aemo(self, rows):
         with self.lock:
@@ -292,14 +352,16 @@ class Store:
         bucket = max(60, int(hours * 3600 / 480) // 60 * 60)
         with self.lock:
             rows = self.db.execute(
-                "SELECT (ts/?)*? AS b, AVG(pv), AVG(load), AVG(battery), AVG(grid), AVG(soc) "
-                "FROM samples WHERE ts>=? GROUP BY b ORDER BY b", (bucket, bucket, since)).fetchall()
-        keys = ["t", "pv", "load", "battery", "grid", "soc"]
+                "SELECT (ts/?)*? AS b, AVG(pv), AVG(MAX(0, load - COALESCE(ev, 0))), AVG(battery), AVG(grid), "
+                "AVG(soc), AVG(ev) FROM samples WHERE ts>=? GROUP BY b ORDER BY b", (bucket, bucket, since)).fetchall()
+        keys = ["t", "pv", "load", "battery", "grid", "soc", "ev"]
         out = {k: [] for k in keys}
         for r in rows:
             for k, v in zip(keys, r):
                 out[k].append(round(v, 1) if isinstance(v, float) else v)
         out["bucket_seconds"] = bucket
+        if not any(v is not None for v in out["ev"]):
+            del out["ev"]  # no charger: keep the chart to the four series
         return out
 
     def daily(self, days):
@@ -307,7 +369,7 @@ class Store:
         cols = ",".join(f"MIN({c}),MAX({c})" for c in COUNTERS)
         with self.lock:
             rows = self.db.execute(
-                f"SELECT day, {cols}, MAX(soc), MIN(soc) FROM samples WHERE day>? "
+                f"SELECT day, {cols}, MAX(soc), MIN(soc), SUM(ev)/60000.0 FROM samples WHERE day>? "
                 "AND total_pv_kwh IS NOT NULL GROUP BY day ORDER BY day", (since,)).fetchall()
         out, prev_max = [], None
         names = ["pv", "load", "import", "export", "charge", "discharge"]
@@ -318,6 +380,9 @@ class Store:
                 start = prev_max[i] if prev_max and prev_max[i] is not None else mins[i]
                 entry[n] = round(max(0.0, (maxs[i] or 0) - (start or 0)), 2)
             entry["soc_max"], entry["soc_min"] = round(r[13] or 0, 1), round(r[14] or 0, 1)
+            if r[15] is not None:  # the plant's load total includes the car; split it out
+                entry["ev"] = round(min(r[15], entry["load"]), 2)
+                entry["load"] = round(entry["load"] - entry["ev"], 2)
             prev_max = maxs
             out.append(entry)
         with self.lock:
@@ -349,6 +414,7 @@ class Collector:
         if self.inverter:
             self.inverter.unsupported |= self.extra_strings
         self.string_count = None
+        self.charger = ChargerWatch(self.client, store, CHARGER_SETTING, {0, PLANT_UNIT, INVERTER_UNIT}, log=log)
         self.state = {"status": "connecting", "mode": "simulator" if SIMULATE else "live",
                       "target": f"{host}:{port}", "updated": None, "error": None}
         self.cond = threading.Condition()
@@ -408,18 +474,20 @@ class Collector:
                     log(f"Inverter reports {count} PV string{'s' if count != 1 else ''}")
             except Exception as e:  # inverter unit id may be wrong - plant data still useful
                 inv = {"_error": str(e)}
-        self.raw = {"plant": p, "inverter": inv, "read_at": time.time(),
+        buy = self.retailer.prices_now()[0] if self.retailer else None
+        ev = self.charger.read(time.time(), p.get("grid_power"), buy)
+        self.raw = {"plant": p, "inverter": inv, "charger": self.charger.debug(), "read_at": time.time(),
                     "unsupported": {"plant": sorted(self.plant.unsupported),
                                     "inverter": sorted(self.inverter.unsupported) if self.inverter else []}}
         now = time.time()
         was = self.state.get("status")
-        self.state_from(p, inv, now)
+        self.state_from(p, inv, now, ev)
         if was == "error":
             self.store.event("connection", "Connection to inverter restored")
             log("Connection restored")
         self.record(p, now, inv)
 
-    def state_from(self, p, inv, now):
+    def state_from(self, p, inv, now, ev=None):
         day = local_day(now)
         base = self.store.day_start_counters(day)
         cur = {c: p.get(c) for c in COUNTERS}
@@ -437,6 +505,13 @@ class Collector:
         chg = inv.get("daily_charge_kwh", today("total_charge_kwh"))
         dis = inv.get("daily_discharge_kwh", today("total_discharge_kwh"))
         cost = self.store.cost_for_day(day)
+        ev_w = self.charger.power
+        ev_today = self.store.ev_day(day) if ev_w is not None or (ev and ev.get("unit")) else None
+        if ev_today is not None and load_today is not None:
+            ev_today = min(ev_today, load_today)
+        home_w = p.get("load_power")
+        if ev_w is not None and home_w is not None:
+            home_w = max(0.0, home_w - ev_w)  # the plant's total load includes the car
         self_suff = None
         if load_today and imp is not None and load_today > 0.1:
             self_suff = round(max(0.0, min(100.0, (1 - imp / load_today) * 100)), 1)
@@ -466,8 +541,8 @@ class Collector:
         state = {
             "status": "ok", "error": None, "updated": now, "version": VERSION,
             "mode": "simulator" if SIMULATE else "live", "target": self.state["target"],
-            "power": {"pv": r(p.get("pv_power")), "load": r(p.get("load_power")),
-                      "battery": r(p.get("battery_power")), "grid": r(p.get("grid_power"))},
+            "power": {"pv": r(p.get("pv_power")), "load": r(home_w),
+                      "battery": r(p.get("battery_power")), "grid": r(p.get("grid_power")), "ev": r(ev_w)},
             "battery": {
                 "soc": r(p.get("battery_soc"), 1), "soh": r(p.get("battery_soh"), 1),
                 "rated_kwh": r(p.get("battery_rated_kwh"), 1),
@@ -484,7 +559,8 @@ class Collector:
                 "cell_v_min": r(inv.get("battery_min_cell_voltage"), 3),
                 "packs": inv.get("pack_count"),
             },
-            "today": {"pv": r(pv_today, 2), "load": r(load_today, 2), "import": imp, "export": exp,
+            "today": {"pv": r(pv_today, 2), "import": imp, "export": exp, "ev": ev_today,
+                      "load": r(load_today - (ev_today or 0) if load_today is not None else None, 2),
                       "charge": r(chg, 2), "discharge": r(dis, 2), "self_sufficiency": self_suff, "cost": cost,
                       "yesterday_pv": r(p.get("yesterday_pv_kwh"), 2)},
             "system": {
@@ -500,7 +576,8 @@ class Collector:
                 "inverter_error": inv.get("_error"), "strings": strings,
                 "max_active_power": r(p.get("max_active_power")),
             },
-            "alarms": alarms,
+            "alarms": alarms + [a for a in (ev or {}).get("alarms", [])],
+            "ev": ev or {"enabled": False, "status": "off"},
             "alarm_registers_ignored": {k: f"0x{v:04X}" for k, v in ignored.items()},
             "events": self.store.events(12),
             "price": self.retailer.summary() if self.retailer else {"enabled": False, "status": "off"},
@@ -527,9 +604,10 @@ class Collector:
         avg = lambda k: sum(a[k] for a in acc) / len(acc)
         last = acc[-1]
         buy, sell = self.retailer.prices_now() if self.retailer else (None, None)
+        evs = [a["ev"] for a in acc if a.get("ev") is not None]
         self.store.insert([(self.minute_bucket, local_day(self.minute_bucket),
                             avg("pv"), avg("load"), avg("battery"), avg("grid"), last["soc"],
-                            *[last[c] for c in COUNTERS], buy, sell)])
+                            *[last[c] for c in COUNTERS], buy, sell, sum(evs) / len(evs) if evs else None)])
         self.minute_acc = []
 
     def record(self, p, now, inv=None):
@@ -547,7 +625,7 @@ class Collector:
         self.minute_acc.append({"pv": p.get("pv_power", 0), "load": p.get("load_power", 0),
                                 "battery": p.get("battery_power", 0), "grid": p.get("grid_power", 0),
                                 "soc": p.get("battery_soc"), **{c: p.get(c) for c in COUNTERS},
-                                "strings": self._strings_now(inv)})
+                                "strings": self._strings_now(inv), "ev": self.charger.power})
 
     def _strings_now(self, inv):
         inv = inv or {}
@@ -570,6 +648,8 @@ def start_simulator(store):
     plant.t = start
     fill = store.empty() and DEMO_DAYS > 0
     t, rows, prices, srows = start, [], [], []
+    from charger import SessionTracker
+    tracker = SessionTracker(store, log) if fill and simulator.EV_ON else None
     while t < now:
         t += timedelta(minutes=1)
         plant.step(t)
@@ -579,7 +659,9 @@ def start_simulator(store):
             buy, feed, spot = (None, None, None) if (AMBER_KEY or LV_KEY) else Amber.sim_price(ts)
             rows.append((ts, t.strftime("%Y-%m-%d"), plant.p["pv"], plant.p["load"], plant.p["battery"],
                          plant.p["grid"], plant.soc, tot["pv"], tot["load"], tot["import"], tot["export"],
-                         tot["charge"], tot["discharge"], buy, feed))
+                         tot["charge"], tot["discharge"], buy, feed, plant.p["ev"] if tracker else None))
+            if tracker:
+                tracker.update(ts, plant.charger_values(), plant.p["grid"], buy, quiet=True)
             for n, (v, a) in enumerate(plant.string_values(), 1):
                 srows.append((ts, n, v, a))
             if buy is not None and ts % 1800 == 0:
@@ -593,6 +675,8 @@ def start_simulator(store):
         store.insert(rows)
         log(f"Pre-filled {DEMO_DAYS} days of simulated history ({len(rows)} samples)")
     srv = simulator.Server(("127.0.0.1", 0), simulator.Handler)
+    if fill and tracker:
+        tracker.save()
     srv.plant, srv.inverter_unit = plant, INVERTER_UNIT or 1
     srv.alarms = simulator.parse_alarms(ENV("SIM_ALARMS"))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -667,6 +751,8 @@ class Api(BaseHTTPRequestHandler):
                     self.wfile.write(body)
                     return
                 return self._json([{"t": ts, "string": n, "v": round(v, 1), "a": round(a, 2)} for ts, n, v, a in rows])
+            if url.path in ("/api/ev", "/api/ev-sessions", "/api/ev-log"):
+                return self._ev(url.path, q)
             if url.path == "/api/debug":
                 raw = json.loads(json.dumps(self.collector.raw, default=str))
                 for dev in ("plant", "inverter"):
@@ -687,6 +773,42 @@ class Api(BaseHTTPRequestHandler):
         except Exception as e:
             traceback.print_exc()
             self._json({"error": str(e)}, 500)
+
+    def _csv(self, name, lines):
+        body = ("\n".join(lines) + "\n").encode()
+        self._headers(200, "text/csv", {"Content-Length": str(len(body)),
+                                        "Content-Disposition": f'attachment; filename="{name}"'})
+        self.wfile.write(body)
+
+    def _ev(self, path, q):
+        from registers import CHARGER_STATE
+        days = min(800, max(1, float(q.get("days", ["30"])[0])))
+        csv = q.get("format", [""])[0] == "csv"
+        lt = lambda ts: datetime.fromtimestamp(ts, TZ).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
+        if path == "/api/ev-log":
+            rows = self.store.ev_states(days)
+            if csv:
+                return self._csv("ev-charger-states.csv", ["timestamp_utc,local_time,state,state_code,meaning,power_w,offered_current_a"] + [
+                    f"{ts},{lt(ts)},{code},{st},\"{CHARGER_STATE.get(st, ('', ''))[1]}\",{p or 0:.0f},{'' if a is None else f'{a:g}'}"
+                    for ts, st, code, p, a in rows])
+            return self._json([{"t": ts, "state_code": st, "state": code, "power": p, "set_current": a}
+                               for ts, st, code, p, a in rows])
+        sessions = self.store.ev_sessions(days)
+        if path == "/api/ev-sessions" and csv:
+            lines = ["plugged_in,unplugged,minutes_plugged_in,minutes_charging,kwh,kwh_from_grid,"
+                     "grid_cost_dollars,peak_kw,states_seen"]
+            for x in sessions:
+                mins = round(((x["end"] or time.time()) - x["start"]) / 60)
+                cost = "" if x["cost"] is None else f"{x['cost']:.2f}"
+                lines.append(f"{lt(x['start'])},{lt(x['end'])},{mins},{round((x['charging_s'] or 0) / 60)},"
+                             f"{x['kwh']:.2f},{x['grid_kwh']:.2f},{cost},{x['peak_w'] / 1000:.2f},"
+                             f"{(x['states'] or '').replace(',', ' ')}")
+            return self._csv("ev-charging-sessions.csv", lines)
+        out = {"sessions": sessions, "live": self.collector.charger.summary()}
+        if path == "/api/ev":
+            out["log"] = [{"t": ts, "state_code": st, "state": code, "power": p}
+                          for ts, st, code, p, _a in self.store.ev_states(min(days, 2))]
+        return self._json(out)
 
     def _stream(self):
         self._headers(200, "text/event-stream", {"Connection": "keep-alive"})
@@ -771,6 +893,7 @@ def main():
             with collector.rec_lock:
                 collector.stopping.set()
                 collector.flush_minute()
+                collector.charger.close()
             store.close()
         except Exception as e:  # never block shutdown
             log("Error while saving on shutdown:", e)

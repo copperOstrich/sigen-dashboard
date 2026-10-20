@@ -3,6 +3,22 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.3.0
+
+### Car charging (Sigen AC charger)
+- Finds a Sigen EVAC AC charger on the system automatically (or set `SIGEN_CHARGER_UNIT`)
+  and reads it over the same Modbus TCP connection, read-only
+- The car in the live power flow, with its own line on the power chart and its own
+  category in daily energy and today's totals; home figures now leave the car out
+- Car charging panel: the charger's state in plain words, power, the current offered to
+  the car, this session's energy, grid energy and cost, a 48-hour plug-in and charging
+  timeline, and recent sessions
+- Plug-in, charging, unplug and fault events in the event log, including a note when power
+  has been offered for 10 minutes and the car hasn't started charging
+- Charging sessions and the full state log (IEC 61851 states) as CSV downloads
+- The desktop widget shows when the car is plugged in or charging
+- Simulator includes a charger and a car so the panel can be tried without one
+
 ## 1.2.0
 
 The first public release.

@@ -1,4 +1,4 @@
-"""Minimal, dependency-free Modbus TCP client (function 0x04, read input registers).
+"""Minimal, dependency-free Modbus TCP client (functions 0x03 and 0x04: reading registers).
 
 Read-only by design: this module has no write functions at all, so the dashboard
 can never change inverter settings or interfere with Amber / VPP control.
@@ -51,20 +51,31 @@ class ModbusTCPClient:
             buf += chunk
         return buf
 
-    def read_input_registers(self, unit, address, count):
+    def read_input_registers(self, unit, address, count, timeout=None):
+        return self._read(0x04, unit, address, count, timeout)
+
+    def read_holding_registers(self, unit, address, count, timeout=None):
+        """Function 0x03. Still only a read: used for settings the dashboard displays."""
+        return self._read(0x03, unit, address, count, timeout)
+
+    def _read(self, fc_req, unit, address, count, timeout=None):
         if count < 1 or count > 125:
             raise ValueError("count must be 1..125")
         with self._lock:
             if self._sock is None:
                 self.connect()
             self._tid = (self._tid + 1) & 0xFFFF
-            pdu = struct.pack(">BHH", 0x04, address, count)
+            pdu = struct.pack(">BHH", fc_req, address, count)
             frame = struct.pack(">HHHB", self._tid, 0, len(pdu) + 1, unit) + pdu
             try:
+                # A shorter timeout is used when probing unit ids, which real devices
+                # simply don't answer if nothing is there.
+                self._sock.settimeout(timeout or self.timeout)
                 self._sock.sendall(frame)
                 header = self._recv_exact(7)
                 tid, proto, length, _unit = struct.unpack(">HHHB", header)
                 body = self._recv_exact(length - 1)
+                self._sock.settimeout(self.timeout)
             except (OSError, ModbusError):
                 self.close()
                 raise
