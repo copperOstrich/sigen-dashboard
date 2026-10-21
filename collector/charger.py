@@ -11,7 +11,10 @@ from modbus import ModbusError, ModbusException, decode, scale
 from registers import (CHARGER, CHARGER_ALARM_BITS, CHARGER_SET_CURRENT, CHARGER_STATE, decode_alarms,
                        looks_like_charger, reg_count)
 
-PROBE_TIMEOUT = 1.5          # seconds to wait for an answer from a unit id that may not exist
+import os
+# Seconds to wait for an answer from a unit id that may not exist. The inverter passes requests
+# on to a wired charger, which can take a moment, so this is generous.
+PROBE_TIMEOUT = float(os.environ.get("SIGEN_CHARGER_PROBE_TIMEOUT") or 3)
 RESCAN_AFTER = 12 * 3600     # if nothing was found, look again this often
 WAITING_ALERT = 10 * 60      # "power offered but the car isn't taking it" after this long
 OFFLINE_AFTER = 12           # consecutive failed reads before the charger counts as offline
@@ -155,7 +158,11 @@ class ChargerWatch:
         except (OSError, ModbusError):
             return "no answer"
         v = decode_block(regs)
-        return v if looks_like_charger(v) else "answered, but not charger data"
+        if looks_like_charger(v):
+            return v
+        # Keep what it said, so /api/debug shows why it didn't count as a charger
+        return "answered, but not charger data: " + ", ".join(f"{k}={v[k]}" for k in
+                                                              ("state", "rated_power", "rated_current", "rated_voltage", "power"))
 
     def _scan_step(self, now):
         if not self.queue:
@@ -177,8 +184,9 @@ class ChargerWatch:
         if not self.queue:
             self.status = "not found"
             self.next_scan = now + RESCAN_AFTER
+            answered = ", ".join(f"{u}: {r}" for u, r in self.scan_log.items()) or "none"
             self.log("No AC charger found on unit ids 1-246; will look again in 12 hours. "
-                     "If you have one, set SIGEN_CHARGER_UNIT to its id.")
+                     "If you have one, set SIGEN_CHARGER_UNIT to its id. Ids that answered: " + answered)
         return None
 
     # ---- reading -----------------------------------------------------------------

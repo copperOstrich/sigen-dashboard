@@ -214,7 +214,7 @@ class SimPlant:
             "total_load_kwh": self.totals["load"], "total_charge_kwh": self.totals["charge"],
             "total_discharge_kwh": self.totals["discharge"], "total_import_kwh": self.totals["import"],
             "total_export_kwh": self.totals["export"], "daily_pv_kwh": self.daily["pv"],
-            "yesterday_pv_kwh": self.yesterday_pv, "general_load_power": p["load"] - p["ev"],
+            "yesterday_pv_kwh": self.yesterday_pv, "total_evac_kwh": self.ev_total if EV_ON else 0, "general_load_power": p["load"] - p["ev"],
             "load_power": p["load"], "battery_avg_cell_temp": 24.5 + abs(p["battery"]) / 2500,
         }
         for i in range(1, 8):

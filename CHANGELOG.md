@@ -3,6 +3,15 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.3.1
+
+- AC charger search waits longer for each Modbus id (3 s, or `SIGEN_CHARGER_PROBE_TIMEOUT`),
+  since the inverter relays requests to a wired charger
+- Accepts chargers whose firmware reports only a power or only a current rating
+- When no charger is found, the log and `/api/debug` list every id that answered and what it
+  returned, and `/api/debug` shows the plant's total energy sent to an AC charger
+  (`total_evac_kwh`), which tells you whether the inverter knows about a charger at all
+
 ## 1.3.0
 
 ### Car charging (Sigen AC charger)

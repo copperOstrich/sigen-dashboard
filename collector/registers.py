@@ -47,6 +47,7 @@ PLANT = [
     ("total_load_kwh",         30094, "u64", 100,  "kWh"),
     ("total_charge_kwh",       30200, "u64", 100,  "kWh"),
     ("total_discharge_kwh",    30204, "u64", 100,  "kWh"),
+    ("total_evac_kwh",         30232, "u64", 100,  "kWh"),  # energy the plant has sent to an AC charger
     ("total_import_kwh",       30216, "u64", 100,  "kWh"),
     ("total_export_kwh",       30220, "u64", 100,  "kWh"),
     ("daily_pv_kwh",           30272, "u32", 100,  "kWh"),
@@ -149,8 +150,11 @@ CHARGER_ALARM_BITS = {
 def looks_like_charger(v):
     """True if a block read from 32000 is plausibly a Sigen AC charger (not filler from another device)."""
     try:
-        return (int(v["state"]) in CHARGER_STATE and 1000 <= v["rated_power"] <= 50000
-                and 100 <= v["rated_voltage"] <= 500 and 0 < v["rated_current"] <= 100)
+        # The state must be valid; then either the power or the current rating must look like
+        # an AC charger's (firmware may leave one of them at zero).
+        return (int(v["state"]) in CHARGER_STATE
+                and (1000 <= v["rated_power"] <= 50000 or 6 <= v["rated_current"] <= 80)
+                and not (v["rated_power"] == 0xFFFFFFFF or v["rated_voltage"] == 0xFFFF / 10))
     except (KeyError, TypeError, ValueError):
         return False
 
