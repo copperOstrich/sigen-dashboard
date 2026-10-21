@@ -18,6 +18,7 @@ Settings (environment variables):
   SIM_EV_CHARGER        1 = include a Sigen AC charger and a car   default 1
   SIM_CHARGER_UNIT      the charger's Modbus unit id                default 3
   SIM_EV_KW             charger rating, kW                          default 7
+  SIM_CHARGER_MODBUS    0 = charger has no Modbus address (seen only via plant figures)
 """
 import argparse
 import hashlib
@@ -47,6 +48,8 @@ EXPORT_LIMIT_W = _env_float("SIM_EXPORT_LIMIT_KW", 5) * 1000
 EV_ON = os.environ.get("SIM_EV_CHARGER", "1") != "0"
 EV_W = _env_float("SIM_EV_KW", 7) * 1000
 CHARGER_UNIT = int(os.environ.get("SIM_CHARGER_UNIT") or 3)
+# 0 = the charger has no Modbus address (only the plant's figures show it), like many installs
+CHARGER_ON_MODBUS = os.environ.get("SIM_CHARGER_MODBUS", "1") != "0"
 MAX_BATT_W = min(INVERTER_W, BATTERY_KWH * 1000 * 0.5)  # ~0.5C, capped by the inverter
 MIN_SOC, MAX_SOC = 5.0, 100.0
 LOCAL_TZ = ZoneInfo(os.environ.get("TZ") or "Australia/Sydney")
@@ -332,7 +335,7 @@ class Handler(socketserver.BaseRequestHandler):
                 regs = register_image(PLANT, plant.plant_values(self.server.alarms))
             elif unit == inverter_unit:
                 regs = register_image(INVERTER, plant.inverter_values())
-            elif EV_ON and unit == CHARGER_UNIT:
+            elif EV_ON and CHARGER_ON_MODBUS and unit == CHARGER_UNIT:
                 regs = register_image(CHARGER + [CHARGER_SET_CURRENT], plant.charger_values())
             else:
                 continue  # real devices time out for unknown unit ids

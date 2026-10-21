@@ -133,6 +133,9 @@ CHARGER_STATE = {
     5: ("C2", "Charging", True),
     6: ("F", "Charger unavailable", False),
     7: ("E", "Pilot signal error", True),
+    # Not an IEC state: used when the charger isn't readable over Modbus and charging is
+    # inferred from the plant's figures, so whether the car is plugged in isn't known.
+    8: ("-", "Not charging", False),
 }
 CHARGER_ALARM_BITS = {
     "alarm1": ("EV charger", {

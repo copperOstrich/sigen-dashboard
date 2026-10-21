@@ -475,7 +475,7 @@ class Collector:
             except Exception as e:  # inverter unit id may be wrong - plant data still useful
                 inv = {"_error": str(e)}
         buy = self.retailer.prices_now()[0] if self.retailer else None
-        ev = self.charger.read(time.time(), p.get("grid_power"), buy)
+        ev = self.charger.read(time.time(), p.get("grid_power"), buy, p)
         self.raw = {"plant": p, "inverter": inv, "charger": self.charger.debug(), "read_at": time.time(),
                     "unsupported": {"plant": sorted(self.plant.unsupported),
                                     "inverter": sorted(self.inverter.unsupported) if self.inverter else []}}
@@ -510,7 +510,9 @@ class Collector:
         if ev_today is not None and load_today is not None:
             ev_today = min(ev_today, load_today)
         home_w = p.get("load_power")
-        if ev_w is not None and home_w is not None:
+        if self.charger.source == "plant" and p.get("general_load_power") is not None:
+            home_w = max(0.0, p["general_load_power"])  # the plant's own figure without the car
+        elif ev_w is not None and home_w is not None:
             home_w = max(0.0, home_w - ev_w)  # the plant's total load includes the car
         self_suff = None
         if load_today and imp is not None and load_today > 0.1:
@@ -538,6 +540,7 @@ class Collector:
                 strings.append({"n": i, "v": round(v, 1), "a": round(a, 2), "w": round(v * a)})
 
         r = lambda x, d=0: None if x is None else round(x, d)
+        cell = lambda x: None if x is None or x >= 65 else round(x, 3)  # 65.535 = 0xFFFF: not reported
         state = {
             "status": "ok", "error": None, "updated": now, "version": VERSION,
             "mode": "simulator" if SIMULATE else "live", "target": self.state["target"],
@@ -554,9 +557,9 @@ class Collector:
                 "cutoff_high": r(p.get("charge_cutoff_soc"), 1),
                 "cell_temp_avg": r(inv.get("battery_avg_cell_temp", p.get("battery_avg_cell_temp")), 1),
                 "temp_max": r(inv.get("battery_max_temp"), 1), "temp_min": r(inv.get("battery_min_temp"), 1),
-                "cell_v_avg": r(inv.get("battery_avg_cell_voltage"), 3),
-                "cell_v_max": r(inv.get("battery_max_cell_voltage"), 3),
-                "cell_v_min": r(inv.get("battery_min_cell_voltage"), 3),
+                "cell_v_avg": cell(inv.get("battery_avg_cell_voltage")),
+                "cell_v_max": cell(inv.get("battery_max_cell_voltage")),
+                "cell_v_min": cell(inv.get("battery_min_cell_voltage")),
                 "packs": inv.get("pack_count"),
             },
             "today": {"pv": r(pv_today, 2), "import": imp, "export": exp, "ev": ev_today,

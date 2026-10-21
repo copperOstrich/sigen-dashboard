@@ -139,11 +139,14 @@
           <div class="ev-timeline" id="ev-timeline"></div>
           <div class="ev-key">
             <span><i style="background:var(--ev)"></i>Charging</span>
-            <span><i style="background:color-mix(in srgb, var(--ev) 30%, var(--surface));border:1px solid var(--ev)"></i>Plugged in, not charging</span>
+            <span id="ev-key-plugged"><i style="background:color-mix(in srgb, var(--ev) 30%, var(--surface));border:1px solid var(--ev)"></i>Plugged in, not charging</span>
             <span><i style="background:var(--bad)"></i>Fault</span>
           </div>
           <table class="strings ev-sessions" id="ev-sessions"></table>
           <div class="ev-links" id="ev-links"></div>
+          <p class="chart-note" id="ev-note" hidden>The charger itself isn't readable over Modbus (it needs a Modbus address set by
+            your installer), so charging is worked out from the inverter's own figures. That shows when the car charges and how much,
+            but not when it's plugged in without charging, or the charger's alarms.</p>
         </div>
       </div>
     </section>
@@ -257,6 +260,13 @@
     </section>
   </div>
 </div>
+
+<footer class="foot" id="foot">
+  <span id="foot-collector">Collector –</span>
+  <span id="foot-app" hidden></span>
+  <span id="foot-mode"></span>
+  <a href="https://github.com/copperOstrich/sigen-dashboard/releases" target="_blank" rel="noopener">Releases</a>
+</footer>
 
 <dialog id="settings">
   <form method="dialog" id="settings-form">

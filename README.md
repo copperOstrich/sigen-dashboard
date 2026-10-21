@@ -216,6 +216,13 @@ collector looks for it: it checks one id per poll alongside the normal readings 
 in `SIGEN_CHARGER_UNIT` to skip the search next time, or set `SIGEN_CHARGER_UNIT=0` if you
 don't have a charger. If none is found it looks again every 12 hours.
 
+**If the charger has no Modbus address** (common: setting one needs the installer
+account), the collector still shows the car's charging, worked out from the inverter's own
+figures: its split of total load from household load, and its counter of energy sent to the
+charger. That gives charging power, sessions, energy and cost. What it can't show is the
+charger's own state (plugged in but not charging) or its alarms; for those, ask your
+installer to give the charger a Modbus address.
+
 Once found, the dashboard shows:
 
 * the car in the power flow, and its charging on the power and daily energy charts

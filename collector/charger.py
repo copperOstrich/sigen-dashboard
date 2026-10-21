@@ -6,6 +6,7 @@ collector scans for it: one unit id per poll, so a slow or silent id never holds
 normal readings. Read-only, like everything else here.
 """
 import time
+from collections import deque
 
 from modbus import ModbusError, ModbusException, decode, scale
 from registers import (CHARGER, CHARGER_ALARM_BITS, CHARGER_SET_CURRENT, CHARGER_STATE, decode_alarms,
@@ -18,6 +19,10 @@ PROBE_TIMEOUT = float(os.environ.get("SIGEN_CHARGER_PROBE_TIMEOUT") or 3)
 RESCAN_AFTER = 12 * 3600     # if nothing was found, look again this often
 WAITING_ALERT = 10 * 60      # "power offered but the car isn't taking it" after this long
 OFFLINE_AFTER = 12           # consecutive failed reads before the charger counts as offline
+# Inferring charging from the plant's figures (charger not on Modbus)
+PLANT_ON_W = 300             # car counts as charging above this
+PLANT_OFF_AFTER = 10 * 60    # ...and as stopped once below PLANT_IDLE_W for this long
+PLANT_IDLE_W = 100
 BLOCK_START = CHARGER[0][1]
 BLOCK_LEN = CHARGER[-1][1] + reg_count(CHARGER[-1][2]) - BLOCK_START
 
@@ -49,6 +54,7 @@ class SessionTracker:
         self.last_t = None
         self.alarm_keys = set()
         self.waiting_flagged = False
+        self.inferred = False  # True when states come from the plant's figures, not the charger
 
     def update(self, now, v, grid_w=None, buy_c=None, quiet=False):
         code = int(v.get("state", -1))
@@ -65,7 +71,7 @@ class SessionTracker:
             self.store.ev_log(now, code, CHARGER_STATE.get(code, ("?",))[0], power, v.get("set_current"))
             if prev is not None:
                 was_plugged = CHARGER_STATE.get(prev, (None, None, False))[2]
-                if plugged and not was_plugged:
+                if plugged and not was_plugged and not self.inferred:
                     event("Car plugged in")
                 if code == 5:
                     event("Charging started")
@@ -110,8 +116,11 @@ class SessionTracker:
             if not plugged:
                 s["end"] = int(now)
                 self.store.save_ev_session(s)
-                event(f"Car unplugged after {duration(s['end'] - s['start'])}: {s['kwh']:.1f} kWh"
-                      + ("" if s["charging_s"] else ", it never started charging"))
+                if self.inferred:
+                    event(f"Charging finished after {duration(s['charging_s'])}: {s['kwh']:.1f} kWh")
+                else:
+                    event(f"Car unplugged after {duration(s['end'] - s['start'])}: {s['kwh']:.1f} kWh"
+                          + ("" if s["charging_s"] else ", it never started charging"))
                 self.session = None
 
         alarms, _ignored = decode_alarms(v, CHARGER_ALARM_BITS)
@@ -141,6 +150,11 @@ class ChargerWatch:
         self.tracker = SessionTracker(store, log) if self.mode != "off" else None
         self.last_save = 0.0
         self.set_current_ok = True
+        self.source = None            # "charger" (read directly) or "plant" (inferred)
+        self.plant_ev_w = None
+        self.counter = deque()        # (time, plant EV energy counter) for the last few minutes
+        self.charging_since_low = None
+        self.plant_charging = False
 
     # ---- discovery ---------------------------------------------------------------
     def _start_scan(self):
@@ -190,13 +204,60 @@ class ChargerWatch:
         return None
 
     # ---- reading -----------------------------------------------------------------
-    def read(self, now, grid_w=None, buy_c=None):
+    # ---- charging from the plant's own figures -------------------------------------
+    def _from_plant(self, now, p):
+        """The charger can't be read (no Modbus address), but the plant still reports it.
+
+        Power: total load minus general load (the plant's split of the car from the house),
+        or, if that stays at zero, the rise of the plant's AC-charger energy counter.
+        """
+        total = p.get("total_evac_kwh")
+        if total is None:
+            return None
+        self.counter.append((now, total))
+        while self.counter and now - self.counter[0][0] > 6 * 60:
+            self.counter.popleft()
+        diff = None
+        if p.get("load_power") is not None and p.get("general_load_power") is not None:
+            diff = max(0.0, float(p["load_power"]) - float(p["general_load_power"]))
+        w = diff or 0.0
+        t0, k0 = self.counter[0]
+        if w < 50 and now - t0 >= 120 and total > k0:  # counter moved: 0.01 kWh steps, so average
+            w = (total - k0) * 3.6e6 / (now - t0)
+        self.plant_ev_w = w
+        if w >= PLANT_ON_W:
+            self.plant_charging, self.charging_since_low = True, None
+        elif self.plant_charging:
+            if w < PLANT_IDLE_W:
+                self.charging_since_low = self.charging_since_low or now
+                if now - self.charging_since_low >= PLANT_OFF_AFTER:
+                    self.plant_charging = False
+            else:
+                self.charging_since_low = None
+        if total <= 0 and not self.plant_charging:
+            return None  # the plant has never sent anything to a charger: assume there isn't one
+        return {"state": 5 if self.plant_charging else 8, "total_kwh": total, "power": w,
+                "alarm1": 0, "alarm2": 0, "alarm3": 0}
+
+    def read(self, now, grid_w=None, buy_c=None, plant=None):
         """Called once per collector poll. Returns the charger's live summary (or None if off)."""
         if self.mode == "off":
             return None
         v = None
         if self.unit is None:
             v = self._scan_step(now)
+            if v is None and plant is not None:
+                pv = self._from_plant(now, plant)
+                if pv is not None:
+                    if self.source != "plant":
+                        self.log("Showing car charging from the plant's figures; the charger itself "
+                                 "isn't readable over Modbus (it has no Modbus address)")
+                    self.source, self.tracker.inferred, self.values = "plant", True, pv
+                    self.alarms = self.tracker.update(now, pv, grid_w, buy_c)
+                    if now - self.last_save >= 60:
+                        self.tracker.save()
+                        self.last_save = now
+                return self.summary(now)
         else:
             try:
                 regs = self.client.read_input_registers(self.unit, BLOCK_START, BLOCK_LEN)
@@ -219,8 +280,9 @@ class ChargerWatch:
                 except (OSError, ModbusError) as e:
                     self.set_current_ok = False  # firmware doesn't expose it; don't ask again
                     self.log(f"AC charger current setting not readable ({e}); carrying on without it")
-            if not self.values:
+            if not self.values or self.source != "charger":
                 self.log(f"Reading the AC charger at Modbus unit {self.unit}")
+            self.source, self.tracker.inferred = "charger", False
             self.values = v
             self.alarms = self.tracker.update(now, v, grid_w, buy_c)
             if now - self.last_save >= 60:
@@ -230,6 +292,8 @@ class ChargerWatch:
 
     @property
     def power(self):
+        if self.source == "plant" and self.unit is None:
+            return self.plant_ev_w
         if self.status != "ok" or not self.values:
             return None
         return max(0.0, float(self.values.get("power") or 0))
@@ -238,10 +302,12 @@ class ChargerWatch:
         if self.mode == "off":
             return {"enabled": False, "status": "off"}
         now = now or time.time()
-        out = {"enabled": True, "status": self.status, "unit": self.unit, "error": self.error}
+        out = {"enabled": True, "status": self.status, "unit": self.unit, "error": self.error,
+               "source": self.source if (self.unit is not None or self.source == "plant") else None}
         if self.unit is None:
             out["scan"] = {"checked": self.scanned, "of": self.scanned + len(self.queue)}
-            return out
+            if self.source != "plant" or not self.values:
+                return out
         v = self.values
         if not v:
             return out
@@ -265,6 +331,7 @@ class ChargerWatch:
 
     def debug(self):
         return {"mode": self.mode, "status": self.status, "unit": self.unit, "error": self.error,
+                "source": self.source, "plant_ev_w": self.plant_ev_w,
                 "scan_checked": self.scanned, "scan_remaining": len(self.queue),
                 "scan_answers": {str(k): v for k, v in self.scan_log.items()}, "values": self.values}
 

@@ -68,6 +68,8 @@
     live = d;
     if (d.status === "ok") lastOk = Date.now();
     renderStatus();
+    if (d.version) $("foot-collector").textContent = `Collector ${d.version}`;
+    $("foot-mode").textContent = d.mode === "simulator" ? "simulator" : d.target ? `reading ${d.target}` : "";
     if (d.aemo) aemoSummary = d.aemo;
     if (d.price) renderPriceNow(d.price);
     if (!d.power) return;
@@ -197,7 +199,8 @@
   }
 
   // ------------------------------------------------------------ car charging (Sigen AC charger)
-  const evOn = (e) => !!(e && e.enabled && e.unit != null && e.state_code != null);
+  const evOn = (e) => !!(e && e.enabled && (e.unit != null || e.source === "plant") && e.state_code != null);
+  const evInferred = () => !!(live && live.ev && live.ev.source === "plant");
   const EV_PLUGGED_WAIT = "color-mix(in srgb, var(--ev) 30%, var(--surface))";
   const dur = (sec) => {
     const m = Math.round((sec || 0) / 60);
@@ -209,6 +212,7 @@
   function evFact(e) {
     if (!e || !e.enabled) return null;
     if (e.unit == null) {
+      if (e.source === "plant") return "Seen through the inverter";
       if (e.status === "scanning") return e.scan ? `Looking for one (${e.scan.checked} of ${e.scan.of})` : "Looking for one";
       if (e.status === "not found") return "None found";
       return null;
@@ -251,7 +255,14 @@
     }
     const facts = el("dl", { class: "facts" });
     const add = (k, v) => { if (v != null && v !== "") facts.append(el("dt", { text: k }), el("dd", { text: v })); };
-    if (ses) {
+    const inferred = e.source === "plant";
+    $("ev-key-plugged").hidden = inferred;
+    if (ses && inferred) {
+      add("Started", `${S.time(ses.start)}, ${dur(ses.seconds)} ago`);
+      add("Energy this session", S.kwh(ses.kwh));
+      add("From the grid", ses.cost != null ? `${S.kwh(ses.grid_kwh)}, $${ses.cost.toFixed(2)}` : S.kwh(ses.grid_kwh));
+      facts.append(el("div", { class: "sep" }));
+    } else if (ses) {
       add("Plugged in", `${S.time(ses.start)}, ${dur(ses.seconds)} ago`);
       add("Charging time", ses.charging_s ? dur(ses.charging_s) : "not yet");
       add("Energy this session", S.kwh(ses.kwh));
@@ -263,7 +274,9 @@
     add("Supply breaker", e.breaker_current ? `${Math.round(e.breaker_current)} A` : null);
     add("Delivered in total", e.total_kwh != null ? `${Math.round(e.total_kwh).toLocaleString()} kWh` : null);
     box.append(facts);
-    $("ev-sub").textContent = e.status === "offline" ? "charger not answering" : `Sigen AC charger, Modbus unit ${e.unit}`;
+    $("ev-sub").textContent = inferred ? "from the inverter's figures"
+      : e.status === "offline" ? "charger not answering" : `Sigen AC charger, Modbus unit ${e.unit}`;
+    $("ev-note").hidden = !inferred;
   }
 
   function drawEvTimeline() {
@@ -301,7 +314,8 @@
   function renderEvSessions() {
     const tb = $("ev-sessions"); tb.innerHTML = "";
     const list = (evData && evData.sessions || []).slice(0, 8);
-    tb.append(el("tr", {}, el("th", { text: "Plugged in" }), el("th", { text: "For" }), el("th", { text: "Charging" }),
+    const inf = evInferred();
+    tb.append(el("tr", {}, el("th", { text: inf ? "Started" : "Plugged in" }), inf ? null : el("th", { text: "For" }), el("th", { text: "Charging" }),
       el("th", { text: "Energy" }), el("th", { class: "hide-sm", text: "From grid" }), el("th", { class: "hide-sm", text: "Grid cost" })));
     if (!list.length) {
       tb.append(el("tr", {}, el("td", { colspan: 6, class: "muted", style: "font-family:var(--font)", text: "No charging sessions recorded yet." })));
@@ -311,7 +325,7 @@
       const span = (open ? Date.now() / 1000 : r.end) - r.start;
       tb.append(el("tr", {},
         el("td", { style: "font-family:var(--font)", text: dayTime(r.start) }),
-        el("td", { text: open ? `${dur(span)} so far` : dur(span) }),
+        inf ? null : el("td", { text: open ? `${dur(span)} so far` : dur(span) }),
         el("td", {}, r.charging_s ? dur(r.charging_s) : el("span", { class: "tag warn", text: open ? "not yet" : "never charged" })),
         el("td", { text: S.kwh(r.kwh) }),
         el("td", { class: "hide-sm", text: S.kwh(r.grid_kwh) }),
@@ -868,7 +882,10 @@
     const wb = $("widget-btn");
     wb.hidden = false;
     wb.addEventListener("click", () => window.__TAURI__.core.invoke("show_widget"));
-    if (window.__TAURI__.app) window.__TAURI__.app.getVersion().then((v) => { $("app-version").textContent = `Home Energy app version ${v}`; });
+    if (window.__TAURI__.app) window.__TAURI__.app.getVersion().then((v) => {
+      $("app-version").textContent = `Home Energy app version ${v}`;
+      $("foot-app").textContent = `Desktop app ${v}`; $("foot-app").hidden = false;
+    });
 
     const ub = $("update-banner");
     const showUpdate = (info, manual) => {

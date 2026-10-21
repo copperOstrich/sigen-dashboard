@@ -5,6 +5,13 @@ update; the Docker image is tagged with the same version.
 
 ## 1.3.1
 
+- **Car charging without the charger on Modbus.** Most installs don't give the Sigen AC
+  charger a Modbus address, so it can't be read directly. The inverter still reports it, so
+  the dashboard now works out charging from the inverter's own figures: live charging power,
+  charging sessions with energy, grid share and cost, and the car in the power flow, charts
+  and daily totals. Plugged-in-but-not-charging and charger alarms need the charger itself.
+- Version shown at the bottom of the dashboard (collector, and the desktop app when used there)
+- Battery cell voltages that the inverter doesn't report are no longer shown as 65.535 V
 - AC charger search waits longer for each Modbus id (3 s, or `SIGEN_CHARGER_PROBE_TIMEOUT`),
   since the inverter relays requests to a wired charger
 - Accepts chargers whose firmware reports only a power or only a current rating
