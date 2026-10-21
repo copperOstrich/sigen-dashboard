@@ -14,6 +14,7 @@
     <span class="pill" id="status"><span class="dot" id="status-dot"></span><span id="status-text">Connecting…</span></span>
     <span class="spacer"></span>
     <button class="ghost-btn" id="widget-btn" type="button" hidden title="Switch to the small always-on-top widget">Compact widget</button>
+    <button class="ghost-btn" id="layout-btn" type="button" title="Choose which panels to show and in what order">Arrange panels</button>
     <button class="ghost-btn" id="settings-btn" type="button">Collector address</button>
   </header>
 
@@ -22,7 +23,7 @@
   <div class="banner update" id="update-banner" role="status"></div>
 
   <div class="grid">
-    <section class="panel span-8" aria-labelledby="flow-h">
+    <section class="panel span-8" aria-labelledby="flow-h" data-panel="flow" data-name="Right now">
       <div class="panel-head">
         <h2 id="flow-h">Right now</h2>
         <span class="sub" id="flow-sub"></span>
@@ -91,7 +92,7 @@
       <p class="flow-caption" id="caption" aria-live="polite"></p>
     </section>
 
-    <section class="panel span-4" aria-labelledby="batt-h">
+    <section class="panel span-4" aria-labelledby="batt-h" data-panel="battery" data-name="Battery">
       <div class="panel-head"><h2 id="batt-h">Battery</h2><span class="sub" id="batt-sub"></span></div>
       <div class="batt">
         <div class="cell" aria-hidden="true">
@@ -115,7 +116,7 @@
       </div>
     </section>
 
-    <section class="panel span-12" aria-labelledby="today-h">
+    <section class="panel span-12" aria-labelledby="today-h" data-panel="today" data-name="Today so far">
       <div class="panel-head"><h2 id="today-h">Today so far</h2><span class="sub" id="today-sub"></span></div>
       <div class="today">
         <div><div class="k"><i style="background:var(--solar)"></i>Solar made</div><div class="v num" id="t-pv">–</div></div>
@@ -130,7 +131,7 @@
       </div>
     </section>
 
-    <section class="panel span-12" aria-labelledby="ev-h" id="ev-panel" hidden>
+    <section class="panel span-12" aria-labelledby="ev-h" data-panel="ev" data-name="Car charging" id="ev-panel" hidden>
       <div class="panel-head"><h2 id="ev-h">Car charging</h2><span class="sub" id="ev-sub"></span></div>
       <div class="ev-grid">
         <div id="ev-now"></div>
@@ -151,7 +152,7 @@
       </div>
     </section>
 
-    <section class="panel span-12" aria-labelledby="price-h" id="price-panel">
+    <section class="panel span-12" aria-labelledby="price-h" data-panel="price" data-name="Electricity price" id="price-panel">
       <div class="panel-head">
         <h2 id="price-h">Electricity price</h2>
         <span class="sub" id="price-sub"></span>
@@ -166,7 +167,7 @@
       </div>
     </section>
 
-    <section class="panel span-12" aria-labelledby="grid-h" id="grid-panel" hidden>
+    <section class="panel span-12" aria-labelledby="grid-h" data-panel="grid" data-name="The grid" id="grid-panel" hidden>
       <div class="panel-head"><h2 id="grid-h">The grid</h2><span class="sub" id="grid-sub"></span></div>
       <div class="grid3">
         <div class="price-now" id="grid-now"></div>
@@ -181,7 +182,7 @@
       </div>
     </section>
 
-    <section class="panel span-12" aria-labelledby="hist-h">
+    <section class="panel span-12" aria-labelledby="hist-h" data-panel="power" data-name="Power and battery charge">
       <div class="panel-head">
         <h2 id="hist-h">Power</h2>
         <div class="legend" id="legend"></div>
@@ -201,7 +202,7 @@
       <div class="chart" id="soc-chart"></div>
     </section>
 
-    <section class="panel span-12" aria-labelledby="pv-h" id="pv-panel" hidden>
+    <section class="panel span-12" aria-labelledby="pv-h" data-panel="strings" data-name="Solar strings" id="pv-panel" hidden>
       <div class="panel-head">
         <h2 id="pv-h">Solar strings</h2>
         <div class="legend" id="pv-legend"></div>
@@ -228,7 +229,7 @@
         come from when the strings start and stop producing, so they follow the seasons.</p>
     </section>
 
-    <section class="panel span-8" aria-labelledby="daily-h">
+    <section class="panel span-8" aria-labelledby="daily-h" data-panel="daily" data-name="Daily energy">
       <div class="panel-head">
         <h2 id="daily-h">Daily energy</h2>
         <span class="sub">last 30 days, <span id="daily-unit">kWh per day, energy in above zero and out below</span></span>
@@ -248,7 +249,7 @@
       <div class="chart" id="daily-chart"></div>
     </section>
 
-    <section class="panel span-4" aria-labelledby="sys-h">
+    <section class="panel span-4" aria-labelledby="sys-h" data-panel="system" data-name="System">
       <div class="panel-head"><h2 id="sys-h">System</h2><span class="sub" id="sys-sub"></span></div>
       <div id="alarms"></div>
       <dl class="facts" id="sys-facts"></dl>
@@ -268,6 +269,20 @@
   <a href="https://github.com/copperOstrich/sigen-dashboard/releases" target="_blank" rel="noopener">Releases</a>
 </footer>
 
+<dialog id="layout-dlg" class="layout-dlg" aria-labelledby="layout-title">
+  <form method="dialog">
+    <h2 id="layout-title" style="margin:0 0 4px;font-size:17px">Arrange panels</h2>
+    <p class="muted" style="margin:0 0 10px;font-size:14px">Drag to reorder, or use the arrows. Untick a panel to hide it.
+      Saved in this browser, so your phone and computer can each have their own layout.</p>
+    <ol class="layout-list" id="layout-list"></ol>
+    <div class="row">
+      <button class="ghost-btn" type="button" id="layout-reset">Reset to default</button>
+      <span class="spacer" style="flex:1"></span>
+      <button class="primary-btn" value="done" type="submit">Done</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="settings">
   <form method="dialog" id="settings-form">
     <h2 style="margin:0 0 4px;font-size:17px">Collector address</h2>
@@ -285,5 +300,6 @@
 <script src="common.js"></script>
 <script src="charts.js"></script>
 <script src="dashboard.js"></script>
+<script src="layout.js"></script>
 </body>
 </html>

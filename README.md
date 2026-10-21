@@ -31,6 +31,7 @@ SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) �
   power and battery history, daily energy and cost, retailer and wholesale prices
   with forecasts, the grid's generation mix, solar strings, car charging, system status and
   alarms. Light and dark mode, works on a phone.
+  **Arrange panels** (top right) hides panels you don't use and changes their order and width.
 * **Desktop app** (`desktop/`): one app for Windows and macOS. A small always-on-top
   widget plus the full dashboard window, living in the tray / menu bar, with
   "Start at login".
@@ -219,7 +220,8 @@ don't have a charger. If none is found it looks again every 12 hours.
 **If the charger has no Modbus address** (common: setting one needs the installer
 account), the collector still shows the car's charging, worked out from the inverter's own
 figures: its split of total load from household load, and its counter of energy sent to the
-charger. That gives charging power, sessions, energy and cost. What it can't show is the
+charger. That gives charging power, sessions, energy and cost. Set `SIGEN_CHARGER_UNIT=plant` to skip
+the search and use this straight away. What it can't show is the
 charger's own state (plugged in but not charging) or its alarms; for those, ask your
 installer to give the charger a Modbus address.
 

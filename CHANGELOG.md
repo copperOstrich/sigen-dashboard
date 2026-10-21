@@ -5,6 +5,9 @@ update; the Docker image is tagged with the same version.
 
 ## 1.3.1
 
+- **Arrange panels**: choose which dashboard panels show, their order (drag, or the arrows)
+  and their width. Saved in each browser, so a phone and a computer can differ.
+- `SIGEN_CHARGER_UNIT=plant` skips the charger search for chargers without a Modbus address
 - **Car charging without the charger on Modbus.** Most installs don't give the Sigen AC
   charger a Modbus address, so it can't be read directly. The inverter still reports it, so
   the dashboard now works out charging from the inverter's own figures: live charging power,

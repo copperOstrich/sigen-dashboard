@@ -24,7 +24,8 @@ Configuration (environment variables):
   LOCALVOLTS_NMI        LocalVolts NMI, if you have more than one default: first on the account
   AEMO_REGION           NEM region for wholesale data             NSW1, QLD1, VIC1, SA1 or TAS1 (default NSW1)
   AEMO_ENABLED          0 to turn off AEMO market data            default 1
-  SIGEN_CHARGER_UNIT    Sigen AC charger's Modbus unit id         default auto (scan for it); 0 = none
+  SIGEN_CHARGER_UNIT    Sigen AC charger's Modbus unit id         default auto (scan for it); 0 = none;
+                        plant = charger has no Modbus address, use the inverter's figures only
 """
 import json
 import mimetypes

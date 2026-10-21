@@ -140,12 +140,15 @@ class ChargerWatch:
     def __init__(self, client, store, setting, skip_units, log=print):
         self.client, self.store, self.log = client, store, log
         setting = (setting or "auto").strip().lower()
-        self.mode = "off" if setting in ("0", "off", "none", "no") else "auto" if setting == "auto" else "fixed"
+        # auto: scan for the charger, using the plant's figures meanwhile; plant: never scan,
+        # just use the plant's figures (charger has no Modbus address); a number: read that unit
+        self.mode = ("off" if setting in ("0", "off", "none", "no") else setting if setting in ("auto", "plant")
+                     else "fixed")
         self.unit = int(setting) if self.mode == "fixed" else None
         self.skip = set(skip_units)
         self.queue, self.next_scan, self.scanned = [], 0.0, 0
         self.scan_log = {}
-        self.status = "off" if self.mode == "off" else "scanning" if self.mode == "auto" else "connecting"
+        self.status = {"off": "off", "auto": "scanning", "plant": "plant"}.get(self.mode, "connecting")
         self.values, self.alarms, self.fails, self.error = {}, [], 0, None
         self.tracker = SessionTracker(store, log) if self.mode != "off" else None
         self.last_save = 0.0
@@ -155,6 +158,7 @@ class ChargerWatch:
         self.counter = deque()        # (time, plant EV energy counter) for the last few minutes
         self.charging_since_low = None
         self.plant_charging = False
+        self.plant_logged = False
 
     # ---- discovery ---------------------------------------------------------------
     def _start_scan(self):
@@ -245,15 +249,19 @@ class ChargerWatch:
             return None
         v = None
         if self.unit is None:
-            v = self._scan_step(now)
+            v = self._scan_step(now) if self.mode == "auto" else None
             if v is None and plant is not None:
                 pv = self._from_plant(now, plant)
                 if pv is not None:
-                    if self.source != "plant":
+                    if not self.plant_logged and self.status != "scanning":
+                        self.plant_logged = True
                         self.log("Showing car charging from the plant's figures; the charger itself "
                                  "isn't readable over Modbus (it has no Modbus address)")
                     self.source, self.tracker.inferred, self.values = "plant", True, pv
-                    self.alarms = self.tracker.update(now, pv, grid_w, buy_c)
+                    # While still searching, a charger may yet turn up with its real states, so
+                    # don't start or end sessions from the plant's figures until the search is over.
+                    if self.status != "scanning":
+                        self.alarms = self.tracker.update(now, pv, grid_w, buy_c)
                     if now - self.last_save >= 60:
                         self.tracker.save()
                         self.last_save = now

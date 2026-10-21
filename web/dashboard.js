@@ -942,6 +942,7 @@
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);
   setInterval(loadDaily, 10 * 60000);
+  window.SigenRedraw = () => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); if (dailyData.length) drawDaily(); };
   let rt;
   new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); if (dailyData.length) drawDaily(); }, 120); })
     .observe(document.querySelector(".wrap"));
