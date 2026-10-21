@@ -333,3 +333,4 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .ev-links a:hover { text-decoration: underline; }
 .ev-sessions th:nth-child(n+2), .ev-sessions td:nth-child(n+2) { padding-left: 10px; }
 @media (max-width: 560px) { .ev-sessions .hide-sm { display: none; } }
+.chart .fold { fill: var(--surface-2); stroke: var(--rule); stroke-width: 1; }

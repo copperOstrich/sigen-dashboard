@@ -19,6 +19,13 @@ update; the Docker image is tagged with the same version.
 - The desktop widget shows when the car is plugged in or charging
 - Simulator includes a charger and a car so the panel can be tried without one
 
+### Charts
+- Solar strings: a **Daylight** view (now the default) that shows sunrise to sunset only.
+  Today runs to the expected sunset; 3 and 7 days fold the nights away so each day's curves
+  sit side by side. Sunrise and sunset come from when the strings start and stop producing,
+  so they follow the seasons. **All hours** brings back the full timeline.
+- Power chart: a **Today** range, from midnight to now
+
 ## 1.2.0
 
 The first public release.

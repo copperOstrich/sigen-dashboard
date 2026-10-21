@@ -184,6 +184,7 @@
         <div class="legend" id="legend"></div>
         <span class="spacer"></span>
         <div class="seg" id="range" role="group" aria-label="Time range">
+          <button type="button" data-h="today" aria-pressed="false" title="Since midnight">Today</button>
           <button type="button" data-h="24" aria-pressed="true">24 h</button>
           <button type="button" data-h="72" aria-pressed="false">3 days</button>
           <button type="button" data-h="168" aria-pressed="false">7 days</button>
@@ -191,7 +192,8 @@
         </div>
       </div>
       <div class="chart" id="power-chart"></div>
-      <p class="chart-note">Battery above zero is charging, below is discharging. Grid above zero is buying, below is selling.</p>
+      <p class="chart-note">Battery above zero is charging, below is discharging. Grid above zero is buying, below is selling.
+        Click a name above the chart to hide it; the scale adjusts to what's left, so hiding Solar shows the night in detail.</p>
       <div class="panel-head" style="margin:18px 0 6px"><h2>Battery charge</h2></div>
       <div class="chart" id="soc-chart"></div>
     </section>
@@ -206,8 +208,12 @@
           <button type="button" data-m="v" aria-pressed="false">Voltage</button>
           <button type="button" data-m="a" aria-pressed="false">Current</button>
         </div>
+        <div class="seg" id="pv-hours" role="group" aria-label="Hours shown">
+          <button type="button" data-d="1" aria-pressed="true" title="Sunrise to sunset, from when the strings start and stop producing">Daylight</button>
+          <button type="button" data-d="0" aria-pressed="false">All hours</button>
+        </div>
         <div class="seg" id="pv-range" role="group" aria-label="Time range">
-          <button type="button" data-h="24" aria-pressed="true">24 h</button>
+          <button type="button" data-h="24" aria-pressed="true" id="pv-range-1">Today</button>
           <button type="button" data-h="72" aria-pressed="false">3 days</button>
           <button type="button" data-h="168" aria-pressed="false">7 days</button>
         </div>
@@ -215,7 +221,8 @@
       <div class="chart" id="pv-chart"></div>
       <table class="strings pv-today" id="pv-today"></table>
       <p class="chart-note">Strings facing east peak in the morning, north around midday and west in the afternoon.
-        Voltage depends mostly on how many panels are in the string.</p>
+        Voltage depends mostly on how many panels are in the string. Daylight hides the nights; sunrise and sunset
+        come from when the strings start and stop producing, so they follow the seasons.</p>
     </section>
 
     <section class="panel span-8" aria-labelledby="daily-h">

@@ -397,6 +397,14 @@
   }
   buildLegend();
 
+  let histToday = false;
+  const midnightTs = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() / 1000; };
+  function trimTo(h, since) {  // drop a bucket that started before midnight
+    const i = h.t.findIndex((t) => t >= since);
+    const out = {};
+    for (const k of Object.keys(h)) if (Array.isArray(h[k])) out[k] = i < 0 ? [] : h[k].slice(i);
+    return out;
+  }
   function tipTitle(t) {
     return new Date(t * 1000).toLocaleString([], hours > 30
       ? { weekday: "short", day: "numeric", hour: "numeric", minute: "2-digit" }
@@ -425,11 +433,18 @@
     });
   }
   async function loadHistory() {
-    try { historyData = await S.fetchJSON(`/api/history?hours=${hours}`); drawHistory(); } catch (e) { /* status banner covers it */ }
+    // "Today" runs from midnight; the API's buckets then cover just today
+    const h = histToday ? Math.max(1, (Date.now() / 1000 - midnightTs()) / 3600) : hours;
+    try {
+      historyData = await S.fetchJSON(`/api/history?hours=${h.toFixed(3)}`);
+      if (histToday) historyData = { ...historyData, ...trimTo(historyData, midnightTs()) };
+      drawHistory();
+    } catch (e) { /* status banner covers it */ }
   }
   $("range").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
-    hours = +b.dataset.h;
+    histToday = b.dataset.h === "today";
+    hours = histToday ? 24 : +b.dataset.h;
     $("range").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
     loadHistory();
   });
@@ -512,6 +527,33 @@
   const pvStyle = (i) => ({ color: PV_COLORS[i % 4], dash: PV_DASHES[(i + Math.floor(i / 4)) % 4] });
   const PV_MEASURE = { w: ["Power", (v) => S.kw(v)], v: ["Voltage", (v) => `${Math.round(v)} V`], a: ["Current", (v) => `${v.toFixed(1)} A`] };
   let pvData = null, pvHours = 24, pvMeasure = "w";
+  let pvDaylight = S.store.get("sigen.pvDaylight") !== "0";
+  const dayKey = (ts) => new Date(ts * 1000).toDateString();
+  const midnight = (ts, daysBack = 0) => { const d = new Date(ts * 1000); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - daysBack); return d.getTime() / 1000; };
+
+  // Sunrise-to-sunset windows, one per day, taken from the strings themselves: a bucket counts
+  // as daylight once any string shows voltage or power. That follows the seasons, the roof's
+  // own horizon and shading, with no location setting. Today's sunset is estimated from
+  // yesterday's until it actually happens.
+  function daylightWindows(d) {
+    const ids = Object.keys(d.strings || {}), b = d.bucket_seconds || 60, pad = 20 * 60, now = Date.now() / 1000;
+    const days = new Map();
+    d.t.forEach((t, i) => {
+      const lit = ids.some((n) => (d.strings[n].v[i] || 0) > 20 || (d.strings[n].w[i] || 0) > 5);
+      if (!lit) return;
+      const k = dayKey(t), w = days.get(k);
+      if (!w) days.set(k, [t, t + b]); else w[1] = t + b;
+    });
+    const wins = [...days.values()].map(([a, z]) => [a - pad, z + pad]);
+    const last = wins[wins.length - 1];
+    if (last && dayKey(last[0]) === dayKey(now) && last[1] >= now - 3 * b - pad) {
+      // still daylight: stretch to the expected sunset so the rest of the day shows as to come
+      const prev = wins[wins.length - 2];
+      const expected = prev && dayKey(prev[0]) !== dayKey(now) ? prev[1] + Math.round((midnight(now) - midnight(prev[0])) / 86400) * 86400 : 0;
+      last[1] = Math.max(last[1], expected, now + b);
+    }
+    return wins;
+  }
   const pvHidden = new Set();
   const swatch = (st) => el("svg", { class: "swl", width: 22, height: 8, "aria-hidden": "true" },
     el("line", { x1: 1, x2: 21, y1: 4, y2: 4, stroke: st.color, "stroke-width": 2.5, "stroke-linecap": "round", "stroke-dasharray": st.dash }));
@@ -537,11 +579,19 @@
     const [label, fmt] = PV_MEASURE[pvMeasure];
     const series = ids.map((n, i) => ({ key: n, label: `PV${n}`, ...pvStyle(i), values: d.strings[n][pvMeasure] }));
     const hidden = new Set([...pvHidden]);
+    const ndays = Math.round(pvHours / 24);
+    let windows = null;
+    if (pvDaylight) {
+      windows = daylightWindows(d).slice(-ndays);
+      if (ndays === 1 && windows.length && dayKey(windows[0][0]) !== dayKey(Date.now() / 1000)) windows = windows.slice(-1); // before sunrise: yesterday
+    }
+    $("pv-range-1").textContent = pvDaylight ? "Today" : "24 h";
     C.lineChart($("pv-chart"), {
       t: d.t, series, hidden, height: 250, gapSeconds: d.bucket_seconds * 5, yMin: 0,
+      windows: windows && windows.length ? windows : null, markerT: pvDaylight ? Date.now() / 1000 : null, markerLabel: "Now",
       yFmt: pvMeasure === "w" ? S.kwAxis : pvMeasure === "v" ? (v) => `${v} V` : (v) => `${v} A`,
       tipFmt: (v) => (v == null ? "–" : fmt(v)),
-      tipTitle: (t) => new Date(t * 1000).toLocaleString([], pvHours > 30
+      tipTitle: (t) => new Date(t * 1000).toLocaleString([], pvHours > 30 || dayKey(t) !== dayKey(Date.now() / 1000)
         ? { weekday: "short", day: "numeric", hour: "numeric", minute: "2-digit" } : { hour: "numeric", minute: "2-digit" }),
       ariaLabel: `${label} of each PV string over time`,
     });
@@ -559,8 +609,21 @@
     });
   }
   async function loadStrings() {
-    try { pvData = await S.fetchJSON(`/api/string-history?hours=${pvHours}`); drawStrings(); } catch (e) { /* banner */ }
+    // Daylight view: whole calendar days (plus yesterday, for today's expected sunset)
+    const now = Date.now() / 1000, days = Math.round(pvHours / 24);
+    const hrs = pvDaylight ? Math.ceil((now - midnight(now, days)) / 3600) : pvHours;
+    try { pvData = await S.fetchJSON(`/api/string-history?hours=${hrs}`); drawStrings(); } catch (e) { /* banner */ }
   }
+  (function initDaylight() {
+    $("pv-hours").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", (x.dataset.d === "1") === pvDaylight ? "true" : "false"));
+  })();
+  $("pv-hours").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    pvDaylight = b.dataset.d === "1";
+    S.store.set("sigen.pvDaylight", pvDaylight ? "1" : "0");
+    $("pv-hours").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    loadStrings();
+  });
   $("pv-range").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
     pvHours = +b.dataset.h;

@@ -96,7 +96,8 @@ read any moment.
 </picture>
 
 **Solar strings**: power, voltage and current for each PV string your inverter reports,
-with each string's energy, share and peak for the day. Handy for spotting shading or a
+sunrise to sunset with the nights folded away, plus each string's energy, share and peak
+for the day. Handy for spotting shading or a
 faulty panel, and for telling which roof face is on which string.
 
 <picture>

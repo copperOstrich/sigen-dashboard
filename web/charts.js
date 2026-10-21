@@ -56,7 +56,10 @@
 
   /**
    * opts: { t:[epoch s], series:[{key,label,color,values,dash}], hidden:Set, height,
-   *         yFmt(v)->string, tipFmt(v)->string, yMin, yMax, gapSeconds, tipTitle(t) }
+   *         yFmt(v)->string, tipFmt(v)->string, yMin, yMax, gapSeconds, tipTitle(t),
+   *         windows:[[start,end],...] }
+   * windows: show only these time ranges, side by side with a narrow break between them
+   * (used to fold the nights out of the solar charts). Points outside them are skipped.
    */
   function lineChart(wrap, opts) {
     wrap.innerHTML = "";
@@ -76,12 +79,23 @@
     }
     const ticks = opts.yTicks || niceTicks(lo, hi, opts.tickCount || 5);
     lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]);
-    const t0 = t[0], t1 = Math.max(opts.stepEnd || 0, t[t.length - 1] || t0 + 1);
-    const x = (v) => m.l + ((v - t0) / Math.max(1, t1 - t0)) * (W - m.l - m.r);
+    const wins = (opts.windows || []).filter((w) => w[1] > w[0]);
+    const t0 = wins.length ? wins[0][0] : t[0];
+    const t1 = wins.length ? wins[wins.length - 1][1] : Math.max(opts.stepEnd || 0, t[t.length - 1] || t0 + 1);
+    const BREAK = wins.length > 1 ? 14 : 0;
+    const plotW = W - m.l - m.r - BREAK * Math.max(0, wins.length - 1);
+    const winSpan = wins.reduce((a, w) => a + (w[1] - w[0]), 0);
+    const winX = [];  // left edge of each window in px
+    { let acc = m.l; for (const w of wins) { winX.push(acc); acc += (w[1] - w[0]) / winSpan * plotW + BREAK; } }
+    const winOf = (v) => { for (let k = 0; k < wins.length; k++) if (v >= wins[k][0] && v <= wins[k][1]) return k; return -1; };
+    const x = wins.length
+      ? (v) => { const k = winOf(v); if (k < 0) return NaN; return winX[k] + (v - wins[k][0]) / winSpan * plotW; }
+      : (v) => m.l + ((v - t0) / Math.max(1, t1 - t0)) * (W - m.l - m.r);
+    const inView = (v) => !wins.length || winOf(v) >= 0;
     const y = (v) => m.t + (1 - (v - lo) / (hi - lo || 1)) * (H - m.t - m.b);
 
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": opts.ariaLabel || "Chart" });
-    if (opts.markerT != null && opts.markerT > t0 && opts.markerT < t1) {
+    if (opts.markerT != null && opts.markerT > t0 && opts.markerT < t1 && inView(opts.markerT)) {
       const xm = x(opts.markerT);
       svg.append(el("rect", { class: "future", x: xm, y: m.t, width: W - m.r - xm, height: H - m.t - m.b }));
     }
@@ -89,20 +103,30 @@
       svg.append(el("line", { class: tv === 0 ? "zero" : "gridline", x1: m.l, x2: W - m.r, y1: y(tv), y2: y(tv) }));
       svg.append(el("text", { class: "axis-label", x: m.l - 8, y: y(tv) + 4, "text-anchor": "end", text: opts.yFmt ? opts.yFmt(tv) : tv }));
     }
-    if (opts.markerT != null && opts.markerT > t0 && opts.markerT < t1) {
+    if (opts.markerT != null && opts.markerT > t0 && opts.markerT < t1 && inView(opts.markerT)) {
       const xm = x(opts.markerT);
       svg.append(el("line", { class: "now-line", x1: xm, x2: xm, y1: m.t, y2: H - m.b }));
       svg.append(el("text", { class: "now-label", x: xm + 5, y: m.t + 12, text: opts.markerLabel || "Now" }));
     }
-    for (const tk of timeTicks(t0, t1, Math.max(3, Math.floor((W - m.l) / 62)))) {
-      svg.append(el("text", { class: "axis-label", x: x(tk.t), y: H - 6, "text-anchor": "middle", text: tk.label }));
+    if (wins.length > 1) {
+      // one label per window (the day), and a shaded break between windows
+      wins.forEach((w, k) => {
+        const wx = winX[k], ww = (w[1] - w[0]) / winSpan * plotW;
+        if (k > 0) svg.append(el("rect", { class: "fold", x: wx - BREAK + 3, y: m.t, width: BREAK - 6, height: H - m.t - m.b, rx: 2 }));
+        if (ww > 34) svg.append(el("text", { class: "axis-label", x: wx + ww / 2, y: H - 6, "text-anchor": "middle",
+          text: new Date((w[0] + w[1]) / 2 * 1000).toLocaleDateString([], ww > 90 ? { weekday: "short", day: "numeric" } : { weekday: "short" }) }));
+      });
+    } else {
+      for (const tk of timeTicks(t0, t1, Math.max(3, Math.floor((W - m.l) / 62)))) {
+        svg.append(el("text", { class: "axis-label", x: x(tk.t), y: H - 6, "text-anchor": "middle", text: tk.label }));
+      }
     }
     const gap = opts.gapSeconds || Infinity;
     for (const s of visible) {
       let d = "", pen = false;
       for (let i = 0; i < t.length; i++) {
-        const v = s.values[i];
-        if (v == null || (i > 0 && t[i] - t[i - 1] > gap)) { pen = false; if (v == null) continue; }
+        const v = inView(t[i]) ? s.values[i] : null;
+        if (v == null || (i > 0 && (t[i] - t[i - 1] > gap || winOf(t[i]) !== winOf(t[i - 1])))) { pen = false; if (v == null) continue; }
         if (pen && opts.stepped) d += "H" + x(t[i]).toFixed(1);
         d += (pen ? "L" : "M") + x(t[i]).toFixed(1) + "," + y(v).toFixed(1);
         pen = true;
@@ -143,14 +167,20 @@
       tipPosition(tip, wrap, xi, 0);
     }
     function nearest(px) {
-      const tv = t0 + ((px - m.l) / (W - m.l - m.r)) * (t1 - t0);
+      let tv = t0 + ((px - m.l) / (W - m.l - m.r)) * (t1 - t0);
+      if (wins.length) {  // invert the folded axis
+        let k = wins.length - 1;
+        while (k > 0 && px < winX[k] - BREAK / 2) k--;
+        tv = Math.max(wins[k][0], Math.min(wins[k][1], wins[k][0] + (px - winX[k]) / plotW * winSpan));
+      }
       let lo2 = 0, hi2 = t.length - 1;
       while (hi2 - lo2 > 1) { const mid = (lo2 + hi2) >> 1; (t[mid] < tv ? (lo2 = mid) : (hi2 = mid)); }
       return Math.abs(t[lo2] - tv) < Math.abs(t[hi2] - tv) ? lo2 : hi2;
     }
     hit.addEventListener("pointermove", (e) => {
       const r = svg.getBoundingClientRect();
-      show(nearest(((e.clientX - r.left) / r.width) * W));
+      const i = nearest(((e.clientX - r.left) / r.width) * W);
+      if (inView(t[i])) show(i);
     });
     hit.addEventListener("pointerleave", () => { hover.style.display = "none"; tip.style.display = "none"; });
   }
