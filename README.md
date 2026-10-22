@@ -9,8 +9,9 @@ A local dashboard and desktop widget for a SigenStor system that reads the inver
 directly over **Modbus TCP**, so it keeps working when Sigenergy's cloud is down.
 Live retailer prices from **Amber Electric** or **LocalVolts** add buy/sell prices, spike
 warnings, forecasts and what your power is costing, and free **AEMO** market data shows
-the wholesale price, demand and generation mix for your region. If you have a **Sigen AC
-charger**, it shows the car charging too, with a log of every session.
+the wholesale price, demand and generation mix for your region. Free **Open-Meteo** weather
+gives a local forecast and a **solar production forecast** that learns from your own panels.
+If you have a **Sigen AC charger**, it shows the car charging too, with a log of every session.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/power-flow-dark.png">
@@ -20,18 +21,26 @@ charger**, it shows the car charging too, with a log of every session.
 ```
                                           ┌── Amber or LocalVolts API (optional)
 SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) ◀── AEMO market data
-                                         │  SQLite history, web dashboard, JSON API
+  (inverter, battery, AC charger)        │  SQLite history,      ◀── Open-Meteo weather (optional)
+                                         │  web dashboard, JSON API
                      ┌───────────────────┼─────────────────────┐
               Browser dashboard   Windows widget app      Mac widget app
 ```
 
 * **Collector** (`collector/`): Python standard library only, no packages to install.
   Polls every 5 s, keeps minute history for ~2 years, serves the dashboard on port 8080.
-* **Dashboard** (`web/`): live power flow, battery detail, today's totals and cost,
-  power and battery history, daily energy and cost, retailer and wholesale prices
-  with forecasts, the grid's generation mix, solar strings, car charging, system status and
-  alarms. Light and dark mode, works on a phone.
-  **Arrange panels** (top right) hides panels you don't use and changes their order and width.
+* **Dashboard** (`web/`), in panels you can show, hide, reorder and resize:
+  * live power flow between solar, battery, home, grid and car, with battery detail
+  * today's totals, self-sufficiency and cost
+  * weather, four-day forecast and a solar forecast in kWh
+  * car charging from a Sigen AC charger: state, sessions, energy and cost
+  * retailer and wholesale prices with forecasts, and the grid's generation mix
+  * power and battery history, with a Today view
+  * solar strings, sunrise to sunset, for spotting shading or a faulty string
+  * daily energy and cost for the last 30 days
+  * system status, decoded alarms, insulation resistance check and an event log
+
+  Light and dark mode, works on a phone, and shows the version you're running at the bottom.
 * **Desktop app** (`desktop/`): one app for Windows and macOS. A small always-on-top
   widget plus the full dashboard window, living in the tray / menu bar, with
   "Start at login".
@@ -60,7 +69,12 @@ Then point it at your inverter and add your retailer, either with `-e` settings 
 SIGEN_SIMULATE=0
 SIGEN_HOST=192.168.1.60      # your inverter's IP address (Modbus TCP must be enabled)
 AMBER_API_KEY=...            # or LOCALVOLTS_API_KEY and LOCALVOLTS_PARTNER_ID
+SITE_LAT=-33.87              # optional: for weather and the solar forecast
+SITE_LON=151.21
+SOLAR_KWP=10                 # optional: your array size in kW
 ```
+
+Every setting is listed under [Settings](#settings).
 
 Restart the container after changing `sigen.env`. Desktop apps for Windows and Mac are on
 the [releases page](https://github.com/copperOstrich/sigen-dashboard/releases/latest).
@@ -88,7 +102,15 @@ AEMO's wholesale price, and the region's generation mix.
   <img alt="Electricity price chart with Amber buy and sell prices and AEMO wholesale price, and the grid generation mix" src="docs/screenshots/prices-grid-light.png">
 </picture>
 
-**History**: power flows and battery charge over 24 hours to 30 days, with a crosshair to
+**Weather and solar forecast**: current conditions, four days ahead, and a solar forecast
+in kWh, with today's forecast hour by hour against what the panels actually made.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/weather-dark.png">
+  <img alt="Weather panel: current conditions, today's solar forecast and what's still to come, an hourly forecast-versus-actual chart for today and tomorrow, and four daily forecast cards" src="docs/screenshots/weather-light.png">
+</picture>
+
+**History**: power flows and battery charge from today to 30 days, with a crosshair to
 read any moment.
 
 <picture>
@@ -98,8 +120,8 @@ read any moment.
 
 **Solar strings**: power, voltage and current for each PV string your inverter reports,
 sunrise to sunset with the nights folded away, plus each string's energy, share and peak
-for the day. Handy for spotting shading or a
-faulty panel, and for telling which roof face is on which string.
+for the day. Handy for spotting shading or a faulty panel, and for telling which roof face is
+on which string.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/strings-dark.png">
@@ -120,6 +142,13 @@ out (home, sold, to battery), plus inverter status and alarms.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/daily-system-dark.png">
   <img alt="Daily energy balance chart and system status panel" src="docs/screenshots/daily-system-light.png">
+</picture>
+
+**Arrange panels**: hide what you don't use, and change the order and width of the rest.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/arrange-dark.png">
+  <img alt="Arrange panels window listing each panel with a show checkbox, a width choice and up and down buttons" src="docs/screenshots/arrange-light.png" width="480">
 </picture>
 
 **Desktop widget and phone**: the always-on-top widget for Windows and Mac, and the
@@ -315,6 +344,13 @@ panels actually made over the last two weeks, so after a few sunny days it refle
 system's losses, shading and clipping. If you give an address, it's sent once to
 OpenStreetMap's Nominatim to find the coordinates; nothing else about your system leaves home.
 
+For the best forecast, describe each roof face in `SOLAR_PLANES` as `tilt:azimuth:kW`,
+comma separated: tilt is the roof pitch in degrees, azimuth is the compass direction the
+panels face (0 north, 90 east, 180 south, 270 west) and kW is that face's panels. East and
+west faces then get their morning and afternoon peaks at the right times. Without it, the
+whole array is treated as one north-facing roof at 20°. The weather panel can be hidden with
+**Arrange panels**, or turned off with `WEATHER_ENABLED=0`.
+
 ## 5. Desktop widget app (Windows and Mac)
 
 Download the installer from the
@@ -344,6 +380,63 @@ workflow** builds them as run artifacts; pushing a tag like `v1.2.1` publishes a
 with notes from that version's section of [CHANGELOG.md](CHANGELOG.md). To build locally,
 install Rust and Node, then `cd desktop && npm install && npm run build`.
 
+## System health and alarms
+
+The System panel shows the inverter's status, operating mode, grid, temperatures and
+firmware, and decodes the alarm registers in Sigenergy's Modbus protocol into plain
+messages. New alarms, and alarms clearing, go into the event log.
+
+It also watches the **insulation resistance** of the solar wiring to earth, which Sigenergy
+uses to detect damaged cables or water in a connector. Healthy systems usually read about
+0.5 to 0.8 MΩ, and the inverter protects itself (stopping solar) below about 0.37 MΩ:
+
+| Reading | Shown as |
+|---|---|
+| 0.5 MΩ or more | normal |
+| below 0.5 MΩ | amber "lower than usual" notice and an event |
+| below 0.37 MΩ | red alarm and an event |
+
+It takes three readings in a row to change level, so one damp-morning reading doesn't set it
+off. Change the limits with `INSULATION_WARN_MOHM` and `INSULATION_MIN_MOHM`. A reading that
+stays low is worth having your installer check.
+
+## Settings
+
+Set these as environment variables, or in `sigen.env` in the data folder (read on every
+start; restart the container after editing).
+
+| Setting | What it does | Default |
+|---|---|---|
+| **Inverter** | | |
+| `SIGEN_HOST` | Inverter's IP address | required, unless simulating |
+| `SIGEN_PORT` | Modbus TCP port | `502` |
+| `SIGEN_PLANT_UNIT` / `SIGEN_INVERTER_UNIT` | Modbus unit ids (inverter `0` skips battery cell and string detail) | `247` / `1` |
+| `SIGEN_CHARGER_UNIT` | AC charger: `auto` searches, a number reads that unit, `plant` uses the inverter's figures, `0` none | `auto` |
+| `POLL_SECONDS` | How often to read the inverter (2 s minimum) | `5` |
+| `SIGEN_SIMULATE` | `1` runs the built-in simulator instead | `0` |
+| **Prices** | | |
+| `AMBER_API_KEY`, `AMBER_SITE_ID` | Amber Electric | off |
+| `LOCALVOLTS_API_KEY`, `LOCALVOLTS_PARTNER_ID`, `LOCALVOLTS_NMI` | LocalVolts | off |
+| `PRICE_PROVIDER` | `amber`, `localvolts` or `none` if both are set | whichever has a key |
+| `AEMO_REGION`, `AEMO_ENABLED` | AEMO region (`NSW1`, `QLD1`, `VIC1`, `SA1`, `TAS1`), or `0` to turn off | `NSW1`, on |
+| **Weather and solar forecast** | | |
+| `SITE_LAT`, `SITE_LON` | Where the panels are | off |
+| `SITE_ADDRESS` | Or an address or suburb to look up once | off |
+| `SOLAR_KWP` | Array size in kW, for a first estimate | none |
+| `SOLAR_PLANES` | Roof faces as `tilt:azimuth:kW`, comma separated | one north face at 20° |
+| `WEATHER_ENABLED` | `0` to turn weather off | on |
+| **Checks** | | |
+| `INSULATION_WARN_MOHM` / `INSULATION_MIN_MOHM` | Insulation resistance warning and alarm levels, MΩ | `0.5` / `0.37` |
+| **Collector** | | |
+| `HTTP_PORT` | Dashboard and API port | `8080` |
+| `DATA_DIR` | Where the database and `sigen.env` live | `/data` in Docker |
+| `TZ` | Time zone for "today" | `Australia/Sydney` |
+| `RETENTION_DAYS` | Days of minute history to keep | `800` |
+
+Simulator only: `SIM_PV_KWP`, `SIM_BATTERY_KWH`, `SIM_INVERTER_KW`, `SIM_EXPORT_LIMIT_KW`,
+`SIM_PV_STRINGS`, `SIM_EV_CHARGER`, `SIM_CHARGER_MODBUS`, `SIM_INSULATION_MOHM`, `SIM_ALARMS`,
+`DEMO_HISTORY_DAYS`.
+
 ## API
 
 | Endpoint | What it returns |
@@ -359,7 +452,8 @@ install Rust and Node, then `cd desktop && npm install && npm run build`.
 | `GET /api/ev-sessions?days=30&format=csv` | Charging sessions (CSV download or JSON) |
 | `GET /api/ev-log?days=30&format=csv` | Every charger state change with power and offered current (CSV or JSON) |
 | `GET /api/weather` | Current weather, hourly and daily forecast, and the solar forecast in kWh |
-| `GET /api/health` | `{ok, status, updated}` for monitoring |
+| `GET /api/health` | `{ok, status, updated, version}` for monitoring |
+| `GET /api/debug` | Raw register values, unsupported registers and the charger search, for troubleshooting |
 
 Signs: `grid` positive = buying, negative = selling. `battery` positive = charging.
 
@@ -378,7 +472,13 @@ Signs: `grid` positive = buying, negative = selling. `battery` positive = chargi
   are treated as unsupported filler values and ignored (they're listed in the log).
 * **AC charger not found**: the `charger` section of `/api/debug` lists which unit ids
   answered during the search. If your installer knows the charger's id, set
-  `SIGEN_CHARGER_UNIT` to it.
+  `SIGEN_CHARGER_UNIT` to it. If the charger has no Modbus address, set
+  `SIGEN_CHARGER_UNIT=plant` to show charging from the inverter's figures instead.
+* **No weather panel**: set `SITE_LAT` and `SITE_LON` (or `SITE_ADDRESS`); problems show in
+  the collector log on lines starting `Weather:`.
+* **Solar forecast way off**: it calibrates over a few sunny days; set `SOLAR_KWP` and
+  `SOLAR_PLANES` for a better start.
+* **Which version am I running?** It's at the bottom of the dashboard, and in `/api/health`.
 * **Widget says "Can't reach collector"**: click its status text to open the dashboard and
   fix the address. The collector must be reachable from that computer on port 8080.
 
