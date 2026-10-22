@@ -295,7 +295,27 @@ happens only this panel stops, everything else carries on. Wholesale prices are 
 c/kWh ($/MWh ÷ 10) and exclude network charges, so they're a guide to when power is
 cheap rather than what you pay.
 
-## 4. Desktop widget app (Windows and Mac)
+## 4. Weather and solar forecast (optional, no account needed)
+
+Set where the panels are, then restart the collector:
+
+```
+SITE_LAT=-33.87        # right-click your roof in Google Maps to copy these
+SITE_LON=151.21
+# or instead:  SITE_ADDRESS=Bendigo VIC   (a suburb is plenty; looked up once and cached)
+SOLAR_KWP=10           # array size, for a first estimate
+SOLAR_PLANES=22:90:5,22:270:5   # optional: each roof face as tilt:azimuth:kW (0 north, 90 east, 270 west)
+```
+
+The dashboard then shows current weather, four days of forecast and a solar forecast in kWh,
+with an hour-by-hour chart of forecast against actual production. Weather comes from
+[Open-Meteo](https://open-meteo.com) (free for non-commercial use). The solar forecast starts
+from the sunshine forecast for your roof faces and then calibrates itself against what your
+panels actually made over the last two weeks, so after a few sunny days it reflects your own
+system's losses, shading and clipping. If you give an address, it's sent once to
+OpenStreetMap's Nominatim to find the coordinates; nothing else about your system leaves home.
+
+## 5. Desktop widget app (Windows and Mac)
 
 Download the installer from the
 [latest release](https://github.com/copperOstrich/sigen-dashboard/releases/latest):
@@ -338,6 +358,7 @@ install Rust and Node, then `cd desktop && npm install && npm run build`.
 | `GET /api/ev?days=30` | AC charger: live state, charging sessions and the last two days of state changes |
 | `GET /api/ev-sessions?days=30&format=csv` | Charging sessions (CSV download or JSON) |
 | `GET /api/ev-log?days=30&format=csv` | Every charger state change with power and offered current (CSV or JSON) |
+| `GET /api/weather` | Current weather, hourly and daily forecast, and the solar forecast in kWh |
 | `GET /api/health` | `{ok, status, updated}` for monitoring |
 
 Signs: `grid` positive = buying, negative = selling. `battery` positive = charging.
@@ -375,3 +396,5 @@ Register map from Sigenergy's Modbus Protocol (V2.7–V2.9) as implemented by th
 integration; Amber endpoints from Amber's public API spec; LocalVolts fields as used by the
 [Localvolts Home Assistant integration](https://github.com/gurrier/localvolts); AEMO feeds
 as used by [aemonemdata](https://github.com/cabberley/aemonemdata) and AEMO's NEM data dashboard.
+Weather and irradiance forecasts by [Open-Meteo](https://open-meteo.com) (CC BY 4.0); address lookup by
+[OpenStreetMap Nominatim](https://nominatim.org).

@@ -24,6 +24,11 @@ Configuration (environment variables):
   LOCALVOLTS_NMI        LocalVolts NMI, if you have more than one default: first on the account
   AEMO_REGION           NEM region for wholesale data             NSW1, QLD1, VIC1, SA1 or TAS1 (default NSW1)
   AEMO_ENABLED          0 to turn off AEMO market data            default 1
+  SITE_LAT / SITE_LON   where the panels are, for weather and the solar forecast
+  SITE_ADDRESS          or an address / suburb to look up instead (once, cached)
+  SOLAR_KWP             array size, kW (helps the forecast before it has learned your system)
+  SOLAR_PLANES          roof faces as tilt:azimuth:kW, comma separated; azimuth 0 = north, 90 = east
+  WEATHER_ENABLED       0 to turn off weather                     default 1
   INSULATION_WARN_MOHM  insulation resistance "lower than usual" below this, MΩ   default 0.5
   INSULATION_MIN_MOHM   insulation fault below this (inverter's shutdown point)   default 0.37
   SIGEN_CHARGER_UNIT    Sigen AC charger's Modbus unit id         default auto (scan for it); 0 = none;
@@ -76,13 +81,14 @@ def load_settings_file():
 SETTINGS_PATH = load_settings_file()
 from aemo import Aemo  # noqa: E402
 from charger import ChargerWatch  # noqa: E402
+from weather import Weather  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.3.1"
+VERSION = "1.4.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -107,13 +113,22 @@ AEMO_ENABLED = ENV("AEMO_ENABLED", "1") != "0"
 AEMO_SIMULATE = ENV("AEMO_SIMULATE", "0") == "1"
 CHARGER_SETTING = (ENV("SIGEN_CHARGER_UNIT", "") or "auto").strip()
 def _env_num(name, default):
+    v = (ENV(name, "") or "").strip()
+    if not v:
+        return default
     try:
-        return float(ENV(name, "") or default)
+        return float(v)
     except ValueError:
         return default
 
 
 INSULATION_MIN = _env_num("INSULATION_MIN_MOHM", 0.37)
+SITE_LAT = _env_num("SITE_LAT", None)
+SITE_LON = _env_num("SITE_LON", None)
+SITE_ADDRESS = ENV("SITE_ADDRESS", "").strip()
+SOLAR_KWP = _env_num("SOLAR_KWP", None)
+SOLAR_PLANES = ENV("SOLAR_PLANES", "").strip()
+WEATHER_ENABLED = ENV("WEATHER_ENABLED", "1") != "0"
 INSULATION_WARN = max(INSULATION_MIN, _env_num("INSULATION_WARN_MOHM", 0.5))
 INSULATION_CONFIRM = 3  # consecutive readings either side of the limit before it counts
 
@@ -291,6 +306,13 @@ class Store:
             r = self.db.execute("SELECT SUM(ev)/60000.0, COUNT(ev) FROM samples WHERE day=?", (day,)).fetchone()
         return round(r[0] or 0, 2) if r and r[1] else None
 
+    def hourly_pv(self, since, until):
+        """{hour start: average PV W} for whole hours with readings for most of the hour."""
+        with self.lock:
+            rows = self.db.execute("SELECT (ts/3600)*3600 AS h, AVG(pv), COUNT(*) FROM samples WHERE ts>=? AND ts<? "
+                                   "GROUP BY h", (int(since), int(until))).fetchall()
+        return {h: w for h, w, n in rows if n >= 45 and w is not None}
+
     def save_aemo(self, rows):
         with self.lock:
             self.db.executemany("INSERT OR REPLACE INTO aemo_prices VALUES (?,?,?,?)", rows)
@@ -415,8 +437,9 @@ class Store:
 
 # ---------------------------------------------------------------- poller
 class Collector:
-    def __init__(self, store, host, port, retailer=None, aemo=None):
+    def __init__(self, store, host, port, retailer=None, aemo=None, weather=None):
         self.store = store
+        self.weather = weather
         self.retailer = retailer
         self.aemo = aemo
         self.client = ModbusTCPClient(host, port)
@@ -637,6 +660,7 @@ class Collector:
             "events": self.store.events(12),
             "price": self.retailer.summary() if self.retailer else {"enabled": False, "status": "off"},
             "aemo": self.aemo.summary() if self.aemo else {"enabled": False, "status": "off"},
+            "weather": self.weather.summary() if self.weather else {"enabled": False, "status": "off"},
         }
         with self.cond:
             state["target"] = self.state["target"]
@@ -745,6 +769,7 @@ class Api(BaseHTTPRequestHandler):
     store = None
     retailer = None
     aemo = None
+    weather = None
 
     def log_message(self, fmt, *args):
         pass
@@ -806,6 +831,8 @@ class Api(BaseHTTPRequestHandler):
                     self.wfile.write(body)
                     return
                 return self._json([{"t": ts, "string": n, "v": round(v, 1), "a": round(a, 2)} for ts, n, v, a in rows])
+            if url.path == "/api/weather":
+                return self._json(self.weather.snapshot() if self.weather else {"enabled": False, "status": "off"})
             if url.path in ("/api/ev", "/api/ev-sessions", "/api/ev-log"):
                 return self._ev(url.path, q)
             if url.path == "/api/debug":
@@ -918,11 +945,17 @@ def main():
         threading.Thread(target=retailer.run, daemon=True).start()
     aemo = Aemo(store, AEMO_REGION, enabled=AEMO_ENABLED, simulate=AEMO_SIMULATE, log=log)
     threading.Thread(target=aemo.run, daemon=True).start()
-    collector = Collector(store, host, port, retailer, aemo)
+    weather = Weather(store, SITE_LAT, SITE_LON, SITE_ADDRESS, SOLAR_PLANES, SOLAR_KWP,
+                      enabled=WEATHER_ENABLED, simulate=SIMULATE, cache_dir=DATA_DIR, tz=TZ, log=log)
+    if weather.enabled:
+        threading.Thread(target=weather.run, daemon=True).start()
+    elif WEATHER_ENABLED:
+        log("Weather off: set SITE_LAT and SITE_LON (or SITE_ADDRESS) to see weather and a solar forecast")
+    collector = Collector(store, host, port, retailer, aemo, weather)
     if SIMULATE:
         collector.state["target"] = "built-in simulator"
     threading.Thread(target=collector.run, daemon=True).start()
-    Api.collector, Api.store, Api.retailer, Api.aemo = collector, store, retailer, aemo
+    Api.collector, Api.store, Api.retailer, Api.aemo, Api.weather = collector, store, retailer, aemo, weather
     httpd = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), Api)
     httpd.daemon_threads = True
     if SETTINGS_PATH:

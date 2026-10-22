@@ -207,6 +207,118 @@
     if (!(d.events || []).length) ev.append(el("li", {}, el("span", { class: "muted", text: "No events recorded" })));
   }
 
+
+  // ------------------------------------------------------------ weather and solar forecast
+  let wxData = null, wxActual = null;
+  const WXI = {
+    sun: '<circle class="sun" cx="12" cy="12" r="4.5" fill="none" stroke="currentColor"/><path class="sun" stroke="currentColor" d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>',
+    part: '<circle class="sun" cx="9" cy="9" r="3.6" fill="none" stroke="currentColor"/><path class="sun" stroke="currentColor" d="M9 2v1.6M2 9h1.6M4 4l1.1 1.1M14 4l-1.1 1.1"/><path fill="var(--surface)" stroke="currentColor" d="M8 19.5h9.5a3.5 3.5 0 0 0 .2-7 5 5 0 0 0-9.6 1.3A2.9 2.9 0 0 0 8 19.5z"/>',
+    cloud: '<path fill="none" stroke="currentColor" d="M7 18.5h10.5a4 4 0 0 0 .3-8 5.6 5.6 0 0 0-10.8 1.4A3.3 3.3 0 0 0 7 18.5z"/>',
+    rain: '<path fill="none" stroke="currentColor" d="M7 14.5h10.5a4 4 0 0 0 .3-8 5.6 5.6 0 0 0-10.8 1.4A3.3 3.3 0 0 0 7 14.5z"/><path stroke="var(--home)" d="M9 17l-1 3M13 17l-1 3M17 17l-1 3"/>',
+    storm: '<path fill="none" stroke="currentColor" d="M7 14.5h10.5a4 4 0 0 0 .3-8 5.6 5.6 0 0 0-10.8 1.4A3.3 3.3 0 0 0 7 14.5z"/><path stroke="var(--solar)" fill="none" d="M12.5 15.5l-2 3.5h3l-2 3.5"/>',
+    fog: '<path fill="none" stroke="currentColor" d="M4 9h16M6 13h12M4 17h16"/>',
+    snow: '<path fill="none" stroke="currentColor" d="M7 14.5h10.5a4 4 0 0 0 .3-8 5.6 5.6 0 0 0-10.8 1.4A3.3 3.3 0 0 0 7 14.5z"/><path stroke="currentColor" d="M9 18.5h.01M13 18.5h.01M17 18.5h.01M11 21h.01M15 21h.01"/>',
+  };
+  const wxIcon = (kind, size = 22) => {
+    const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("width", size); s.setAttribute("height", size);
+    s.setAttribute("class", "wx-icon"); s.setAttribute("aria-hidden", "true");
+    s.setAttribute("stroke-width", "1.6"); s.setAttribute("stroke-linecap", "round"); s.setAttribute("stroke-linejoin", "round");
+    s.innerHTML = WXI[kind] || WXI.cloud;
+    return s;
+  };
+  const wxDay = (t) => new Date(t * 1000).toLocaleDateString([], { weekday: "short" });
+  const kwh1 = (v) => (v == null ? "–" : v.toFixed(v >= 100 ? 0 : 1));
+
+  function renderWeather() {
+    const w = wxData, panel = $("wx-panel");
+    panel.hidden = !(w && w.enabled);
+    if (panel.hidden) return;
+    const now = $("wx-now"); now.innerHTML = "";
+    if (w.status !== "ok" || !w.current) {
+      now.append(el("p", { class: "setup", text: w.status === "error" ? `Weather isn't available right now (${w.error}). It retries every few minutes.` : "Getting the forecast…" }));
+      return;
+    }
+    const c = w.current, today = w.daily[0], tom = w.daily[1];
+    $("wx-sub").textContent = w.mode === "simulator" ? "simulated"
+      : (w.location && w.location.name ? w.location.name.split(",").slice(0, 2).join(",") + ", " : "") + "from Open-Meteo";
+    const icon = c.is_day ? c.icon : (c.icon === "sun" ? "cloud" : c.icon);
+    now.append(el("div", { class: "wx-now-top" }, wxIcon(c.is_day || c.icon !== "sun" ? icon : "cloud", 44),
+      el("div", { class: "wx-temp" }, c.temp == null ? "–" : Math.round(c.temp), el("small", { text: "°C" }))));
+    now.append(el("div", { class: "wx-desc", text: c.desc + (c.feels != null ? `, feels like ${Math.round(c.feels)}°` : "") }));
+    const facts = el("dl", { class: "facts" });
+    const add = (k, v) => { if (v != null) facts.append(el("dt", { text: k }), el("dd", { text: v })); };
+    add("Cloud", c.cloud != null ? `${Math.round(c.cloud)}%` : null);
+    add("Wind", c.wind != null ? `${Math.round(c.wind)} km/h` : null);
+    add("Humidity", c.humidity != null ? `${Math.round(c.humidity)}%` : null);
+    if (today) add("Sunrise, sunset", `${clock(today.sunrise)}, ${clock(today.sunset)}`);
+    facts.append(el("div", { class: "sep" }));
+    const learned = w.factor && w.factor.value != null;
+    if (today) {
+      add("Solar today, forecast", today.pv_kwh != null ? `${kwh1(today.pv_kwh)} kWh` : "learning");
+      const made = live && live.today ? live.today.pv : null;
+      add("Made so far", made != null ? `${kwh1(made)} kWh` : null);
+      const rem = live && live.weather ? live.weather.remaining_kwh : null;
+      add("Still to come", rem != null && learned ? `${kwh1(rem)} kWh` : null);
+    }
+    if (tom) add("Tomorrow", tom.pv_kwh != null ? `${kwh1(tom.pv_kwh)} kWh, ${tom.desc.toLowerCase()}` : tom.desc);
+    now.append(facts);
+
+    const days = $("wx-days"); days.innerHTML = "";
+    w.daily.forEach((d, i) => {
+      days.append(el("div", { class: "wx-day" },
+        el("div", { class: "d" }, el("span", { text: i === 0 ? "Today" : i === 1 ? "Tomorrow" : wxDay(d.t) }), wxIcon(d.icon, 22)),
+        el("div", { class: "k" }, d.pv_kwh == null ? "–" : kwh1(d.pv_kwh), el("small", { text: "kWh" })),
+        el("div", { class: "m", text: `${d.desc}, ${Math.round(d.tmin)}–${Math.round(d.tmax)}°` }),
+        el("div", { class: "m", text: `${d.rain_prob != null ? `${d.rain_prob}% rain` : ""}${d.uv != null ? `, UV ${Math.round(d.uv)}` : ""}` })));
+    });
+    $("wx-note").textContent = !learned
+      ? "The solar forecast needs a few sunny days of readings to learn your system (or set SOLAR_KWP for a first estimate)."
+      : w.factor.learned
+        ? `Forecast from Open-Meteo's sunshine forecast for your roof, scaled by how your system has actually performed over the last two weeks (${Math.round(w.factor.hours)} sunny hours compared).`
+        : "Forecast from Open-Meteo's sunshine forecast for your roof and SOLAR_KWP. It sharpens once a few sunny days have been compared with what your panels made.";
+    drawWeather();
+  }
+
+  function drawWeather() {
+    const w = wxData;
+    if (!w || w.status !== "ok" || $("wx-panel").hidden) return;
+    const days = w.daily.slice(0, 2);
+    const windows = days.map((d) => [d.sunrise - 1800, d.sunset + 1800]);
+    const byHour = new Map();
+    for (const h of w.hourly) byHour.set(h.t, { t: h.t + 1800, fc: h.pv_w, cloud: h.cloud, act: null });
+    for (const [t, v] of Object.entries(wxActual || {})) { const r = byHour.get(+t); if (r) r.act = v; }
+    const rows = [...byHour.values()].sort((a, b) => a.t - b.t);
+    const nowT = Date.now() / 1000;
+    const series = [
+      { key: "fc", label: "Forecast", color: "var(--solar)", dash: "5 4", values: rows.map((r) => r.fc) },
+      { key: "act", label: "Actual", color: "var(--solar)", values: rows.map((r) => (r.t - 1800 < nowT ? r.act : null)) },
+    ];
+    const lg = $("wx-legend"); lg.innerHTML = "";
+    for (const s of series) lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw" + (s.dash ? " dash" : ""), style: `border-color:${s.color}` }), s.label));
+    C.lineChart($("wx-chart"), {
+      t: rows.map((r) => r.t), series, height: 200, yMin: 0, windows, markerT: nowT, gapSeconds: 7200,
+      yFmt: S.kwAxis, tipFmt: (v) => (v == null ? "–" : S.kw(v)),
+      tipTitle: (t) => { const r = byHour.get(t - 1800); return `${new Date(t * 1000).toLocaleString([], { weekday: "short", hour: "numeric" })}` + (r && r.cloud != null ? `, ${Math.round(r.cloud)}% cloud` : ""); },
+      ariaLabel: "Solar forecast for today and tomorrow, hour by hour, with what the panels actually made today",
+    });
+  }
+
+  async function loadWeather() {
+    try {
+      wxData = await S.fetchJSON("/api/weather");
+      if (wxData && wxData.enabled && wxData.status === "ok") {
+        const since = Math.min(...wxData.hourly.map((h) => h.t));
+        const hrs = Math.max(1, (Date.now() / 1000 - since) / 3600);
+        const h = await S.fetchJSON(`/api/history?hours=${hrs.toFixed(2)}`);
+        const acc = {};
+        h.t.forEach((t, i) => { const k = Math.floor(t / 3600) * 3600; if (h.pv[i] != null) (acc[k] = acc[k] || []).push(h.pv[i]); });
+        wxActual = Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, v.reduce((a, b) => a + b, 0) / v.length]));
+      }
+      renderWeather();
+    } catch (e) { /* banner */ }
+  }
+
   // ------------------------------------------------------------ car charging (Sigen AC charger)
   const evOn = (e) => !!(e && e.enabled && (e.unit != null || e.source === "plant") && e.state_code != null);
   const evInferred = () => !!(live && live.ev && live.ev.source === "plant");
@@ -883,7 +995,7 @@
   dlg.addEventListener("close", () => {
     if (dlg.returnValue !== "save") return;
     S.setApiBase($("api-input").value.trim());
-    sub.restart(); evData = null; loadHistory(); loadDaily(); loadPrices(); loadStrings();
+    sub.restart(); evData = null; loadWeather(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
   });
 
   // ------------------------------------------------------------ desktop: widget switch + updates
@@ -948,12 +1060,14 @@
   loadHistory(); loadDaily(); loadPrices(); loadStrings();
   setInterval(loadStrings, 60000);
   setInterval(loadEv, 60000);
+  loadWeather();
+  setInterval(loadWeather, 10 * 60000);
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);
   setInterval(loadDaily, 10 * 60000);
-  window.SigenRedraw = () => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); if (dailyData.length) drawDaily(); };
+  window.SigenRedraw = () => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); if (dailyData.length) drawDaily(); };
   let rt;
-  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); if (dailyData.length) drawDaily(); }, 120); })
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); if (dailyData.length) drawDaily(); }, 120); })
     .observe(document.querySelector(".wrap"));
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawHistory(); drawDaily(); });
 })();

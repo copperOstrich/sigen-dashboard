@@ -3,6 +3,18 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.4.0
+
+### Weather and solar forecast
+- New **Weather and solar forecast** panel: current conditions, sunrise and sunset, and four
+  days of forecast from Open-Meteo (free, no account)
+- Solar production forecast in kWh for today, tomorrow and the next two days, plus "still to
+  come" today, and an hour-by-hour chart of forecast against what the panels actually made
+- The forecast uses the sunshine expected on your own roof faces (`SOLAR_PLANES`: tilt,
+  direction and size of each) and then learns from your system, comparing the last two weeks
+  of forecasts with real production, so it allows for losses, shading and clipping
+- Location from `SITE_LAT`/`SITE_LON`, or `SITE_ADDRESS` looked up once and cached
+
 ## 1.3.1
 
 - **Insulation resistance check** (PV wiring to earth). Healthy systems usually read about
