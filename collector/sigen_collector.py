@@ -24,6 +24,7 @@ Configuration (environment variables):
   LOCALVOLTS_NMI        LocalVolts NMI, if you have more than one default: first on the account
   AEMO_REGION           NEM region for wholesale data             NSW1, QLD1, VIC1, SA1 or TAS1 (default NSW1)
   AEMO_ENABLED          0 to turn off AEMO market data            default 1
+  INSULATION_MIN_MOHM   flag insulation resistance below this, MΩ default 0.37 (Sigenergy's guidance)
   SIGEN_CHARGER_UNIT    Sigen AC charger's Modbus unit id         default auto (scan for it); 0 = none;
                         plant = charger has no Modbus address, use the inverter's figures only
 """
@@ -104,6 +105,11 @@ AEMO_REGION = (ENV("AEMO_REGION", "") or "NSW1").strip().upper()
 AEMO_ENABLED = ENV("AEMO_ENABLED", "1") != "0"
 AEMO_SIMULATE = ENV("AEMO_SIMULATE", "0") == "1"
 CHARGER_SETTING = (ENV("SIGEN_CHARGER_UNIT", "") or "auto").strip()
+try:
+    INSULATION_MIN = float(ENV("INSULATION_MIN_MOHM", "") or 0.37)
+except ValueError:
+    INSULATION_MIN = 0.37
+INSULATION_CONFIRM = 3  # consecutive readings either side of the limit before it counts
 
 COUNTERS = ["total_pv_kwh", "total_load_kwh", "total_import_kwh", "total_export_kwh",
             "total_charge_kwh", "total_discharge_kwh"]
@@ -425,6 +431,7 @@ class Collector:
         self.fail_count = 0
         self.first_seen = {}
         self.last_ignored = {}
+        self.ins_low, self.ins_streak = False, 0
         self.rec_lock = threading.Lock()
         self.stopping = threading.Event()
         self.raw = {"plant": {}, "inverter": {}}
@@ -533,6 +540,29 @@ class Collector:
             self.store.event("alarm-cleared", f"Alarm cleared ({k[0]} bit {k[1]})")
         self.last_alarm_set = keys
 
+        # Insulation resistance (PV array to earth). Sigenergy's guidance: below 0.37 MΩ is abnormal.
+        # Needs a few readings in a row either way, so one odd sample (morning dew) doesn't flap.
+        # 0 and 65.535 (0xFFFF) mean "not measured", e.g. overnight on some firmware.
+        iso = inv.get("insulation_resistance")
+        measured = iso is not None and 0 < iso < 65
+        if measured and (iso < INSULATION_MIN) != self.ins_low:
+            self.ins_streak += 1
+            if self.ins_streak >= INSULATION_CONFIRM:
+                self.ins_low, self.ins_streak = not self.ins_low, 0
+                if self.ins_low:
+                    msg = f"Insulation resistance low: {iso:.3f} MΩ (below {INSULATION_MIN:g} MΩ)"
+                    log(msg)
+                    self.store.event("alarm", msg)
+                else:
+                    self.store.event("alarm-cleared", f"Insulation resistance back to normal: {iso:.3f} MΩ")
+        elif measured:
+            self.ins_streak = 0
+        if self.ins_low:
+            alarms = alarms + [{"source": "Dashboard check",
+                                "message": f"Low insulation resistance: {iso:.3f} MΩ, below {INSULATION_MIN:g} MΩ"
+                                if measured else f"Low insulation resistance (below {INSULATION_MIN:g} MΩ)",
+                                "register": "insulation_resistance", "bit": None}]
+
         strings = []
         n = int(inv.get("pv_string_count") or 0) or 4
         for i in range(1, min(n, MAX_PV_STRINGS) + 1):
@@ -576,7 +606,8 @@ class Collector:
                 "model": inv.get("model"), "serial": inv.get("serial"), "firmware": inv.get("firmware"),
                 "grid_frequency": r(inv.get("grid_frequency"), 2), "grid_voltage": r(inv.get("phase_a_voltage"), 1),
                 "grid_current": r(inv.get("phase_a_current"), 1), "pcs_temp": r(inv.get("pcs_temp"), 1),
-                "insulation_mohm": r(inv.get("insulation_resistance"), 2),
+                "insulation_mohm": r(iso, 3) if measured else None, "insulation_min_mohm": INSULATION_MIN,
+                "insulation_low": self.ins_low,
                 "inverter_error": inv.get("_error"), "strings": strings,
                 "max_active_power": r(p.get("max_active_power")),
             },

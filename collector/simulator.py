@@ -279,7 +279,7 @@ class SimPlant:
             "grid_frequency": 49.98 + 0.04 * math.sin(time.time() / 13), "pcs_temp": 38 + pv / 1500,
             "phase_a_voltage": 241.3 + 2 * math.sin(time.time() / 29),
             "phase_a_current": (pv - p["battery"]) / 241.3, "pack_count": max(1, round(BATTERY_KWH / 8)), "pv_string_count": len(self.STRINGS),
-            "mppt_count": min(4, len(self.STRINGS)), "pv_power": pv, "insulation_resistance": 3.2, "daily_pv_kwh": self.daily["pv"],
+            "mppt_count": min(4, len(self.STRINGS)), "pv_power": pv, "insulation_resistance": float(os.environ.get("SIM_INSULATION_MOHM") or 3.2), "daily_pv_kwh": self.daily["pv"],
         }
         for i, (vv, ii) in enumerate(strings, 1):
             v[f"pv{i}_voltage"], v[f"pv{i}_current"] = vv, ii

@@ -175,12 +175,19 @@
       ["Grid meter", s.grid_meter],
       ["Grid", s.grid_voltage != null ? `${s.grid_voltage.toFixed(0)} V, ${s.grid_frequency?.toFixed(2)} Hz` : null],
       ["Inverter temperature", s.pcs_temp != null ? `${s.pcs_temp.toFixed(1)} °C` : null],
-      ["Insulation", s.insulation_mohm != null ? `${s.insulation_mohm} MΩ` : null],
+      ["Insulation", s.insulation_mohm != null ? `${s.insulation_mohm.toFixed(2)} MΩ` : null, s.insulation_low
+        ? `Below ${s.insulation_min_mohm} MΩ, which Sigenergy treats as abnormal. Often moisture in a connector or a damaged cable; worth having your installer check.`
+        : s.insulation_min_mohm ? `Resistance between the solar wiring and earth. Sigenergy treats below ${s.insulation_min_mohm} MΩ as abnormal.` : null],
       ["Model", s.model], ["Firmware", s.firmware],
       ["EV charger", evFact(d.ev)],
     ];
     const f = $("sys-facts"); f.innerHTML = "";
-    for (const [k, v] of rows) if (v != null && v !== "") f.append(el("dt", { text: k }), el("dd", { text: v, style: "font-family:var(--font);font-size:14px" }));
+    for (const [k, v, note] of rows) {
+      if (v == null || v === "") continue;
+      const bad = k === "Insulation" && s.insulation_low;
+      f.append(el("dt", { text: k, title: note || null }),
+        el("dd", { text: bad ? `${v}, low` : v, title: note || null, class: bad ? "bad" : null, style: "font-family:var(--font);font-size:14px" }));
+    }
     if (s.inverter_error) f.append(el("dt", { text: "Inverter details" }), el("dd", { text: "unavailable – check SIGEN_INVERTER_UNIT", style: "font-size:13px" }));
     $("sys-sub").textContent = d.mode === "simulator" ? "simulated" : (s.serial || "");
 

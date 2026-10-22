@@ -145,6 +145,7 @@ button { font: inherit; color: inherit; }
 .facts { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0; font-size: 14px; }
 .facts dt { color: var(--ink-2); }
 .facts dd { margin: 0; text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 15px; }
+.facts dd.bad { color: var(--bad); font-weight: 600; }
 .facts .sep { grid-column: 1 / -1; border-top: 1px solid var(--rule); margin: 4px 0; }
 
 /* ---------------------------------------------------------------- today strip */

@@ -5,6 +5,10 @@ update; the Docker image is tagged with the same version.
 
 ## 1.3.1
 
+- **Insulation resistance check**: a reading below 0.37 MΩ (Sigenergy's threshold for
+  abnormal; change with `INSULATION_MIN_MOHM`) shows as an alarm in the System panel, is
+  highlighted in red, and is logged as an event, with another when it recovers. It takes three
+  readings in a row either side of the limit, so one odd reading doesn't trigger it.
 - **Arrange panels**: choose which dashboard panels show, their order (drag, or the arrows)
   and their width. Saved in each browser, so a phone and a computer can differ.
 - `SIGEN_CHARGER_UNIT=plant` skips the charger search for chargers without a Modbus address
