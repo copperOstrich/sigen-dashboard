@@ -146,6 +146,8 @@ button { font: inherit; color: inherit; }
 .facts dt { color: var(--ink-2); }
 .facts dd { margin: 0; text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 15px; }
 .facts dd.bad { color: var(--bad); font-weight: 600; }
+.facts dd.warn { color: var(--warn); font-weight: 600; }
+.alarm.warn { background: color-mix(in srgb, var(--warn) 9%, var(--surface)); border-color: color-mix(in srgb, var(--warn) 32%, var(--rule)); }
 .facts .sep { grid-column: 1 / -1; border-top: 1px solid var(--rule); margin: 4px 0; }
 
 /* ---------------------------------------------------------------- today strip */

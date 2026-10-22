@@ -152,7 +152,7 @@
   }
 
   const icon = (kind) => {
-    const c = kind === "ok" ? "var(--good)" : "var(--bad)";
+    const c = kind === "ok" ? "var(--good)" : kind === "warn" ? "var(--warn)" : "var(--bad)";
     return el("svg", { width: 18, height: 18, viewBox: "0 0 20 20", "aria-hidden": "true" },
       el("circle", { cx: 10, cy: 10, r: 8.5, fill: "none", stroke: c, "stroke-width": 1.8 }),
       kind === "ok" ? el("path", { d: "M6 10.3l2.7 2.7L14 7.6", fill: "none", stroke: c, "stroke-width": 1.8, "stroke-linecap": "round", "stroke-linejoin": "round" })
@@ -166,7 +166,7 @@
       al.append(el("div", { class: "ok-line" }, icon("ok"), el("span", { text: "No active alarms" })));
     } else {
       for (const a of d.alarms) {
-        al.append(el("div", { class: "alarm" }, icon("bad"),
+        al.append(el("div", { class: "alarm" + (a.severity === "warning" ? " warn" : "") }, icon(a.severity === "warning" ? "warn" : "bad"),
           el("div", {}, el("b", { text: a.message }), el("div", { class: "muted", style: "font-size:13px", text: a.source }))));
       }
     }
@@ -175,18 +175,20 @@
       ["Grid meter", s.grid_meter],
       ["Grid", s.grid_voltage != null ? `${s.grid_voltage.toFixed(0)} V, ${s.grid_frequency?.toFixed(2)} Hz` : null],
       ["Inverter temperature", s.pcs_temp != null ? `${s.pcs_temp.toFixed(1)} °C` : null],
-      ["Insulation", s.insulation_mohm != null ? `${s.insulation_mohm.toFixed(2)} MΩ` : null, s.insulation_low
-        ? `Below ${s.insulation_min_mohm} MΩ, which Sigenergy treats as abnormal. Often moisture in a connector or a damaged cable; worth having your installer check.`
-        : s.insulation_min_mohm ? `Resistance between the solar wiring and earth. Sigenergy treats below ${s.insulation_min_mohm} MΩ as abnormal.` : null],
+      ["Insulation", s.insulation_mohm != null ? `${s.insulation_mohm.toFixed(2)} MΩ` : null,
+        `Resistance between the solar wiring and earth. Healthy systems usually read about 0.5 to 0.8 MΩ, ` +
+        `and the inverter protects itself below about ${s.insulation_min_mohm ?? 0.37} MΩ. Low readings are often moisture ` +
+        `in a connector or a damaged cable, especially on wet mornings; if it stays low, have your installer check.`],
       ["Model", s.model], ["Firmware", s.firmware],
       ["EV charger", evFact(d.ev)],
     ];
     const f = $("sys-facts"); f.innerHTML = "";
     for (const [k, v, note] of rows) {
       if (v == null || v === "") continue;
-      const bad = k === "Insulation" && s.insulation_low;
+      const lvl = k === "Insulation" ? s.insulation_level || 0 : 0;
       f.append(el("dt", { text: k, title: note || null }),
-        el("dd", { text: bad ? `${v}, low` : v, title: note || null, class: bad ? "bad" : null, style: "font-family:var(--font);font-size:14px" }));
+        el("dd", { text: lvl === 2 ? `${v}, too low` : lvl === 1 ? `${v}, lower than usual` : v, title: note || null,
+          class: lvl === 2 ? "bad" : lvl === 1 ? "warn" : null, style: "font-family:var(--font);font-size:14px" }));
     }
     if (s.inverter_error) f.append(el("dt", { text: "Inverter details" }), el("dd", { text: "unavailable – check SIGEN_INVERTER_UNIT", style: "font-size:13px" }));
     $("sys-sub").textContent = d.mode === "simulator" ? "simulated" : (s.serial || "");

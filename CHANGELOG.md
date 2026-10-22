@@ -5,10 +5,11 @@ update; the Docker image is tagged with the same version.
 
 ## 1.3.1
 
-- **Insulation resistance check**: a reading below 0.37 MΩ (Sigenergy's threshold for
-  abnormal; change with `INSULATION_MIN_MOHM`) shows as an alarm in the System panel, is
-  highlighted in red, and is logged as an event, with another when it recovers. It takes three
-  readings in a row either side of the limit, so one odd reading doesn't trigger it.
+- **Insulation resistance check** (PV wiring to earth). Healthy systems usually read about
+  0.5 to 0.8 MΩ, and the inverter protects itself below about 0.37 MΩ. Below 0.5 MΩ shows an
+  amber "lower than usual" notice; below 0.37 MΩ a red alarm. Both are logged as events, with
+  another when it recovers, and need three readings in a row so one odd reading doesn't
+  trigger them. Limits: `INSULATION_WARN_MOHM` and `INSULATION_MIN_MOHM`.
 - **Arrange panels**: choose which dashboard panels show, their order (drag, or the arrows)
   and their width. Saved in each browser, so a phone and a computer can differ.
 - `SIGEN_CHARGER_UNIT=plant` skips the charger search for chargers without a Modbus address

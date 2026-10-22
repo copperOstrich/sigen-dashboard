@@ -24,7 +24,8 @@ Configuration (environment variables):
   LOCALVOLTS_NMI        LocalVolts NMI, if you have more than one default: first on the account
   AEMO_REGION           NEM region for wholesale data             NSW1, QLD1, VIC1, SA1 or TAS1 (default NSW1)
   AEMO_ENABLED          0 to turn off AEMO market data            default 1
-  INSULATION_MIN_MOHM   flag insulation resistance below this, MΩ default 0.37 (Sigenergy's guidance)
+  INSULATION_WARN_MOHM  insulation resistance "lower than usual" below this, MΩ   default 0.5
+  INSULATION_MIN_MOHM   insulation fault below this (inverter's shutdown point)   default 0.37
   SIGEN_CHARGER_UNIT    Sigen AC charger's Modbus unit id         default auto (scan for it); 0 = none;
                         plant = charger has no Modbus address, use the inverter's figures only
 """
@@ -105,10 +106,15 @@ AEMO_REGION = (ENV("AEMO_REGION", "") or "NSW1").strip().upper()
 AEMO_ENABLED = ENV("AEMO_ENABLED", "1") != "0"
 AEMO_SIMULATE = ENV("AEMO_SIMULATE", "0") == "1"
 CHARGER_SETTING = (ENV("SIGEN_CHARGER_UNIT", "") or "auto").strip()
-try:
-    INSULATION_MIN = float(ENV("INSULATION_MIN_MOHM", "") or 0.37)
-except ValueError:
-    INSULATION_MIN = 0.37
+def _env_num(name, default):
+    try:
+        return float(ENV(name, "") or default)
+    except ValueError:
+        return default
+
+
+INSULATION_MIN = _env_num("INSULATION_MIN_MOHM", 0.37)
+INSULATION_WARN = max(INSULATION_MIN, _env_num("INSULATION_WARN_MOHM", 0.5))
 INSULATION_CONFIRM = 3  # consecutive readings either side of the limit before it counts
 
 COUNTERS = ["total_pv_kwh", "total_load_kwh", "total_import_kwh", "total_export_kwh",
@@ -431,7 +437,7 @@ class Collector:
         self.fail_count = 0
         self.first_seen = {}
         self.last_ignored = {}
-        self.ins_low, self.ins_streak = False, 0
+        self.ins_level, self.ins_streak = 0, 0
         self.rec_lock = threading.Lock()
         self.stopping = threading.Event()
         self.raw = {"plant": {}, "inverter": {}}
@@ -540,27 +546,41 @@ class Collector:
             self.store.event("alarm-cleared", f"Alarm cleared ({k[0]} bit {k[1]})")
         self.last_alarm_set = keys
 
-        # Insulation resistance (PV array to earth). Sigenergy's guidance: below 0.37 MΩ is abnormal.
-        # Needs a few readings in a row either way, so one odd sample (morning dew) doesn't flap.
-        # 0 and 65.535 (0xFFFF) mean "not measured", e.g. overnight on some firmware.
+        # Insulation resistance (PV array to earth). Healthy systems typically read 0.5-0.8 MΩ;
+        # the inverter protects itself below about 0.37 MΩ (its "ISO protection value").
+        # Two levels: "low" (below INSULATION_WARN, worth watching) and "fault" (below
+        # INSULATION_MIN, at or past the shutdown point). A level only changes after a few readings
+        # in a row, so one odd sample (morning dew) doesn't flap. 0 and 65.535 (0xFFFF) mean
+        # "not measured", e.g. overnight on some firmware.
         iso = inv.get("insulation_resistance")
         measured = iso is not None and 0 < iso < 65
-        if measured and (iso < INSULATION_MIN) != self.ins_low:
-            self.ins_streak += 1
-            if self.ins_streak >= INSULATION_CONFIRM:
-                self.ins_low, self.ins_streak = not self.ins_low, 0
-                if self.ins_low:
-                    msg = f"Insulation resistance low: {iso:.3f} MΩ (below {INSULATION_MIN:g} MΩ)"
-                    log(msg)
-                    self.store.event("alarm", msg)
-                else:
-                    self.store.event("alarm-cleared", f"Insulation resistance back to normal: {iso:.3f} MΩ")
-        elif measured:
-            self.ins_streak = 0
-        if self.ins_low:
-            alarms = alarms + [{"source": "Dashboard check",
-                                "message": f"Low insulation resistance: {iso:.3f} MΩ, below {INSULATION_MIN:g} MΩ"
-                                if measured else f"Low insulation resistance (below {INSULATION_MIN:g} MΩ)",
+        if measured:
+            level = 2 if iso < INSULATION_MIN else 1 if iso < INSULATION_WARN else 0
+            if level != self.ins_level:
+                self.ins_streak += 1
+                if self.ins_streak >= INSULATION_CONFIRM:
+                    was, self.ins_level, self.ins_streak = self.ins_level, level, 0
+                    if level == 2:
+                        msg = (f"Insulation resistance {iso:.3f} MΩ, below {INSULATION_MIN:g} MΩ: "
+                               "the inverter may shut down solar to protect itself")
+                        log(msg); self.store.event("alarm", msg)
+                    elif level == 1:
+                        msg = f"Insulation resistance {iso:.3f} MΩ, below the usual {INSULATION_WARN:g} MΩ"
+                        if was == 2:
+                            msg += f" (back above {INSULATION_MIN:g} MΩ)"
+                        log(msg); self.store.event("alarm" if was == 0 else "alarm-cleared", msg)
+                    else:
+                        self.store.event("alarm-cleared", f"Insulation resistance back to normal: {iso:.3f} MΩ")
+            else:
+                self.ins_streak = 0
+        val = f"{iso:.3f} MΩ" if measured else "reading unavailable"
+        if self.ins_level == 2:
+            alarms = alarms + [{"source": "Dashboard check", "severity": "fault",
+                                "message": f"Insulation resistance too low: {val}, below {INSULATION_MIN:g} MΩ",
+                                "register": "insulation_resistance", "bit": None}]
+        elif self.ins_level == 1:
+            alarms = alarms + [{"source": "Dashboard check", "severity": "warning",
+                                "message": f"Insulation resistance lower than usual: {val}",
                                 "register": "insulation_resistance", "bit": None}]
 
         strings = []
@@ -607,7 +627,7 @@ class Collector:
                 "grid_frequency": r(inv.get("grid_frequency"), 2), "grid_voltage": r(inv.get("phase_a_voltage"), 1),
                 "grid_current": r(inv.get("phase_a_current"), 1), "pcs_temp": r(inv.get("pcs_temp"), 1),
                 "insulation_mohm": r(iso, 3) if measured else None, "insulation_min_mohm": INSULATION_MIN,
-                "insulation_low": self.ins_low,
+                "insulation_warn_mohm": INSULATION_WARN, "insulation_level": self.ins_level,
                 "inverter_error": inv.get("_error"), "strings": strings,
                 "max_active_power": r(p.get("max_active_power")),
             },
