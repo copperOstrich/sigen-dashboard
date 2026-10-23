@@ -208,6 +208,89 @@
   }
 
 
+
+  // ------------------------------------------------------------ battery outlook
+  let olData = null, olPast = null;
+  const olWhen = (ts) => {
+    if (!ts) return "–";
+    const d = new Date(ts * 1000), today = new Date();
+    const tm = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    if (d.toDateString() === today.toDateString()) return tm;
+    const tmr = new Date(today); tmr.setDate(today.getDate() + 1);
+    return d.toDateString() === tmr.toDateString() ? `${tm} tomorrow` : `${tm} ${d.toLocaleDateString([], { weekday: "short" })}`;
+  };
+
+  function renderOutlook() {
+    const o = olData, panel = $("ol-panel");
+    panel.hidden = !(o && o.enabled);
+    if (panel.hidden) return;
+    const box = $("ol-now"); box.innerHTML = "";
+    box.append(el("p", { class: "ol-head", text: o.headline }));
+    const f = el("dl", { class: "facts" });
+    const add = (k, v) => { if (v != null && v !== "") f.append(el("dt", { text: k }), el("dd", { text: v })); };
+    const soc = live && live.battery ? live.battery.soc : null;
+    add("Battery now", soc != null ? `${Math.round(soc)}%` : null);
+    add("Lowest point", o.lowest ? `${Math.round(o.lowest.soc)}% at ${olWhen(o.lowest.t)}` : null);
+    add(`Reaches ${o.reserve}% reserve`, o.empty_at ? olWhen(o.empty_at) : "not tonight");
+    if (o.night_grid_kwh > 0.05) add("From the grid until sunrise", `${o.night_grid_kwh.toFixed(1)} kWh` + (o.night_cost != null ? `, $${o.night_cost.toFixed(2)}` : ""));
+    add("Solar takes over", o.solar_covers_at ? olWhen(o.solar_covers_at) : null);
+    const t = o.tomorrow;
+    if (t) {
+      f.append(el("div", { class: "sep" }));
+      add(`${t.label}: solar`, `${t.pv_kwh.toFixed(0)} kWh`);
+      add(`${t.label}: home use`, `${t.home_kwh.toFixed(0)} kWh`);
+      add(t.full_at ? "Full again" : "Highest charge", t.full_at ? olWhen(t.full_at) : t.max_soc != null ? `${Math.round(t.max_soc)}%` : null);
+      if (t.spare_kwh >= 0.5) add("Spare solar after that", `${t.spare_kwh.toFixed(0)} kWh`);
+    }
+    box.append(f);
+    const adv = $("ol-advice"); adv.innerHTML = "";
+    for (const a of o.advice || []) adv.append(el("p", { text: a }));
+    $("ol-sub").textContent = `${o.solar_source === "forecast" ? "solar from the weather forecast" : "solar from recent days"}, home use from the last ${o.history_days} days`;
+    $("ol-note").textContent = "Assumes the battery runs the house and stores spare solar, at your usual use for each hour (car charging left out)." +
+      (o.managed ? ` Your system is in ${o.ems_mode} mode, so your retailer or VPP may export or charge the battery differently from this.` : "");
+    drawOutlook();
+  }
+
+  function drawOutlook() {
+    const o = olData;
+    if (!o || !o.enabled || $("ol-panel").hidden) return;
+    const proj = o.projection || [], nowT = Date.now() / 1000;
+    const rows = new Map();
+    const row = (t) => { if (!rows.has(t)) rows.set(t, { t, act: null, fc: null, pv: null, load: null }); return rows.get(t); };
+    if (olPast) olPast.t.forEach((t, i) => { if (olPast.soc[i] != null && t < nowT) row(t).act = olPast.soc[i]; });
+    for (const p of proj) Object.assign(row(p.t), { fc: p.soc, pv: p.pv, load: p.load });
+    // join the actual line to the projection at "now"
+    if (proj.length && olPast) { const r0 = row(proj[0].t); if (r0.act == null && live && live.battery) r0.act = live.battery.soc; }
+    const lst = [...rows.values()].sort((a, b) => a.t - b.t);
+    const lg = $("ol-legend"); lg.innerHTML = "";
+    const items = [["Charge so far", "var(--battery)", false], ["Expected charge", "var(--battery)", true], ["Expected solar", "var(--solar)", true], ["Usual home use", "var(--home)", true]];
+    for (const [l, c, d] of items) lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw" + (d ? " dash" : ""), style: `border-color:${c}` }), l));
+    const title = (t) => new Date(t * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+    C.lineChart($("ol-chart"), {
+      t: lst.map((r) => r.t), height: 190, yMin: 0, yMax: 100, yTicks: [0, 25, 50, 75, 100], markerT: nowT,
+      series: [{ key: "act", label: "Charge", color: "var(--battery)", values: lst.map((r) => r.act), area: false },
+        { key: "fc", label: "Expected", color: "var(--battery)", dash: "5 4", values: lst.map((r) => r.fc) }],
+      yFmt: (v) => `${Math.round(v)}%`, tipFmt: (v) => (v == null ? "–" : `${Math.round(v)}%`), tipTitle: title,
+      ariaLabel: "Battery charge over the last 12 hours and expected until the end of tomorrow",
+    });
+    // same time axis as the charge chart above, so the two line up
+    C.lineChart($("ol-flow"), {
+      t: lst.map((r) => r.t), height: 120, yMin: 0, markerT: nowT, markerLabel: "",
+      series: [{ key: "pv", label: "Expected solar", color: "var(--solar)", dash: "5 4", values: lst.map((r) => r.pv) },
+        { key: "load", label: "Usual home use", color: "var(--home)", dash: "2 3", values: lst.map((r) => r.load) }],
+      yFmt: S.kwAxis, tipFmt: (v) => (v == null ? "–" : S.kw(v)), tipTitle: title,
+      ariaLabel: "Expected solar and usual home use for the same period",
+    });
+  }
+
+  async function loadOutlook() {
+    try {
+      const [o, h] = await Promise.all([S.fetchJSON("/api/outlook"), S.fetchJSON("/api/history?hours=12")]);
+      olData = o; olPast = h;
+      renderOutlook();
+    } catch (e) { /* banner */ }
+  }
+
   // ------------------------------------------------------------ weather and solar forecast
   let wxData = null, wxActual = null;
   const WXI = {
@@ -995,7 +1078,7 @@
   dlg.addEventListener("close", () => {
     if (dlg.returnValue !== "save") return;
     S.setApiBase($("api-input").value.trim());
-    sub.restart(); evData = null; loadWeather(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
+    sub.restart(); evData = null; loadWeather(); loadOutlook(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
   });
 
   // ------------------------------------------------------------ desktop: widget switch + updates
@@ -1062,12 +1145,14 @@
   setInterval(loadEv, 60000);
   loadWeather();
   setInterval(loadWeather, 10 * 60000);
+  loadOutlook();
+  setInterval(loadOutlook, 5 * 60000);
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);
   setInterval(loadDaily, 10 * 60000);
-  window.SigenRedraw = () => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); if (dailyData.length) drawDaily(); };
+  window.SigenRedraw = () => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); if (dailyData.length) drawDaily(); };
   let rt;
-  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); if (dailyData.length) drawDaily(); }, 120); })
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); if (dailyData.length) drawDaily(); }, 120); })
     .observe(document.querySelector(".wrap"));
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawHistory(); drawDaily(); });
 })();

@@ -3,6 +3,21 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.5.0
+
+### Battery outlook
+- New **Battery outlook** panel: where the battery's charge is heading until the end of
+  tomorrow, drawn on from the last 12 hours, with expected solar and usual home use below
+- Plain answers: whether the battery lasts the night (or when it reaches its reserve), how much
+  the house will need from the grid until the sun takes over and what that costs at the
+  forecast prices, when solar fills it again and how much is left over
+- Advice on grid charging: when the next day's solar will refill the battery anyway, it says
+  charging overnight isn't needed; when it won't, it points to the cheapest window
+- Home use is your typical use for each hour over the last two weeks, weekdays and weekends
+  separately (car charging left out); solar comes from the weather forecast when it's set up,
+  otherwise from recent days. It notes when VPP or retailer control may do things differently.
+- `/api/outlook` returns the projection and the figures behind it
+
 ## 1.4.1
 
 - macOS: the app is now ad-hoc signed, so macOS offers **Open Anyway** (System Settings →

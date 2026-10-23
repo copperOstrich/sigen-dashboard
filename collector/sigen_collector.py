@@ -82,13 +82,14 @@ SETTINGS_PATH = load_settings_file()
 from aemo import Aemo  # noqa: E402
 from charger import ChargerWatch  # noqa: E402
 from weather import Weather  # noqa: E402
+from outlook import Outlook  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.4.1"
+VERSION = "1.5.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -313,6 +314,14 @@ class Store:
                                    "GROUP BY h", (int(since), int(until))).fetchall()
         return {h: w for h, w, n in rows if n >= 45 and w is not None}
 
+    def hourly_avgs(self, since, until):
+        """{hour start: (average PV W, average home W without the car)} for well-covered hours."""
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT (ts/3600)*3600 AS h, AVG(pv), AVG(MAX(0, load - COALESCE(ev, 0))), COUNT(*) FROM samples "
+                "WHERE ts>=? AND ts<? GROUP BY h", (int(since), int(until))).fetchall()
+        return {h: (pv, home) for h, pv, home, n in rows if n >= 45}
+
     def save_aemo(self, rows):
         with self.lock:
             self.db.executemany("INSERT OR REPLACE INTO aemo_prices VALUES (?,?,?,?)", rows)
@@ -440,6 +449,8 @@ class Collector:
     def __init__(self, store, host, port, retailer=None, aemo=None, weather=None):
         self.store = store
         self.weather = weather
+        self.outlook = Outlook(store, TZ, log=log)
+        self.outlook_summary = None
         self.retailer = retailer
         self.aemo = aemo
         self.client = ModbusTCPClient(host, port)
@@ -523,6 +534,15 @@ class Collector:
             self.store.event("connection", "Connection to inverter restored")
             log("Connection restored")
         self.record(p, now, inv)
+        if now - self.outlook.computed >= 300:
+            try:
+                res = self.outlook.compute(self.state, self.weather.snapshot() if self.weather else None,
+                                           self.retailer.snapshot() if self.retailer else None, now)
+                self.outlook_summary = {k: v for k, v in res.items() if k != "projection"}
+            except Exception as e:  # the outlook is a nice-to-have; never stop the readings for it
+                self.outlook.computed = now
+                log("Battery outlook failed:", f"{type(e).__name__}: {e}")
+                traceback.print_exc()
 
     def state_from(self, p, inv, now, ev=None):
         day = local_day(now)
@@ -661,6 +681,7 @@ class Collector:
             "price": self.retailer.summary() if self.retailer else {"enabled": False, "status": "off"},
             "aemo": self.aemo.summary() if self.aemo else {"enabled": False, "status": "off"},
             "weather": self.weather.summary() if self.weather else {"enabled": False, "status": "off"},
+            "outlook": self.outlook_summary or {"enabled": False},
         }
         with self.cond:
             state["target"] = self.state["target"]
@@ -831,6 +852,8 @@ class Api(BaseHTTPRequestHandler):
                     self.wfile.write(body)
                     return
                 return self._json([{"t": ts, "string": n, "v": round(v, 1), "a": round(a, 2)} for ts, n, v, a in rows])
+            if url.path == "/api/outlook":
+                return self._json(self.collector.outlook.result or {"enabled": False, "reason": "not worked out yet"})
             if url.path == "/api/weather":
                 return self._json(self.weather.snapshot() if self.weather else {"enabled": False, "status": "off"})
             if url.path in ("/api/ev", "/api/ev-sessions", "/api/ev-log"):

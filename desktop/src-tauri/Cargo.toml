@@ -1,6 +1,6 @@
 [package]
 name = "home-energy"
-version = "1.4.1"
+version = "1.5.0"
 description = "SigenStor solar and battery dashboard with desktop widget"
 edition = "2021"
 

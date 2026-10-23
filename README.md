@@ -32,6 +32,7 @@ SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) �
 * **Dashboard** (`web/`), in panels you can show, hide, reorder and resize:
   * live power flow between solar, battery, home, grid and car, with battery detail
   * today's totals, self-sufficiency and cost
+  * battery outlook: will it last the night, when it fills again, and whether grid charging is worthwhile
   * weather, four-day forecast and a solar forecast in kWh
   * car charging from a Sigen AC charger: state, sessions, energy and cost
   * retailer and wholesale prices with forecasts, and the grid's generation mix
@@ -100,6 +101,15 @@ AEMO's wholesale price, and the region's generation mix.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/prices-grid-dark.png">
   <img alt="Electricity price chart with Amber buy and sell prices and AEMO wholesale price, and the grid generation mix" src="docs/screenshots/prices-grid-light.png">
+</picture>
+
+**Battery outlook**: where the battery's charge is heading until the end of tomorrow, with
+plain answers: will it last the night, what the grid will cost until sunrise, when solar fills
+it again, and whether charging from the grid overnight is worth it.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/outlook-dark.png">
+  <img alt="Battery outlook: battery charge over the last 12 hours and expected until the end of tomorrow, with expected solar and usual home use, and advice that the battery reaches its reserve at 3 AM and tomorrow's solar will refill it" src="docs/screenshots/outlook-light.png">
 </picture>
 
 **Weather and solar forecast**: current conditions, four days ahead, and a solar forecast
@@ -351,6 +361,23 @@ west faces then get their morning and afternoon peaks at the right times. Withou
 whole array is treated as one north-facing roof at 20°. The weather panel can be hidden with
 **Arrange panels**, or turned off with `WEATHER_ENABLED=0`.
 
+### Battery outlook
+
+With a couple of days of history, the dashboard projects the battery's charge from now to the
+end of tomorrow, in 15-minute steps:
+
+* **home use**: your typical use for each hour over the last two weeks, weekdays and weekends
+  separately, without car charging
+* **solar**: the forecast above when it's set up, otherwise a typical recent day
+* **battery**: runs the house and stores spare solar between your reserve and charge limit,
+  at its maximum rates, allowing for charging losses
+
+From that it tells you whether the battery lasts the night, how much the house needs from the
+grid until solar takes over (and the cost at your retailer's forecast prices), when it's full
+again and what's left over, and whether charging from the grid overnight is worth it. It's a
+model of self-consumption, not of your retailer's control: with Amber SmartShift or another
+VPP managing the battery, it may export or charge differently, and the panel says so.
+
 ## 5. Desktop widget app (Windows and Mac)
 
 Download the installer from the
@@ -456,6 +483,7 @@ Simulator only: `SIM_PV_KWP`, `SIM_BATTERY_KWH`, `SIM_INVERTER_KW`, `SIM_EXPORT_
 | `GET /api/ev?days=30` | AC charger: live state, charging sessions and the last two days of state changes |
 | `GET /api/ev-sessions?days=30&format=csv` | Charging sessions (CSV download or JSON) |
 | `GET /api/ev-log?days=30&format=csv` | Every charger state change with power and offered current (CSV or JSON) |
+| `GET /api/outlook` | Battery outlook: projected charge to the end of tomorrow, milestones and advice |
 | `GET /api/weather` | Current weather, hourly and daily forecast, and the solar forecast in kWh |
 | `GET /api/health` | `{ok, status, updated, version}` for monitoring |
 | `GET /api/debug` | Raw register values, unsupported registers and the charger search, for troubleshooting |
