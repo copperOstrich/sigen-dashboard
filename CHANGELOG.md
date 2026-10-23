@@ -3,6 +3,11 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.4.1
+
+- macOS: the app is now ad-hoc signed, so macOS offers **Open Anyway** (System Settings →
+  Privacy & Security) instead of saying the app "is damaged and can't be opened"
+
 ## 1.4.0
 
 ### Weather and solar forecast

@@ -370,9 +370,14 @@ On first launch the dashboard window asks for the collector address, e.g.
 Tray / menu bar icon: show widget, open dashboard, keep on top, start at login, quit.
 Closing a window hides it.
 
-The apps aren't code-signed, so the first time:
+The apps aren't signed with a paid developer certificate yet, so the first time:
 * **Windows**: SmartScreen → More info → Run anyway.
-* **macOS**: right-click the app → Open → Open (or System Settings → Privacy & Security → Open Anyway).
+* **macOS**: open the app once (it will be blocked), then go to **System Settings → Privacy &
+  Security**, scroll down to the message about Home Energy and click **Open Anyway**, then
+  confirm with your password. On older macOS, right-click the app → Open → Open also works.
+  If macOS says the app **"is damaged and can't be opened"** (versions before 1.4.1), run
+  this once in Terminal, then open it normally:
+  `xattr -cr "/Applications/Home Energy.app"`
 
 **Building it yourself:** the installers are built by GitHub Actions
 (`.github/workflows/desktop.yml`). In a fork, **Actions → Build desktop widget apps → Run
