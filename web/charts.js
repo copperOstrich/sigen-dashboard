@@ -30,6 +30,16 @@
         }
         t += H;
       }
+    } else if (span > 45 * 86400) {
+      // long ranges: one label per month (with the year on January)
+      const d = new Date(t0 * 1000); d.setDate(1); d.setHours(0, 0, 0, 0);
+      const months = [];
+      while (d.getTime() / 1000 <= t1) { if (d.getTime() / 1000 >= t0) months.push(new Date(d)); d.setMonth(d.getMonth() + 1); }
+      const every = Math.max(1, Math.ceil(months.length / maxLabels));
+      months.forEach((m, i) => {
+        if (i % every) return;
+        out.push({ t: m.getTime() / 1000, label: m.toLocaleDateString([], m.getMonth() === 0 ? { month: "short", year: "numeric" } : { month: "short" }) });
+      });
     } else {
       const days = span / 86400;
       let every = days <= 8 ? 1 : days <= 16 ? 2 : 5;

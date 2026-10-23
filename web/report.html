@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monthly energy report</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<style>
+  body { background: var(--page); }
+  .rep { max-width: 860px; margin: 0 auto; padding: 28px 24px 48px; }
+  .rep header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  .rep h1 { font: 600 26px/1.2 var(--font); margin: 0; }
+  .rep .sub { color: var(--ink-3); }
+  .rep .bar { margin-left: auto; display: flex; gap: 8px; }
+  .rep h2 { font: 600 16px var(--font); margin: 24px 0 8px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .kpi { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; }
+  .kpi .k { font-size: 12.5px; color: var(--ink-2); }
+  .kpi .v { font: 600 22px/1.25 var(--font-num); font-variant-numeric: tabular-nums; }
+  .kpi .v small { font-size: 13px; color: var(--ink-2); margin-left: 2px; font-weight: 500; }
+  table.rt { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+  table.rt th, table.rt td { padding: 5px 10px; text-align: right; border-top: 1px solid var(--rule); font-variant-numeric: tabular-nums; }
+  table.rt th { color: var(--ink-3); font-weight: 500; border-top: 0; }
+  table.rt th:first-child, table.rt td:first-child { text-align: left; }
+  table.rt tr.total td { font-weight: 600; }
+  .fine { font-size: 12px; color: var(--ink-3); margin-top: 14px; }
+  @media (max-width: 640px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media print {
+    @page { size: A4; margin: 14mm; }
+    body { background: #fff; }
+    .rep { padding: 0; max-width: none; }
+    .bar { display: none !important; }
+    .kpi, table.rt { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="rep">
+  <header>
+    <h1 id="title">Monthly energy report</h1>
+    <span class="sub" id="sub"></span>
+    <span class="bar">
+      <button class="ghost-btn" type="button" id="prev">‹ Previous</button>
+      <button class="ghost-btn" type="button" id="next">Next ›</button>
+      <button class="primary-btn" type="button" onclick="window.print()">Print or save as PDF</button>
+    </span>
+  </header>
+  <div class="kpis" id="kpis"></div>
+  <h2>Compared with</h2>
+  <table class="rt" id="cmp"></table>
+  <h2>Day by day</h2>
+  <table class="rt" id="days"></table>
+  <p class="fine" id="fine"></p>
+</div>
+<script src="common.js"></script>
+<script>
+(function () {
+  const S = window.Sigen, el = S.el, $ = (id) => document.getElementById(id);
+  const q = new URLSearchParams(location.search);
+  let months = [], idx = -1;
+  const name = (m) => new Date(m + "-15T12:00:00").toLocaleDateString([], { month: "long", year: "numeric" });
+  const kwh = (v) => (v == null ? "–" : `${v.toFixed(0)} kWh`);
+  const money = (v) => (v == null ? "–" : `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`);
+  const pct = (v) => (v == null ? "–" : `${Math.round(v)}%`);
+
+  async function render() {
+    const m = months[idx];
+    document.title = `Home energy, ${name(m.month)}`;
+    $("title").textContent = `Home energy, ${name(m.month)}`;
+    $("sub").textContent = `${m.days} days of readings`;
+    $("prev").disabled = idx === 0; $("next").disabled = idx === months.length - 1;
+    const k = $("kpis"); k.innerHTML = "";
+    const kpi = (label, v, unit) => el("div", { class: "kpi" }, el("div", { class: "k", text: label }), el("div", { class: "v" }, v, unit ? el("small", { text: unit }) : null));
+    k.append(kpi("Solar made", m.pv.toFixed(0), "kWh"), kpi("Home used", m.load.toFixed(0), "kWh"),
+      kpi("Bought", m.import.toFixed(0), "kWh"), kpi("Sold", m.export.toFixed(0), "kWh"),
+      kpi("Self-sufficient", m.self_sufficiency == null ? "–" : Math.round(m.self_sufficiency), m.self_sufficiency == null ? "" : "%"),
+      kpi("Solar used at home", m.self_consumption == null ? "–" : Math.round(m.self_consumption), m.self_consumption == null ? "" : "%"),
+      kpi("Net cost", money(m.net), m.net != null && m.net < 0 ? "credit" : ""),
+      kpi("Solar and battery value", money(m.saved), ""));
+    if (m.ev > 0.05) k.append(kpi("Car charged", m.ev.toFixed(0), "kWh"));
+    // comparison: previous month and the same month last year
+    const prev = months[idx - 1], ly = months.find((x) => x.month === `${+m.month.slice(0, 4) - 1}${m.month.slice(4)}`);
+    const cols = [m, prev, ly].filter(Boolean);
+    const rows = [["Solar made", (x) => kwh(x.pv)], ["Home used", (x) => kwh(x.load)], ["Car", (x) => (x.ev > 0.05 ? kwh(x.ev) : "–")],
+      ["Bought", (x) => kwh(x.import)], ["Sold", (x) => kwh(x.export)], ["Battery discharged", (x) => kwh(x.discharge)],
+      ["Self-sufficient", (x) => pct(x.self_sufficiency)], ["Paid for power", (x) => money(x.bought)], ["Earned selling", (x) => money(x.earned)],
+      ["Net cost", (x) => money(x.net)], ["Average buy price", (x) => (x.avg_buy_c == null ? "–" : `${x.avg_buy_c}c/kWh`)]];
+    const c = $("cmp"); c.innerHTML = "";
+    c.append(el("tr", {}, el("th", { text: "" }), ...cols.map((x) => el("th", { text: name(x.month) }))));
+    for (const [label, f] of rows) c.append(el("tr", {}, el("td", { text: label }), ...cols.map((x) => el("td", { text: f(x) }))));
+    // day by day for the month
+    const start = new Date(m.month + "-01T00:00:00"), back = Math.ceil((Date.now() - start.getTime()) / 86400000) + 1;
+    const daily = (await S.fetchJSON(`/api/daily?days=${Math.min(800, back)}`)).filter((d) => d.day.startsWith(m.month));
+    const t = $("days"); t.innerHTML = "";
+    t.append(el("tr", {}, ...["Day", "Solar", "Home", "Car", "Bought", "Sold", "Net cost"].map((h) => el("th", { text: h }))));
+    for (const d of daily) {
+      t.append(el("tr", {}, el("td", { text: new Date(d.day + "T12:00:00").toLocaleDateString([], { weekday: "short", day: "numeric" }) }),
+        el("td", { text: d.pv.toFixed(1) }), el("td", { text: d.load.toFixed(1) }), el("td", { text: d.ev != null ? d.ev.toFixed(1) : "–" }),
+        el("td", { text: d.import.toFixed(1) }), el("td", { text: d.export.toFixed(1) }), el("td", { text: money(d.cost) })));
+    }
+    t.append(el("tr", { class: "total" }, el("td", { text: "Total" }), el("td", { text: m.pv.toFixed(1) }), el("td", { text: m.load.toFixed(1) }),
+      el("td", { text: m.ev > 0.05 ? m.ev.toFixed(1) : "–" }), el("td", { text: m.import.toFixed(1) }), el("td", { text: m.export.toFixed(1) }), el("td", { text: money(m.net) })));
+    $("fine").textContent = `Energy in kWh, read from the inverter every few seconds. ` +
+      (m.cost_source === "retailer" ? "Costs are your retailer's metered figures" : m.cost_source ? "Costs are worked out from live retailer prices" : "No retailer prices were available") +
+      ", before daily supply charges. \"Solar and battery value\" is what the energy you made and stored would have cost at your average buy price, plus what you earned selling. " +
+      `Report made ${new Date().toLocaleString()} by Home Energy.`;
+    history.replaceState(null, "", `?month=${m.month}${q.get("api") ? `&api=${encodeURIComponent(q.get("api"))}` : ""}`);
+  }
+  $("prev").addEventListener("click", () => { if (idx > 0) { idx--; render(); } });
+  $("next").addEventListener("click", () => { if (idx < months.length - 1) { idx++; render(); } });
+  S.fetchJSON("/api/monthly?months=36").then((m) => {
+    months = m;
+    if (!months.length) { $("sub").textContent = "No monthly data yet."; return; }
+    idx = Math.max(0, months.findIndex((x) => x.month === q.get("month")));
+    if (!q.get("month")) idx = months.length - 1;
+    render();
+  }).catch((e) => { $("sub").textContent = `Can't reach the collector (${e.message}).`; });
+})();
+</script>
+</body>
+</html>

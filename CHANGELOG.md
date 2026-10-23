@@ -3,6 +3,32 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.6.0
+
+### Monthly summary
+- New **Monthly summary** panel: solar made, home and car use, bought and sold, self-sufficiency,
+  net cost and the value of your solar and battery for any month, with the change on the same
+  month last year (or the month before), a 12-month chart and table
+- **Printable report** for any month (`report.html`): totals, a comparison with the previous
+  month and the same month last year, and every day of the month; print it or save it as a PDF
+- Monthly figures as CSV (`/api/monthly?format=csv`)
+
+### Trends
+- New **Trends** panel over 3 months, a year or everything recorded:
+  - **Strings**: each string's share of the solar, averaged over a week, to spot a string
+    slowly losing output (growing shade, dirt, a failing panel)
+  - **Insulation**: lowest and average reading each day against the warning and alarm levels
+  - **Battery health**: state of health as the battery reports it
+  - **Temperatures**: hottest battery and inverter temperature each day
+- The collector now keeps daily figures for insulation, battery health, temperatures and grid
+  voltage; these trends build up from the day you install 1.6.0. String trends use the
+  history already recorded.
+- Long charts label months instead of days
+
+### Desktop app
+- The macOS app is withdrawn until it can be signed with an Apple developer certificate;
+  unsigned apps won't open on current macOS. Use the dashboard in a browser on a Mac.
+
 ## 1.5.0
 
 ### Battery outlook

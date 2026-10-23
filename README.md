@@ -24,7 +24,7 @@ SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) �
   (inverter, battery, AC charger)        │  SQLite history,      ◀── Open-Meteo weather (optional)
                                          │  web dashboard, JSON API
                      ┌───────────────────┼─────────────────────┐
-              Browser dashboard   Windows widget app      Mac widget app
+              Browser dashboard    Windows widget app    Phone / tablet browser
 ```
 
 * **Collector** (`collector/`): Python standard library only, no packages to install.
@@ -38,13 +38,15 @@ SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) �
   * retailer and wholesale prices with forecasts, and the grid's generation mix
   * power and battery history, with a Today view
   * solar strings, sunrise to sunset, for spotting shading or a faulty string
-  * daily energy and cost for the last 30 days
+  * daily energy and cost for the last 30 days, a monthly summary with a printable report,
+    and trends over months (string output, insulation, battery health, temperatures)
   * system status, decoded alarms, insulation resistance check and an event log
 
   Light and dark mode, works on a phone, and shows the version you're running at the bottom.
-* **Desktop app** (`desktop/`): one app for Windows and macOS. A small always-on-top
-  widget plus the full dashboard window, living in the tray / menu bar, with
-  "Start at login".
+* **Desktop app** (`desktop/`, Windows): a small always-on-top widget plus the full
+  dashboard window, living in the system tray, with "Start at login". On a Mac, use the
+  dashboard in a browser; a Mac app will return once it can be signed with an Apple
+  developer certificate.
 
 It never writes to the inverter. The Modbus client has no write functions, so it can't
 interfere with retailer battery control such as Amber SmartShift or a VPP.
@@ -77,7 +79,7 @@ SOLAR_KWP=10                 # optional: your array size in kW
 
 Every setting is listed under [Settings](#settings).
 
-Restart the container after changing `sigen.env`. Desktop apps for Windows and Mac are on
+Restart the container after changing `sigen.env`. The Windows desktop app is on
 the [releases page](https://github.com/copperOstrich/sigen-dashboard/releases/latest).
 On a QNAP, see [the ready-made setup](#ready-made-image-qnap-synology-unraid-portainer).
 
@@ -154,6 +156,23 @@ out (home, sold, to battery), plus inverter status and alarms.
   <img alt="Daily energy balance chart and system status panel" src="docs/screenshots/daily-system-light.png">
 </picture>
 
+**Monthly summary**: each month's solar, use, bought and sold, self-sufficiency, cost and the
+value of your solar and battery, against the same month last year, plus a printable report.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/monthly-dark.png">
+  <img alt="Monthly summary for September: tiles for solar made, home used, car, bought, sold, self-sufficiency, net cost and solar and battery value, each compared with August, a monthly bar chart and a table of recent months" src="docs/screenshots/monthly-light.png">
+</picture>
+
+**Trends**: slow changes over months that a daily view hides. Here, insulation resistance
+each day against the warning and alarm levels; it can also show each string's share of the
+solar, battery health and temperatures.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/trends-dark.png">
+  <img alt="Trends chart of daily lowest and average insulation resistance over four months, staying between 0.5 and 0.8 megohms, above the warning and alarm lines" src="docs/screenshots/trends-light.png">
+</picture>
+
 **Arrange panels**: hide what you don't use, and change the order and width of the rest.
 
 <picture>
@@ -161,7 +180,7 @@ out (home, sold, to battery), plus inverter status and alarms.
   <img alt="Arrange panels window listing each panel with a show checkbox, a width choice and up and down buttons" src="docs/screenshots/arrange-light.png" width="480">
 </picture>
 
-**Desktop widget and phone**: the always-on-top widget for Windows and Mac, and the
+**Desktop widget and phone**: the always-on-top widget for Windows, and the
 dashboard on a phone.
 
 <p>
@@ -378,33 +397,30 @@ again and what's left over, and whether charging from the grid overnight is wort
 model of self-consumption, not of your retailer's control: with Amber SmartShift or another
 VPP managing the battery, it may export or charge differently, and the panel says so.
 
-## 5. Desktop widget app (Windows and Mac)
+## 5. Desktop widget app (Windows)
 
 Download the installer from the
 [latest release](https://github.com/copperOstrich/sigen-dashboard/releases/latest):
-the `.msi` (or `-setup.exe`) for Windows, the `.dmg` for Mac (Intel and Apple Silicon).
+the `.msi` (or `-setup.exe`).
 It's built with Tauri, so it's small (about 10 MB) and uses the system's own web view.
 
 The app checks for a new release when it starts and every 6 hours (or from the tray menu,
-**Check for updates**) and offers **Download and install**: on Windows it runs the new
-installer; on a Mac it opens the new disk image to drag into Applications.
+**Check for updates**) and offers **Download and install**, which runs the new installer.
 
 Switch between the full window and the compact widget with the **Compact widget** button in
 the dashboard, the expand button on the widget, or a left click on the tray icon.
 
 On first launch the dashboard window asks for the collector address, e.g.
 `http://192.168.1.50:8080`. The widget then appears; drag it by its top bar.
-Tray / menu bar icon: show widget, open dashboard, keep on top, start at login, quit.
+Tray icon: show widget, open dashboard, keep on top, start at login, quit.
 Closing a window hides it.
 
-The apps aren't signed with a paid developer certificate yet, so the first time:
-* **Windows**: SmartScreen → More info → Run anyway.
-* **macOS**: open the app once (it will be blocked), then go to **System Settings → Privacy &
-  Security**, scroll down to the message about Home Energy and click **Open Anyway**, then
-  confirm with your password. On older macOS, right-click the app → Open → Open also works.
-  If macOS says the app **"is damaged and can't be opened"** (versions before 1.4.1), run
-  this once in Terminal, then open it normally:
-  `xattr -cr "/Applications/Home Energy.app"`
+The app isn't code-signed yet, so the first time Windows SmartScreen warns about it: click
+**More info → Run anyway**.
+
+**Mac:** there's no Mac app for now. Unsigned apps won't open on current macOS, so the Mac
+build is paused until it can be signed and notarised with an Apple developer certificate.
+The dashboard works fully in Safari or any browser in the meantime.
 
 **Building it yourself:** the installers are built by GitHub Actions
 (`.github/workflows/desktop.yml`). In a fork, **Actions → Build desktop widget apps → Run
@@ -483,6 +499,8 @@ Simulator only: `SIM_PV_KWP`, `SIM_BATTERY_KWH`, `SIM_INVERTER_KW`, `SIM_EXPORT_
 | `GET /api/ev?days=30` | AC charger: live state, charging sessions and the last two days of state changes |
 | `GET /api/ev-sessions?days=30&format=csv` | Charging sessions (CSV download or JSON) |
 | `GET /api/ev-log?days=30&format=csv` | Every charger state change with power and offered current (CSV or JSON) |
+| `GET /api/monthly?months=13&format=csv` | Monthly totals, costs and value (JSON or CSV) |
+| `GET /api/trends?days=365` | Daily string energy, insulation, battery health and temperatures |
 | `GET /api/outlook` | Battery outlook: projected charge to the end of tomorrow, milestones and advice |
 | `GET /api/weather` | Current weather, hourly and daily forecast, and the solar forecast in kWh |
 | `GET /api/health` | `{ok, status, updated, version}` for monitoring |

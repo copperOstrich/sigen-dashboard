@@ -89,7 +89,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -175,6 +175,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS ev_log(
               ts INTEGER, state INTEGER, code TEXT, power REAL, set_current REAL);
             CREATE INDEX IF NOT EXISTS ev_log_ts ON ev_log(ts);
+            CREATE TABLE IF NOT EXISTS daily_stats(
+              day TEXT, key TEXT, min REAL, max REAL, sum REAL, n INTEGER, PRIMARY KEY(day, key));
             CREATE TABLE IF NOT EXISTS amber_days(
               day TEXT PRIMARY KEY, import_kwh REAL, import_cost REAL, export_kwh REAL,
               export_cost REAL, estimated INTEGER);
@@ -436,12 +438,99 @@ class Store:
             b = billed.get(e["day"])
             if b:  # the retailer's meter-based figures win once available
                 e["cost"] = round((b[1] + b[2]) / 100, 2)
+                e["bought"], e["earned"] = round(b[1] / 100, 2), round(-b[2] / 100, 2)
                 e["cost_source"] = "retailer-estimated" if b[3] else "retailer-billed"
             else:
                 c = self.cost_for_day(e["day"])
                 if c:
                     e["cost"], e["cost_source"] = c["net"], "calculated"
+                    e["bought"], e["earned"] = c["bought"], c["earned"]
         return out
+
+    # ---- long-term trends and monthly summaries
+    def save_daily_stats(self, day, acc):
+        with self.lock:
+            self.db.executemany("INSERT OR REPLACE INTO daily_stats VALUES (?,?,?,?,?,?)",
+                                [(day, k, v[0], v[1], v[2], v[3]) for k, v in acc.items()])
+            self.db.commit()
+
+    def daily_stats_for(self, day):
+        with self.lock:
+            return {k: [mn, mx, sm, n] for k, mn, mx, sm, n in self.db.execute(
+                "SELECT key, min, max, sum, n FROM daily_stats WHERE day=?", (day,))}
+
+    def daily_stats(self, since_day):
+        out = {}
+        with self.lock:
+            for day, k, mn, mx, sm, n in self.db.execute(
+                    "SELECT day, key, min, max, sum, n FROM daily_stats WHERE day>=? ORDER BY day", (since_day,)):
+                out.setdefault(day, {})[k] = {"min": mn, "max": mx, "avg": sm / n if n else None}
+        return out
+
+    def string_daily(self, since_ts):
+        """{local day: {string: kWh}} from the per-minute string readings."""
+        with self.lock:
+            rows = self.db.execute("SELECT (ts/3600)*3600 AS h, n, SUM(v*a)/60000.0 FROM string_samples WHERE ts>=? "
+                                   "GROUP BY h, n", (int(since_ts),)).fetchall()
+        out = {}
+        for h, n, kwh in rows:
+            d = out.setdefault(local_day(h), {})
+            d[n] = d.get(n, 0.0) + max(0.0, kwh or 0.0)
+        return out
+
+    def ev_by_month(self):
+        with self.lock:
+            rows = self.db.execute("SELECT start, kwh, grid_kwh, cost, priced FROM ev_sessions").fetchall()
+        out = {}
+        for start, kwh, gk, cost, priced in rows:
+            m = local_day(start)[:7]
+            e = out.setdefault(m, {"sessions": 0, "kwh": 0.0, "grid_kwh": 0.0, "cost": 0.0, "priced": False})
+            e["sessions"] += 1; e["kwh"] += kwh or 0; e["grid_kwh"] += gk or 0
+            if priced:
+                e["cost"] += cost or 0; e["priced"] = True
+        return out
+
+    def monthly(self, months=13):
+        days = self.daily(min(800, months * 31 + 31))
+        ev = self.ev_by_month()
+        out = {}
+        for d in days:
+            m = out.setdefault(d["day"][:7], {"month": d["day"][:7], "days": 0, "pv": 0.0, "load": 0.0, "ev": 0.0,
+                                              "import": 0.0, "export": 0.0, "charge": 0.0, "discharge": 0.0,
+                                              "bought": 0.0, "earned": 0.0, "priced_days": 0, "best_day": None,
+                                              "sources": set()})
+            m["days"] += 1
+            for k in ("pv", "load", "ev", "import", "export", "charge", "discharge"):
+                m[k] += d.get(k) or 0.0
+            if d.get("bought") is not None:
+                m["bought"] += d["bought"]; m["earned"] += d["earned"]; m["priced_days"] += 1
+                m["sources"].add(d.get("cost_source"))
+            if not m["best_day"] or d["pv"] > m["best_day"]["pv"]:
+                m["best_day"] = {"day": d["day"], "pv": d["pv"]}
+        res = []
+        for key in sorted(out)[-months:]:
+            m = out[key]
+            used = m["load"] + m["ev"]
+            m["self_sufficiency"] = round(max(0, min(100, (1 - m["import"] / used) * 100)), 1) if used > 0.5 else None
+            m["self_consumption"] = round(max(0, min(100, (1 - m["export"] / m["pv"]) * 100)), 1) if m["pv"] > 0.5 else None
+            priced = m["priced_days"] > 0
+            m["net"] = round(m["bought"] - m["earned"], 2) if priced else None
+            avg_buy = m["bought"] / m["import"] if priced and m["import"] > 1 else None
+            m["avg_buy_c"] = round(avg_buy * 100, 1) if avg_buy else None
+            # what the home and car would have cost from the grid without solar and battery, minus what it did cost
+            m["saved"] = round((used - m["import"]) * avg_buy + m["earned"], 2) if avg_buy else None
+            m["cost_source"] = ("calculated" if m["sources"] == {"calculated"} else "retailer" if m["sources"]
+                                and "calculated" not in m["sources"] else "mixed") if priced else None
+            del m["sources"]
+            e = ev.get(key)
+            m["car"] = {"sessions": e["sessions"], "kwh": round(e["kwh"], 1), "grid_kwh": round(e["grid_kwh"], 1),
+                        "cost": round(e["cost"], 2) if e["priced"] else None} if e else None
+            for k in ("pv", "load", "ev", "import", "export", "charge", "discharge", "bought", "earned"):
+                m[k] = round(m[k], 2 if k in ("bought", "earned") else 1)
+            if not priced:
+                m["bought"] = m["earned"] = None
+            res.append(m)
+        return res
 
 
 # ---------------------------------------------------------------- poller
@@ -472,6 +561,7 @@ class Collector:
         self.first_seen = {}
         self.last_ignored = {}
         self.ins_level, self.ins_streak = 0, 0
+        self.day_key, self.day_acc = None, {}
         self.rec_lock = threading.Lock()
         self.stopping = threading.Event()
         self.raw = {"plant": {}, "inverter": {}}
@@ -534,6 +624,7 @@ class Collector:
             self.store.event("connection", "Connection to inverter restored")
             log("Connection restored")
         self.record(p, now, inv)
+        self._track_day(p, inv, now)
         if now - self.outlook.computed >= 300:
             try:
                 res = self.outlook.compute(self.state, self.weather.snapshot() if self.weather else None,
@@ -689,6 +780,30 @@ class Collector:
             self.version += 1
             self.cond.notify_all()
 
+    def _track_day(self, p, inv, now):
+        """Daily min/max/average of slow-moving health figures, for the Trends panel."""
+        day = local_day(now)
+        if day != self.day_key:
+            if self.day_key and self.day_acc:
+                self.store.save_daily_stats(self.day_key, self.day_acc)
+            self.day_key, self.day_acc = day, self.store.daily_stats_for(day)  # carry on after a restart
+        iso = inv.get("insulation_resistance")
+        vals = {"insulation": iso if iso is not None and 0 < iso < 65 else None,
+                "soh": p.get("battery_soh"), "soc": p.get("battery_soc"),
+                "battery_temp": inv.get("battery_max_temp", p.get("battery_avg_cell_temp")),
+                "inverter_temp": inv.get("pcs_temp"), "grid_voltage": inv.get("phase_a_voltage")}
+        for k, v in vals.items():
+            if v is None:
+                continue
+            a = self.day_acc.get(k)
+            if a is None:
+                self.day_acc[k] = [v, v, v, 1]
+            else:
+                a[0], a[1], a[2], a[3] = min(a[0], v), max(a[1], v), a[2] + v, a[3] + 1
+        if now - getattr(self, "_day_saved", 0) >= 300:
+            self.store.save_daily_stats(day, self.day_acc)
+            self._day_saved = now
+
     def flush_minute(self):
         """Write the readings collected so far for the current minute (also used on shutdown)."""
         if self.minute_bucket is None or not self.minute_acc:
@@ -774,6 +889,20 @@ def start_simulator(store):
     if rows:
         store.insert(rows)
         log(f"Pre-filled {DEMO_DAYS} days of simulated history ({len(rows)} samples)")
+        # daily health figures for the Trends panel
+        socs = {}
+        for r in rows:
+            socs.setdefault(r[1], []).append(r[6])
+        for i, (day, s) in enumerate(sorted(socs.items())[:-1]):
+            rnd = lambda k: simulator._rand(day, k)
+            iso = 0.6 + 0.12 * rnd("iso") - (0.1 if rnd("cloud") > 0.6 else 0)
+            soh = 100 - 0.45 * i / max(1, DEMO_DAYS)
+            store.save_daily_stats(day, {
+                "insulation": [iso, iso + 0.15, (iso + 0.08) * 1, 1], "soh": [soh, soh, soh, 1],
+                "soc": [min(s), max(s), sum(s) / len(s), 1],
+                "battery_temp": [21 + 3 * rnd("bt"), 26 + 5 * rnd("bt2"), 24 + 3 * rnd("bt3"), 1],
+                "inverter_temp": [24 + 4 * rnd("it"), 42 + 14 * (1 - rnd("cloud")), 33 + 6 * rnd("it2"), 1],
+                "grid_voltage": [236 + 3 * rnd("gv"), 248 + 4 * rnd("gv2"), 242 + 2 * rnd("gv3"), 1]})
     srv = simulator.Server(("127.0.0.1", 0), simulator.Handler)
     if fill and tracker:
         tracker.save()
@@ -852,6 +981,41 @@ class Api(BaseHTTPRequestHandler):
                     self.wfile.write(body)
                     return
                 return self._json([{"t": ts, "string": n, "v": round(v, 1), "a": round(a, 2)} for ts, n, v, a in rows])
+            if url.path == "/api/trends":
+                days = min(800, max(7, int(float(q.get("days", ["365"])[0]))))
+                since = datetime.now(TZ) - timedelta(days=days)
+                stats = self.store.daily_stats(since.strftime("%Y-%m-%d"))
+                strings = self.store.string_daily(since.timestamp())
+                daily = {d["day"]: d for d in self.store.daily(days)}
+                all_days = sorted(set(stats) | set(strings) | set(daily))
+                ids = sorted({n for d in strings.values() for n in d})
+                r1 = lambda v: None if v is None else round(v, 3)
+                return self._json({
+                    "days": all_days,
+                    "strings": {n: [round(strings.get(d, {}).get(n, 0.0), 2) if d in strings else None for d in all_days]
+                                for n in ids},
+                    "pv": [daily[d]["pv"] if d in daily else None for d in all_days],
+                    "stats": {k: {f: [r1((stats.get(d, {}).get(k) or {}).get(f)) for d in all_days]
+                                  for f in ("min", "avg", "max")}
+                              for k in ("insulation", "soh", "battery_temp", "inverter_temp", "grid_voltage", "soc")},
+                    "insulation_limits": {"warn": INSULATION_WARN, "min": INSULATION_MIN},
+                })
+            if url.path == "/api/monthly":
+                months = min(36, max(1, int(q.get("months", ["13"])[0])))
+                rows = self.store.monthly(months)
+                if q.get("format", [""])[0] == "csv":
+                    f = lambda v: "" if v is None else (f"{v:.2f}" if isinstance(v, float) else str(v))
+                    lines = ["month,days,solar_kwh,home_kwh,car_kwh,bought_kwh,sold_kwh,battery_charged_kwh,"
+                             "battery_discharged_kwh,self_sufficiency_pct,self_consumption_pct,bought_dollars,"
+                             "earned_dollars,net_dollars,saved_dollars,avg_buy_c_per_kwh,car_sessions,car_cost_dollars"]
+                    for m in rows:
+                        car = m["car"] or {}
+                        lines.append(",".join(f(x) for x in (m["month"], m["days"], m["pv"], m["load"], m["ev"], m["import"],
+                                     m["export"], m["charge"], m["discharge"], m["self_sufficiency"], m["self_consumption"],
+                                     m["bought"], m["earned"], m["net"], m["saved"], m["avg_buy_c"], car.get("sessions"),
+                                     car.get("cost"))))
+                    return self._csv("home-energy-monthly.csv", lines)
+                return self._json(rows)
             if url.path == "/api/outlook":
                 return self._json(self.collector.outlook.result or {"enabled": False, "reason": "not worked out yet"})
             if url.path == "/api/weather":

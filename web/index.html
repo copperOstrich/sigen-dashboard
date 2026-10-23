@@ -260,6 +260,47 @@
         come from when the strings start and stop producing, so they follow the seasons.</p>
     </section>
 
+    <section class="panel span-12" aria-labelledby="mo-h" data-panel="monthly" data-name="Monthly summary" id="mo-panel" hidden>
+      <div class="panel-head">
+        <h2 id="mo-h">Monthly summary</h2>
+        <div class="mo-nav">
+          <button type="button" class="icon-btn" id="mo-prev" aria-label="Previous month">‹</button>
+          <span id="mo-label" class="mo-label"></span>
+          <button type="button" class="icon-btn" id="mo-next" aria-label="Next month">›</button>
+        </div>
+        <span class="sub" id="mo-sub"></span>
+        <span class="spacer"></span>
+        <span class="ev-links" id="mo-links" style="margin:0"></span>
+      </div>
+      <div class="today mo-tiles" id="mo-tiles"></div>
+      <div class="mo-grid">
+        <div><div class="chart" id="mo-chart"></div></div>
+        <div style="overflow-x:auto"><table class="strings mo-table" id="mo-table"></table></div>
+      </div>
+      <p class="chart-note" id="mo-note"></p>
+    </section>
+
+    <section class="panel span-12" aria-labelledby="tr-h" data-panel="trends" data-name="Trends" id="tr-panel" hidden>
+      <div class="panel-head">
+        <h2 id="tr-h">Trends</h2>
+        <div class="legend" id="tr-legend"></div>
+        <span class="spacer"></span>
+        <div class="seg" id="tr-metric" role="group" aria-label="Measure">
+          <button type="button" data-m="strings" aria-pressed="true">Strings</button>
+          <button type="button" data-m="insulation" aria-pressed="false">Insulation</button>
+          <button type="button" data-m="battery" aria-pressed="false">Battery health</button>
+          <button type="button" data-m="temps" aria-pressed="false">Temperatures</button>
+        </div>
+        <div class="seg" id="tr-range" role="group" aria-label="Time range">
+          <button type="button" data-d="90" aria-pressed="false">3 months</button>
+          <button type="button" data-d="365" aria-pressed="true">1 year</button>
+          <button type="button" data-d="800" aria-pressed="false">All</button>
+        </div>
+      </div>
+      <div class="chart" id="tr-chart"></div>
+      <p class="chart-note" id="tr-note"></p>
+    </section>
+
     <section class="panel span-8" aria-labelledby="daily-h" data-panel="daily" data-name="Daily energy">
       <div class="panel-head">
         <h2 id="daily-h">Daily energy</h2>

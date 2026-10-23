@@ -209,6 +209,160 @@
 
 
 
+
+  // ------------------------------------------------------------ monthly summary
+  let moData = [], moIdx = -1;
+  const monthName = (m, long = true) => new Date(m + "-15T12:00:00").toLocaleDateString([], { month: long ? "long" : "short", year: "numeric" });
+  const dollars = (v) => (v == null ? "–" : `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`);
+
+  function renderMonthly() {
+    const panel = $("mo-panel");
+    panel.hidden = !moData.length;
+    if (panel.hidden) return;
+    if (moIdx < 0 || moIdx >= moData.length) moIdx = moData.length - 1;
+    const m = moData[moIdx];
+    const cmp = moData.find((x) => x.month === `${+m.month.slice(0, 4) - 1}${m.month.slice(4)}`) || moData[moIdx - 1];
+    $("mo-label").textContent = monthName(m.month);
+    $("mo-prev").disabled = moIdx === 0; $("mo-next").disabled = moIdx === moData.length - 1;
+    const now = new Date(), cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    $("mo-sub").textContent = m.month === cur ? `so far, ${m.days} days` : `${m.days} days of readings`;
+    const tile = (label, color, value, unit, key, better) => {
+      const v = el("div", { class: "v num" }, value, unit ? el("small", { text: unit }) : null);
+      let delta = null;
+      if (cmp && key && cmp[key] != null && m[key] != null && m.month !== cur) {
+        const a = cmp[key], b = m[key];
+        if (Math.abs(a) > 0.01) {
+          const pct = Math.round((b - a) / Math.abs(a) * 100);
+          const good = better === "up" ? pct > 0 : better === "down" ? pct < 0 : null;
+          delta = el("div", { class: "d" + (good == null || pct === 0 ? "" : good ? " up" : " down"),
+            text: `${pct > 0 ? "+" : ""}${pct}% on ${monthName(cmp.month, false)}` });
+        }
+      }
+      return el("div", {}, el("div", { class: "k" }, color ? el("i", { style: `background:${color}` }) : null, label), v, delta);
+    };
+    const tiles = $("mo-tiles"); tiles.innerHTML = "";
+    tiles.classList.toggle("has-ev", m.ev > 0.05);
+    tiles.append(
+      tile("Solar made", "var(--solar)", m.pv.toFixed(0), "kWh", "pv", "up"),
+      tile("Home used", "var(--home)", m.load.toFixed(0), "kWh", "load", "down"),
+      ...(m.ev > 0.05 ? [tile("Car", "var(--ev)", m.ev.toFixed(0), "kWh", "ev", null)] : []),
+      tile("Bought", "var(--grid)", m.import.toFixed(0), "kWh", "import", "down"),
+      tile("Sold", "var(--grid)", m.export.toFixed(0), "kWh", "export", "up"),
+      tile("Self-sufficient", null, m.self_sufficiency == null ? "–" : Math.round(m.self_sufficiency), m.self_sufficiency == null ? "" : "%", "self_sufficiency", "up"),
+      tile("Net cost", null, dollars(m.net), m.net != null && m.net < 0 ? "credit" : "", "net", "down"),
+      tile("Solar and battery value", null, dollars(m.saved), "", "saved", "up"));
+    drawMonthly();
+    const tb = $("mo-table"); tb.innerHTML = "";
+    tb.append(el("tr", {}, ...["Month", "Solar", "Home", "Bought", "Sold", "Self-suff.", "Net cost"].map((h) => el("th", { text: h }))));
+    [...moData].reverse().forEach((x) => {
+      const i = moData.indexOf(x);
+      const tr = el("tr", { class: i === moIdx ? "sel" : null, title: "Show this month" },
+        el("td", { style: "font-family:var(--font)", text: monthName(x.month, false) }),
+        el("td", { text: `${x.pv.toFixed(0)} kWh` }), el("td", { text: `${x.load.toFixed(0)} kWh` }),
+        el("td", { text: `${x.import.toFixed(0)} kWh` }), el("td", { text: `${x.export.toFixed(0)} kWh` }),
+        el("td", { text: x.self_sufficiency == null ? "–" : `${Math.round(x.self_sufficiency)}%` }), el("td", { text: dollars(x.net) }));
+      tr.addEventListener("click", () => { moIdx = i; renderMonthly(); });
+      tb.append(tr);
+    });
+    const base = S.apiBase();
+    $("mo-links").innerHTML = "";
+    $("mo-links").append(el("a", { href: `${base}/report.html?month=${m.month}${base ? `&api=${encodeURIComponent(base)}` : ""}`, target: "_blank", text: "Printable report" }),
+      el("a", { href: `${base}/api/monthly?months=36&format=csv`, download: "home-energy-monthly.csv", target: "_blank", text: "CSV" }));
+    const src = m.cost_source === "retailer" ? "Costs from your retailer's meter data" : m.cost_source ? "Costs worked out from live prices" : "Add retailer prices to see costs";
+    $("mo-note").textContent = `${src}. "Solar and battery value" is what the energy you made and stored would have cost at your average buy price (${m.avg_buy_c != null ? `${m.avg_buy_c}c/kWh` : "–"}) plus what you earned selling, before supply charges.` +
+      (m.car ? ` Car: ${m.car.sessions} charging session${m.car.sessions === 1 ? "" : "s"}, ${m.car.kwh} kWh${m.car.cost != null ? `, ${dollars(m.car.cost)} from the grid` : ""}.` : "") +
+      (m.best_day ? ` Best solar day: ${new Date(m.best_day.day + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" })}, ${m.best_day.pv.toFixed(0)} kWh.` : "");
+  }
+  function drawMonthly() {
+    if (!moData.length || $("mo-panel").hidden) return;
+    C.stackedBarChart($("mo-chart"), {
+      labels: moData.map((x) => monthName(x.month, false).split(" ")[0]), height: 220, yFmt: (v) => `${v}`,
+      series: [{ key: "pv", label: "Solar made", color: "var(--solar)", values: moData.map((x) => x.pv) },
+        { key: "used", label: "Used", color: "var(--home)", values: moData.map((x) => -(x.load + x.ev)) }],
+      title: (i) => monthName(moData[i].month),
+      tip: (i) => { const x = moData[i]; return [["Solar made", S.kwh(x.pv, 0), "var(--solar)"], ["Home and car", S.kwh(x.load + x.ev, 0), "var(--home)"],
+        ["Bought", S.kwh(x.import, 0), "var(--grid)"], ["Sold", S.kwh(x.export, 0), "var(--grid)"], ["Net cost", dollars(x.net), null]]; },
+      ariaLabel: "Solar made each month above zero, and energy used below zero, kWh",
+    });
+  }
+  async function loadMonthly() {
+    try { moData = await S.fetchJSON("/api/monthly?months=13"); renderMonthly(); } catch (e) { /* banner */ }
+  }
+  $("mo-prev").addEventListener("click", () => { if (moIdx > 0) { moIdx--; renderMonthly(); } });
+  $("mo-next").addEventListener("click", () => { if (moIdx < moData.length - 1) { moIdx++; renderMonthly(); } });
+
+  // ------------------------------------------------------------ trends over months
+  let trData = null, trMetric = "strings", trDays = 365;
+  const dayT = (d) => new Date(d + "T12:00:00").getTime() / 1000;
+  const rolling = (vals, n = 7) => vals.map((_, i) => {
+    const w = vals.slice(Math.max(0, i - n + 1), i + 1).filter((v) => v != null);
+    return w.length >= Math.min(3, n) ? w.reduce((a, b) => a + b, 0) / w.length : null;
+  });
+  function drawTrends() {
+    const d = trData, panel = $("tr-panel");
+    panel.hidden = !(d && d.days && d.days.length >= 2);
+    if (panel.hidden) return;
+    const t = d.days.map(dayT), lg = $("tr-legend"); lg.innerHTML = "";
+    let series = [], opts = {}, note = "";
+    const dayTitle = (x) => new Date(x * 1000).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    if (trMetric === "strings") {
+      const ids = Object.keys(d.strings).map(Number).sort((a, b) => a - b);
+      const total = d.days.map((_, i) => ids.reduce((a, n) => a + (d.strings[n][i] || 0), 0));
+      series = ids.map((n, k) => {
+        // 7-day share of the total, from summed energy so dull days count less
+        const share = d.days.map((_, i) => {
+          let a = 0, b = 0;
+          for (let j = Math.max(0, i - 6); j <= i; j++) { a += d.strings[n][j] || 0; b += total[j] || 0; }
+          return b > 3 ? a / b * 100 : null;
+        });
+        return { key: n, label: `PV${n}`, ...pvStyle(k), values: share };
+      });
+      opts = { yFmt: (v) => `${Math.round(v)}%`, tipFmt: (v) => (v == null ? "–" : `${v.toFixed(1)}%`), yMin: 0 };
+      note = "Each string's share of the solar, averaged over a week. Shares move a little with the seasons as the sun's path changes, but a string that drifts down against the others is losing output: new shade from a growing tree, dirt, or a failing panel.";
+    } else if (trMetric === "insulation") {
+      const L = d.insulation_limits || { warn: 0.5, min: 0.37 };
+      series = [
+        { key: "min", label: "Lowest each day", color: "var(--home)", values: d.stats.insulation.min },
+        { key: "avg", label: "Daily average", color: "var(--home)", dash: "2 3", values: d.stats.insulation.avg },
+        { key: "warn", label: `Lower than usual (${L.warn} MΩ)`, color: "var(--warn)", dash: "6 4", values: t.map(() => L.warn) },
+        { key: "alarm", label: `Alarm (${L.min} MΩ)`, color: "var(--bad)", dash: "6 4", values: t.map(() => L.min) }];
+      opts = { yMin: 0, yFmt: (v) => `${v} MΩ`, tipFmt: (v) => (v == null ? "–" : `${v.toFixed(3)} MΩ`) };
+      note = "Insulation resistance between the solar wiring and earth. Dips on wet mornings are normal; a lowest-each-day line creeping down over weeks is worth an installer's look before it reaches the alarm level.";
+    } else if (trMetric === "battery") {
+      const v = d.stats.soh.avg.filter((x) => x != null);
+      const lo = v.length ? Math.floor(Math.min(...v) - 1) : 90;
+      series = [{ key: "soh", label: "Battery health", color: "var(--battery)", values: d.stats.soh.avg }];
+      opts = { yMin: Math.max(0, lo), yMax: 100, yFmt: (x) => `${x}%`, tipFmt: (x) => (x == null ? "–" : `${x.toFixed(1)}%`) };
+      note = "Battery state of health as the battery reports it: how much of its original capacity is left. Expect a slow decline of around a percent or two a year.";
+    } else {
+      series = [{ key: "bt", label: "Battery, hottest each day", color: "var(--battery)", values: d.stats.battery_temp.max },
+        { key: "it", label: "Inverter, hottest each day", color: "var(--grid)", dash: "5 4", values: d.stats.inverter_temp.max }];
+      opts = { yFmt: (x) => `${x}°`, tipFmt: (x) => (x == null ? "–" : `${x.toFixed(1)} °C`) };
+      note = "Hottest battery cell and inverter temperature each day. Summer peaks are expected; a steady rise against similar weather can mean poor airflow around the unit.";
+    }
+    for (const s of series) lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw" + (s.dash ? " dash" : ""), style: `border-color:${s.color}` }), s.label));
+    const hasData = series.some((s) => s.values.some((v) => v != null && s.key !== "warn" && s.key !== "alarm"));
+    C.lineChart($("tr-chart"), { t, series, height: 240, gapSeconds: 86400 * 3, tipTitle: dayTitle,
+      emptyText: "Not enough readings yet.", ariaLabel: `Trend over ${trDays} days`, ...opts });
+    if (!hasData) { $("tr-chart").innerHTML = ""; $("tr-chart").append(el("div", { class: "empty", text: "This builds up from the first day of readings; check back in a few days." })); }
+    $("tr-note").textContent = note;
+  }
+  async function loadTrends() {
+    try { trData = await S.fetchJSON(`/api/trends?days=${trDays}`); drawTrends(); } catch (e) { /* banner */ }
+  }
+  $("tr-metric").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    trMetric = b.dataset.m;
+    $("tr-metric").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    drawTrends();
+  });
+  $("tr-range").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    trDays = +b.dataset.d;
+    $("tr-range").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    loadTrends();
+  });
+
   // ------------------------------------------------------------ battery outlook
   let olData = null, olPast = null;
   const olWhen = (ts) => {
@@ -1078,7 +1232,7 @@
   dlg.addEventListener("close", () => {
     if (dlg.returnValue !== "save") return;
     S.setApiBase($("api-input").value.trim());
-    sub.restart(); evData = null; loadWeather(); loadOutlook(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
+    sub.restart(); evData = null; loadWeather(); loadOutlook(); loadMonthly(); loadTrends(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
   });
 
   // ------------------------------------------------------------ desktop: widget switch + updates
@@ -1147,12 +1301,14 @@
   setInterval(loadWeather, 10 * 60000);
   loadOutlook();
   setInterval(loadOutlook, 5 * 60000);
+  loadMonthly(); loadTrends();
+  setInterval(() => { loadMonthly(); loadTrends(); }, 30 * 60000);
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);
   setInterval(loadDaily, 10 * 60000);
-  window.SigenRedraw = () => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); if (dailyData.length) drawDaily(); };
+  window.SigenRedraw = () => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); };
   let rt;
-  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); if (dailyData.length) drawDaily(); }, 120); })
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); }, 120); })
     .observe(document.querySelector(".wrap"));
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawHistory(); drawDaily(); });
 })();
