@@ -981,6 +981,24 @@ class Api(BaseHTTPRequestHandler):
                     self.wfile.write(body)
                     return
                 return self._json([{"t": ts, "string": n, "v": round(v, 1), "a": round(a, 2)} for ts, n, v, a in rows])
+            if url.path in ("/eink.png", "/api/eink.png"):
+                import eink
+                if not eink.AVAILABLE:
+                    return self._json({"error": "The e-ink image needs Pillow (included in the Docker image)."}, 501)
+                w = min(3000, max(300, int(q.get("w", ["1404"])[0])))
+                h = min(4000, max(300, int(q.get("h", ["1872"])[0])))
+                body = eink.render(self.collector.snapshot(), self.store.history(24), tz=TZ, width=w, height=h,
+                                   version=VERSION)
+                self._headers(200, "image/png", {"Content-Length": str(len(body))})
+                self.wfile.write(body)
+                return
+            if url.path == "/remarkable/install.sh":
+                # the installer, with this collector's address filled in (as the tablet reached it)
+                host = self.headers.get("Host") or f"127.0.0.1:{HTTP_PORT}"
+                body = (WEB_DIR / "remarkable" / "install.sh").read_text().replace("__BASE__", f"http://{host}").encode()
+                self._headers(200, "text/x-shellscript; charset=utf-8", {"Content-Length": str(len(body))})
+                self.wfile.write(body)
+                return
             if url.path == "/api/trends":
                 days = min(800, max(7, int(float(q.get("days", ["365"])[0]))))
                 since = datetime.now(TZ) - timedelta(days=days)

@@ -433,6 +433,34 @@ workflow** builds them as run artifacts; pushing a tag like `v1.2.1` publishes a
 with notes from that version's section of [CHANGELOG.md](CHANGELOG.md). To build locally,
 install Rust and Node, then `cd desktop && npm install && npm run build`.
 
+## reMarkable 2 sleep screen (optional)
+
+The collector draws an e-ink version of the dashboard at `http://<collector>/eink.png`:
+the four flows, battery, outlook, prices, today's totals and the solar forecast in large
+black-and-white type, sized for a reMarkable 2 (other sizes with `?w=1072&h=1448` and so on).
+A reMarkable 2 can show it as its sleep screen, so the tablet becomes an energy display when
+you put it down.
+
+<img alt="E-ink energy display: solar, home, battery and grid tiles, battery outlook, buy and sell prices, today's totals and the solar forecast" src="docs/screenshots/eink-remarkable.png" width="360">
+
+It updates while the tablet is awake (every 5 minutes, and when it wakes); a sleeping
+reMarkable has Wi-Fi off, so the sleep screen shows the figures from when you put it down,
+with that time printed at the top. Needs reMarkable software 3.20 or later.
+
+1. On the tablet, open **Settings → Help → Copyrights and licenses** and note the IP address
+   and root password at the bottom.
+2. From a computer on the same network: `ssh root@<tablet IP>` and enter that password.
+3. Run (with your collector's address):
+   ```sh
+   wget -qO- http://homeenergy.internal/remarkable/install.sh | sh
+   ```
+4. Put the tablet to sleep.
+
+**To remove it completely:** `ssh` in again and run `sh /home/root/home-energy/uninstall.sh`.
+That stops the refresh, deletes the files and puts the normal sleep screen back. After a
+reMarkable software update the sleep screen setting stays but the refresh stops, so run the
+install command again (or the uninstaller).
+
 ## System health and alarms
 
 The System panel shows the inverter's status, operating mode, grid, temperatures and

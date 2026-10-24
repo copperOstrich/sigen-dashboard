@@ -25,6 +25,14 @@ update; the Docker image is tagged with the same version.
   history already recorded.
 - Long charts label months instead of days
 
+### E-ink display (reMarkable 2)
+- The collector draws an e-ink version of the dashboard at `/eink.png` (1404 x 1872 for the
+  reMarkable 2 by default; `?w=&h=` for other screens): the four flows, battery, outlook,
+  prices, today's totals and the solar forecast in high-contrast greyscale
+- A one-command installer makes it a reMarkable 2's sleep screen, refreshed every 5 minutes
+  while the tablet is awake, and an uninstaller puts everything back
+- The Docker image now includes Pillow, used only to draw this image
+
 ### Desktop app
 - The macOS app is withdrawn until it can be signed with an Apple developer certificate;
   unsigned apps won't open on current macOS. Use the dashboard in a browser on a Mac.

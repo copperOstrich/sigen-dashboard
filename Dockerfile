@@ -1,6 +1,7 @@
 FROM python:3.12-alpine
 # tzdata so "today" rolls over at local midnight
-RUN apk add --no-cache tzdata
+RUN apk add --no-cache tzdata \
+ && pip install --no-cache-dir pillow   # only for the e-ink image (/eink.png); everything else is standard library
 WORKDIR /app
 COPY collector/ collector/
 COPY web/ web/
