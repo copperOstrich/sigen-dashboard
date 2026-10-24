@@ -234,7 +234,7 @@ On a QNAP:
 3. Open `http://<NAS-IP>:8088`. It uses port 8088 because QTS's own admin page is on 8080.
 
 To give the dashboard its **own address on your network** (so it's at
-`http://homeenergy.internal` with no port, after adding a DNS record on your router), use
+a plain address with no port, or a name you set up on your router's DNS), use
 [`qnap/docker-compose.own-ip.yml`](qnap/docker-compose.own-ip.yml) instead; the comments at the
 top say which three values to change.
 
@@ -436,12 +436,12 @@ install Rust and Node, then `cd desktop && npm install && npm run build`.
 ## reMarkable 2 sleep screen (optional)
 
 The collector draws an e-ink version of the dashboard at `http://<collector>/eink.png`:
-the four flows, battery, outlook, prices, today's totals and the solar forecast in large
-black-and-white type, sized for a reMarkable 2 (other sizes with `?w=1072&h=1448` and so on).
+the four flows, battery and its outlook, the buy, sell and wholesale prices for the next two
+hours, today's totals and the solar forecast in large black-and-white type, sized for a reMarkable 2 (other sizes with `?w=1072&h=1448` and so on).
 A reMarkable 2 can show it as its sleep screen, so the tablet becomes an energy display when
 you put it down.
 
-<img alt="E-ink energy display: solar, home, battery and grid tiles, battery outlook, buy and sell prices, today's totals and the solar forecast" src="docs/screenshots/eink-remarkable.png" width="360">
+<img alt="E-ink energy display: solar, home, battery and grid tiles, battery outlook, a chart of buy, sell and wholesale prices for the next two hours, today's totals and the solar forecast" src="docs/screenshots/eink-remarkable.png" width="360">
 
 It updates while the tablet is awake (every 5 minutes, and when it wakes); a sleeping
 reMarkable has Wi-Fi off, so the sleep screen shows the figures from when you put it down,
@@ -450,9 +450,9 @@ with that time printed at the top. Needs reMarkable software 3.20 or later.
 1. On the tablet, open **Settings → Help → Copyrights and licenses** and note the IP address
    and root password at the bottom.
 2. From a computer on the same network: `ssh root@<tablet IP>` and enter that password.
-3. Run (with your collector's address):
+3. Run this, using the address you open the dashboard at (for example `192.168.1.50:8088`):
    ```sh
-   wget -qO- http://homeenergy.internal/remarkable/install.sh | sh
+   wget -qO- http://<collector address>/remarkable/install.sh | sh
    ```
 4. Put the tablet to sleep.
 

@@ -1,6 +1,6 @@
 # QNAP Container Station, with the dashboard on its OWN IP address on your network,
-# so it can use the normal web port and you can open http://homeenergy.internal
-# (or http://<its IP>) with no ":8088" on the end.
+# so it can use the normal web port and you can open http://<its IP> (or a name you give it in
+# your router's DNS) with no ":8088" on the end.
 #
 # Before you paste this into Container Station -> Applications -> Create:
 #   1. Pick a free address on your network for the dashboard, outside your router's DHCP
@@ -11,7 +11,7 @@
 #   3. Set iface to the NAS's network adapter that's plugged into your network: usually
 #      eth0 (check in Control Panel -> Network & Virtual Switch, or over SSH with ifconfig;
 #      it may be eth1, bond0 or a br0 virtual switch).
-#   4. Point your DNS name (e.g. homeenergy.internal) at the ipv4_address.
+#   4. Optional: give it a name in your router's local DNS, pointing at the ipv4_address.
 #
 # Settings still live in /share/Container/sigen-dashboard/sigen.env. If you already run the
 # ordinary setup, remove that application first (your history in that folder is kept).

@@ -988,7 +988,8 @@ class Api(BaseHTTPRequestHandler):
                 w = min(3000, max(300, int(q.get("w", ["1404"])[0])))
                 h = min(4000, max(300, int(q.get("h", ["1872"])[0])))
                 body = eink.render(self.collector.snapshot(), self.store.history(24), tz=TZ, width=w, height=h,
-                                   version=VERSION)
+                                   version=VERSION, prices=self.retailer.snapshot() if self.retailer else None,
+                                   aemo=self.aemo.snapshot(3) if self.aemo else None)
                 self._headers(200, "image/png", {"Content-Length": str(len(body))})
                 self.wfile.write(body)
                 return
