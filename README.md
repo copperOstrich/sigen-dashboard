@@ -233,6 +233,11 @@ On a QNAP:
    **Container Station → Applications → Create**.
 3. Open `http://<NAS-IP>:8088`. It uses port 8088 because QTS's own admin page is on 8080.
 
+To give the dashboard its **own address on your network** (so it's at
+`http://homeenergy.internal` with no port, after adding a DNS record on your router), use
+[`qnap/docker-compose.own-ip.yml`](qnap/docker-compose.own-ip.yml) instead; the comments at the
+top say which three values to change.
+
 History is kept in `/share/Container/sigen-dashboard`. To change a setting later, edit
 `sigen.env` and restart the container.
 
