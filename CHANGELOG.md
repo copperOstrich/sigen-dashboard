@@ -3,6 +3,13 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.6.1
+
+- reMarkable sleep screen: keeps the "Paper tablet is sleeping" heading and can show the
+  owner's name and phone number at the bottom, like reMarkable's own sleep screen
+  (`OWNER_NAME`, `OWNER_PHONE` and `SLEEP_TITLE` when installing, remembered on the tablet;
+  or `?title=&owner=&phone=` on `/eink.png`)
+
 ## 1.6.0
 
 ### Monthly summary

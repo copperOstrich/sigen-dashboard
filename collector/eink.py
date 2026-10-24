@@ -46,7 +46,8 @@ def _wrap(draw, text, font, width):
     return lines
 
 
-def render(live, history=None, tz=None, width=1404, height=1872, version="", prices=None, aemo=None):
+def render(live, history=None, tz=None, width=1404, height=1872, version="", prices=None, aemo=None,
+           title=None, owner=None, phone=None):
     if not AVAILABLE:
         raise RuntimeError("Pillow isn't installed, so the e-ink image isn't available outside the Docker image")
     s = width / 1404  # scale everything from the reMarkable 2 layout
@@ -64,9 +65,10 @@ def render(live, history=None, tz=None, width=1404, height=1872, version="", pri
     now = datetime.now(tz)
     updated = (live or {}).get("updated")
     stamp = datetime.fromtimestamp(updated, tz) if updated else now
-    d.text((x0, y), "Home energy", font=txtb(56), fill=BLACK)
+    # title: "Home energy", or the device's own sleep message (e.g. "Paper tablet is sleeping")
+    d.text((x0, y), title or "Home energy", font=txtb(56 if not title or len(title) < 26 else 46), fill=BLACK)
     when = stamp.strftime("%-I:%M %p").lower() + stamp.strftime(", %a %-d %b")
-    d.text((x1, y + S(8)), f"as of {when}", font=txt(40), fill=DARK, anchor="ra")
+    d.text((x1, y + S(8)), f"{'energy ' if title else ''}as of {when}", font=txt(40), fill=DARK, anchor="ra")
     y += S(100)
     d.line([(x0, y), (x1, y)], fill=BLACK, width=S(4))
     y += S(40)
@@ -312,10 +314,15 @@ def render(live, history=None, tz=None, width=1404, height=1872, version="", pri
 
     # footer
     d.line([(x0, height - S(96)), (x1, height - S(96))], fill=LIGHT, width=S(3))
-    d.text((x0, height - S(76)), "Updates while the tablet is awake; shown as of the time above.",
-           font=txt(30), fill=MID)
-    if version:
-        d.text((x1, height - S(76)), f"Home Energy {version}", font=txt(30), fill=MID, anchor="ra")
+    if owner or phone:
+        # the owner details the tablet normally shows on its sleep screen
+        d.text((x0, height - S(80)), owner or "", font=txtb(38), fill=BLACK)
+        d.text((x1, height - S(80)), phone or "", font=txtb(38), fill=BLACK, anchor="ra")
+    else:
+        d.text((x0, height - S(76)), "Updates while the tablet is awake; shown as of the time above.",
+               font=txt(30), fill=MID)
+        if version:
+            d.text((x1, height - S(76)), f"Home Energy {version}", font=txt(30), fill=MID, anchor="ra")
 
     out = io.BytesIO()
     img.save(out, "PNG", optimize=True)

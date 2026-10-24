@@ -2,6 +2,10 @@
 # Home Energy sleep screen for a reMarkable 2 (software 3.20 or later).
 #
 # Run on the tablet over SSH:   wget -qO- http://<collector>/remarkable/install.sh | sh
+#
+# To keep the owner details the normal sleep screen shows, add them in front of "sh":
+#   wget -qO- http://<collector>/remarkable/install.sh | OWNER_NAME="Your Name" OWNER_PHONE="0400 000 000" sh
+# SLEEP_TITLE changes the heading (default "Paper tablet is sleeping"; set it to "" for "Home energy").
 # Undo everything:              sh /home/root/home-energy/uninstall.sh
 # After a reMarkable software update, run the first line again (updates remove the timer).
 #
@@ -13,13 +17,27 @@ DIR=/home/root/home-energy
 CONF=/home/root/.config/remarkable/xochitl.conf
 
 echo "Setting up the Home Energy sleep screen from $BASE"
+
+# The heading and owner details drawn on the image. Re-running the installer keeps the
+# previous values unless new ones are given.
+[ -f "$DIR/settings" ] && . "$DIR/settings"
+SLEEP_TITLE="${SLEEP_TITLE-${SAVED_TITLE-Paper tablet is sleeping}}"
+OWNER_NAME="${OWNER_NAME-$SAVED_OWNER}"
+OWNER_PHONE="${OWNER_PHONE-$SAVED_PHONE}"
+urlenc() { printf '%s' "$1" | od -An -tx1 -v | tr -d ' \n' | sed 's/../%&/g'; }
+QUERY="title=$(urlenc "$SLEEP_TITLE")&owner=$(urlenc "$OWNER_NAME")&phone=$(urlenc "$OWNER_PHONE")"
 mkdir -p "$DIR"
+{
+  printf "SAVED_TITLE='%s'\n" "$(printf '%s' "$SLEEP_TITLE" | sed "s/'/'\\\\''/g")"
+  printf "SAVED_OWNER='%s'\n" "$(printf '%s' "$OWNER_NAME" | sed "s/'/'\\\\''/g")"
+  printf "SAVED_PHONE='%s'\n" "$(printf '%s' "$OWNER_PHONE" | sed "s/'/'\\\\''/g")"
+} > "$DIR/settings"
 wget -q -T 20 -O "$DIR/install.sh" "$BASE/remarkable/install.sh" || true
 
 cat > "$DIR/fetch.sh" <<EOF
 #!/bin/sh
 # Fetch a fresh energy image; keep the last one if the collector can't be reached.
-wget -q -T 20 -O "$DIR/energy.tmp" "$BASE/eink.png" && [ -s "$DIR/energy.tmp" ] && mv "$DIR/energy.tmp" "$DIR/energy.png"
+wget -q -T 20 -O "$DIR/energy.tmp" "$BASE/eink.png?$QUERY" && [ -s "$DIR/energy.tmp" ] && mv "$DIR/energy.tmp" "$DIR/energy.png"
 rm -f "$DIR/energy.tmp"
 exit 0
 EOF
