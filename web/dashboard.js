@@ -256,26 +256,41 @@
         ...(d.reason && !cmp ? [] : ["Set ", el("code", { text: "SYSTEM_COST" }), " (what the system cost, in dollars) and, optionally, ",
           el("code", { text: "SYSTEM_INSTALLED" }), " (the date it was switched on) to track when it pays for itself."])));
     } else {
-      const trackedPct = Math.max(0, Math.min(100, pb.tracked / pb.cost * 100));
-      const estPct = Math.max(0, Math.min(100 - trackedPct, pb.estimated_before / pb.cost * 100));
-      c2.append(el("div", { class: "big" }, `${Math.round(pb.pct)}%`, el("small", { text: "paid back" })),
-        el("div", { class: "meter", role: "img", "aria-label": `${Math.round(pb.pct)}% of ${money$(pb.cost)} paid back` },
-          estPct > 0 ? el("i", { class: "est", style: `width:${estPct}%`, title: `Estimated before tracking: ${money$(pb.estimated_before)}` }) : null,
-          el("i", { style: `width:${trackedPct}%`, title: `Recorded: ${money$(pb.tracked)}` })),
-        el("dl", { class: "facts" },
-          el("dt", { text: "Saved so far" }), el("dd", { text: `${money$(pb.saved)} of ${money$(pb.cost)}` }),
-          pb.estimated_days > 0 ? el("dt", { text: `Estimated before ${new Date(pb.since + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}` }) : null,
-          pb.estimated_days > 0 ? el("dd", { text: money$(pb.estimated_before) }) : null,
-          el("dt", { text: "Saving" }), el("dd", { text: `${money$(pb.per_day, 2)} a day` }),
-          el("dt", { text: "Paid back" }), el("dd", { text: pb.paid_back ? "already" : pb.payback_date
-            ? `${new Date(pb.payback_date + "T12:00:00").toLocaleDateString([], { month: "short", year: "numeric" })} (${pb.years_left} yrs)` : "–" })));
-      c2.append(el("p", { class: "chart-note", text: `What your home and car would have cost from the grid without solar and battery, ` +
-        (pb.method === "plan" ? `at ${pb.baseline_plan}'s rates, ` : `at ${me}'s price each minute, `) +
-        `minus what you paid for energy. The daily saving is the average of ${pb.average_days} day${pb.average_days === 1 ? "" : "s"}` +
-        (pb.average_days < 330 ? "; it will swing with the seasons until there's a year of history." : ".") +
-        (pb.estimated_days > 0 ? " The striped part is estimated at that average for the days before the collector started." : "") +
-        (pb.imported_days ? ` ${pb.imported_days} days come from a mySigen export, priced at each day's average ${me} price` +
-          (pb.previous_days ? ` (or, for the ${pb.previous_days} days before you joined ${me}, at the ${pb.previous_plan}: an estimate)` : "") + "." : "") }));
+      const sd = pb.standard;
+      const when = (x) => (x.paid_back ? "already" : x.payback_date
+        ? `${new Date(x.payback_date + "T12:00:00").toLocaleDateString([], { month: "short", year: "numeric" })} (${x.years_left} yrs)` : "–");
+      const meter = (x, label) => el("div", {},
+        el("div", { class: "meter-k" }, el("span", { text: label }), el("b", { text: `${Math.round(x.pct)}%` })),
+        el("div", { class: "meter", role: "img", "aria-label": `${label}: ${Math.round(x.pct)}% of ${money$(pb.cost)} paid back` },
+          x.estimated_before > 0 ? el("i", { class: "est", style: `width:${Math.min(100, x.estimated_before / pb.cost * 100)}%`, title: `Estimated before tracking: ${money$(x.estimated_before)}` }) : null,
+          el("i", { style: `width:${Math.max(0, Math.min(100, x.pct) - Math.min(100, (x.estimated_before || 0) / pb.cost * 100))}%` })));
+      const lo = Math.round(sd ? Math.min(pb.pct, sd.pct) : pb.pct), hi = Math.round(sd ? Math.max(pb.pct, sd.pct) : pb.pct);
+      c2.append(el("div", { class: "big" }, lo === hi ? `${lo}%` : `${lo}–${hi}%`, el("small", { text: "paid back" })),
+        meter(pb, `Against ${me}'s prices`), sd ? meter(sd, `Against the ${sd.plan}`) : null);
+      const t = el("table", { class: "pb-table" },
+        el("tr", {}, el("th", { text: "" }), el("th", { text: `${me} prices` }), sd ? el("th", { text: sd.plan === "Default Market Offer" ? "DMO" : sd.plan }) : null),
+        el("tr", {}, el("td", { text: "Saved so far" }), el("td", { text: money$(pb.saved) }), sd ? el("td", { text: money$(sd.saved) }) : null),
+        el("tr", {}, el("td", { text: "Saving a day" }), el("td", { text: money$(pb.per_day, 2) }), sd ? el("td", { text: money$(sd.per_day, 2) }) : null),
+        el("tr", {}, el("td", { text: "Paid back" }), el("td", { text: when(pb) }), sd ? el("td", { text: when(sd) }) : null));
+      c2.append(t);
+      if (sd) {
+        const diff = sd.per_day - pb.per_day;
+        const yrs = pb.years_left != null && sd.years_left != null ? pb.years_left - sd.years_left : null;
+        c2.append(el("p", { class: "lead", style: "margin-top:10px", text: Math.abs(diff) < 0.05
+          ? `Both views agree: being with ${me} makes little difference to the saving.`
+          : `${diff > 0 ? `Against a standard plan the system saves ${money$(diff, 2)} a day more` : `Against a standard plan the system saves ${money$(-diff, 2)} a day less`}` +
+            ` (about ${money$(Math.abs(diff) * 365)} a year). That's the value of being with ${me}, which only makes sense with a battery` +
+            (yrs != null && Math.abs(yrs) >= 0.1 ? `. Paid back about ${Math.abs(yrs).toFixed(1)} years ${yrs > 0 ? "sooner" : "later"} on that view.` : ".") }));
+      }
+      c2.append(el("p", { class: "chart-note", text: `"${me} prices": what your home and car would have cost without solar and battery ` +
+        (pb.method === "plan" ? `at ${pb.baseline_plan}'s rates, ` : `at ${me}'s price at the time, `) +
+        "minus what you paid for energy (supply charges cancel out). " +
+        (sd ? `"${sd.plan}": the same use on the ${sd.plan}` + (sd.with_fixed ? ", with its supply charge, minus everything you paid " + me + " including supply and fee" : ", energy only") + ", since without solar and battery you'd likely be on a standard plan. " : "") +
+        `Daily savings are the average of ${pb.average_days} day${pb.average_days === 1 ? "" : "s"}` +
+        (pb.average_days < 330 ? " and will swing with the seasons until there's a year of history." : ".") +
+        (pb.estimated_days > 0 ? " Striped parts are estimated at that average for the days before the collector started." : "") +
+        (pb.imported_days ? ` ${pb.imported_days} days come from a mySigen export, priced from ${me}'s bills or daily prices` +
+          (pb.previous_days ? ` (the ${pb.previous_days} days before you joined ${me} are on the ${pb.previous_plan} in both views: an estimate)` : "") + "." : "") }));
     }
 
     // ---- battery trades

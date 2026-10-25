@@ -261,6 +261,11 @@ class Money:
         # ---- payback (energy only: supply charges are paid with or without solar)
         if self.system_cost:
             per_day, method, n_imported, prev_days, prev_saved = [], set(), 0, 0, 0.0
+            # a second view: against a standard plan (the first comparison plan, supply charge
+            # included) rather than your retailer's prices, since without solar and battery you might
+            # well not be with a wholesale-price retailer at all
+            std = []
+            std_plan = plans["plans"][0] if plans and plans["plans"] else None
             for d in days:
                 if d["day"] == today:
                     continue
@@ -273,6 +278,7 @@ class Money:
                         if r["baseline"] is not None:
                             v = r["baseline"] - (first["usage"] - first["feed_in"])
                             per_day.append((d["day"], v))
+                            std.append((d["day"], v))  # same plan both ways: supply charges cancel
                             prev_days += 1; prev_saved += v
                             n_imported += 1 if d.get("imported") else 0
                     continue
@@ -287,6 +293,14 @@ class Money:
                 if b is not None:
                     per_day.append((d["day"], b - energy[d["day"]]))
                     n_imported += 1 if d.get("imported") else 0
+                if std_plan:
+                    r = self._day(d["day"], plans, today, d.get("imported"))
+                    sp = r["plans"][std_plan["name"]]
+                    if r["baseline"] is not None:
+                        # standard plan without solar (supply + all use) vs everything you actually paid
+                        # (supply and fee included when known; otherwise both sides energy only)
+                        base = r["baseline"] + (sp["supply"] if fixed_known else 0)
+                        std.append((d["day"], base - actual[d["day"]]))
             if per_day:
                 tracked = sum(v for _, v in per_day)
                 recent = per_day[-365:]
@@ -310,6 +324,20 @@ class Money:
                 if remaining > 0 and avg > 0:
                     pay["years_left"] = round(remaining / avg / 365, 1)
                     pay["payback_date"] = (date.today() + timedelta(days=int(remaining / avg))).isoformat()
+                if std:
+                    st = sum(v for _, v in std)
+                    rec = std[-365:]
+                    savg = sum(v for _, v in rec) / len(rec)
+                    sbefore = savg * max(0, (date.fromisoformat(std[0][0]) - self.installed).days) if self.installed else 0
+                    ssaved = st + sbefore
+                    srem = self.system_cost - ssaved
+                    pay["standard"] = {"plan": std_plan["name"], "saved": round(ssaved, 2), "per_day": round(savg, 2),
+                                       "estimated_before": round(sbefore, 2), "days": len(std),
+                                       "pct": round(max(0, min(100, ssaved / self.system_cost * 100)), 1),
+                                       "with_fixed": fixed_known, "paid_back": srem <= 0}
+                    if srem > 0 and savg > 0:
+                        pay["standard"]["years_left"] = round(srem / savg / 365, 1)
+                        pay["standard"]["payback_date"] = (date.today() + timedelta(days=int(srem / savg))).isoformat()
                 out["payback"] = pay
         return out
 

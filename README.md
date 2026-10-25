@@ -369,9 +369,12 @@ The **Money** panel needs retailer prices (above) and a little setup in `sigen.e
   is energy only. Every plan uses the same energy flows, so it's a guide: on a different plan
   the battery might be run differently.
 * **Payback**: set `SYSTEM_COST` (dollars) and optionally `SYSTEM_INSTALLED` (`2025-03-15`).
-  Savings are what your home and car would have cost from the grid without solar and battery,
-  at your retailer's price each minute, minus what you paid for energy (supply charges are paid
-  either way). Days before the collector started are estimated at the average daily saving;
+  Shown two ways, side by side. **Against your retailer's prices**: what your home and car would
+  have cost from the grid without solar and battery, at your retailer's price at the time, minus
+  what you paid for energy (supply charges cancel out). **Against the comparison plan** (the
+  Default Market Offer): the same use on a standard plan with its supply charge, minus everything
+  you paid including supply and fee, since without a battery a wholesale-price retailer may not
+  have suited you. The gap between them is what being with your retailer adds. Days before the collector started are estimated at the average daily saving;
   the payback date is a projection from the last 12 months (or what's recorded so far).
 * **Battery trades**: whenever the battery sends power to the grid, or charges from it, beyond
   what the house needs. Under normal self-consumption it does neither, so these are your

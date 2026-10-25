@@ -3,6 +3,12 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.7.5
+
+- Payback shown two ways side by side: against your retailer's prices, and against the
+  Default Market Offer (a standard plan, supply charge included, against everything you paid),
+  with saved so far, daily saving and payback date for each, and the difference between them
+
 ## 1.7.4
 
 - Import retailer bills for days older than the retailer's service returns: a CSV of bill
