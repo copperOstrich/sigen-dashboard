@@ -3,6 +3,16 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.7.1
+
+### History from before the collector
+- **mySigen import**: drop the app's daily Energy export (`stationData-...-Energy.xlsx`, Day
+  view) into the data folder's `import` folder and restart. Daily history, the monthly summary,
+  the Money panel and payback then start when the system did. Imported days never replace the
+  collector's own readings.
+- With Amber, the collector fetches Amber's daily costs and average prices back to the first
+  imported day, once
+
 ## 1.7.0
 
 ### Money
@@ -19,14 +29,6 @@ update; the Docker image is tagged with the same version.
   it beyond the house's needs (Amber SmartShift, VPP events), with its energy, price and value,
   and totals for this month and last
 - `/api/money`
-
-### History from before the collector
-- **mySigen import**: drop the app's daily Energy export (`stationData-...-Energy.xlsx`, Day
-  view) into the data folder's `import` folder and restart. Daily history, the monthly summary,
-  the Money panel and payback then start when the system did. Imported days never replace the
-  collector's own readings.
-- With Amber, the collector fetches Amber's daily costs and average prices back to the first
-  imported day, once
 
 ### System
 - The solar strings table is gone from the System panel; the Solar strings panel has it all
