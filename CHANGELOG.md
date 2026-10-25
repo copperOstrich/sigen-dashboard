@@ -3,6 +3,19 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.7.2
+
+- Money: days imported from mySigen are only priced from the retailer's own billed costs (some
+  were priced from a part-day of readings, which understated them)
+- Payback: the "without solar" cost no longer counts car charging twice (the plant's load
+  already includes it), and uses each hour's metered energy at that hour's price, so short gaps
+  in the readings don't matter
+- A day the collector recorded counts as complete when it has readings near its start and end
+  (totals come from the meter's running counters), rather than by counting minutes
+- Money shows your retailer's cost split into energy (what the retailer's app shows) and supply
+  charge and fee (what the bill adds), with the dates, to check against the app; and how many
+  imported days are still waiting for the retailer's costs
+
 ## 1.7.1
 
 ### History from before the collector

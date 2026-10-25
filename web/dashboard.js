@@ -234,6 +234,7 @@
       c1.append(el("div", { class: "big" }, money$(Math.abs(diff)), el("small", { text: diff >= 0 ? "saved" : "extra" })),
         el("p", { class: "lead", text: `${me} cost ${money$(Math.abs(diff))} ${diff >= 0 ? "less" : "more"} than ${pl.list.length === 1 ? `the ${best}` : `the cheapest alternative (${best})`} over ${span}${cmp.energy_only ? ", energy only" : ""}.` }));
       const rows = [[me, t.actual, true], ...Object.entries(t.plans).map(([n, v]) => [n, v, false])].sort((a, b) => a[1] - b[1]);
+      const dshort = (x) => new Date(x + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" });
       const max = Math.max(...rows.map((r) => Math.abs(r[1])), 1);
       for (const [n, v, mine] of rows) {
         c1.append(el("div", { class: "mix-row cmp-row" + (mine ? " mine" : ""), title: `${n}: ${money$(v, 2)} over ${span}` },
@@ -241,7 +242,11 @@
           el("span", { class: "mix-bar" }, el("i", { style: `width:${Math.max(1, Math.abs(v) / max * 100)}%` })),
           el("span", { class: "mix-v", text: money$(v) })));
       }
+      // the same split as the retailer's app (energy) and bill (plus fixed charges), to check against
+      c1.append(el("p", { class: "chart-note", text: `${me}, ${dshort(t.first)} to ${dshort(t.last)}: ${money$(t.actual_energy, 2)} for energy` +
+        (t.actual_fixed ? ` plus ${money$(t.actual_fixed, 2)} supply charge and fee` : "") + "." }));
     }
+    if (d.waiting_days) c1.append(el("p", { class: "chart-note", text: `${d.waiting_days} imported day${d.waiting_days === 1 ? " is" : "s are"} waiting for ${me}'s costs, which the collector fetches in the background; they're left out until then.` }));
 
     // ---- payback
     const c2 = $("money-payback"); c2.innerHTML = "";

@@ -91,7 +91,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.7.1"
+VERSION = "1.7.2"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -397,7 +397,7 @@ class Store:
                 "AND total_import_kwh IS NOT NULL ORDER BY ts", (day,)).fetchall()
         hours, prev = {}, None
         for ts, imp, exp, load in rows:
-            if prev and ts - prev[0] <= 900:
+            if prev and ts - prev[0] <= 6 * 3600:
                 h = hours.setdefault(ts // 3600 * 3600, [0.0, 0.0, 0.0])
                 for i, (a, b) in enumerate(((imp, prev[1]), (exp, prev[2]), (load, prev[3]))):
                     d = (a or 0) - (b or 0)
@@ -414,12 +414,15 @@ class Store:
     def no_solar_cost(self, day):
         """$ the home and car would have cost from the grid at the retailer's price each minute
         (or, for imported days, at the day's average price)."""
+        # each hour's home and car energy (from the meter counters, so gaps in the readings don't
+        # lose energy) at that hour's average buy price
+        flows = self.hourly_flows(day)
         with self.lock:
-            r = self.db.execute(
-                "SELECT SUM((COALESCE(load,0)+COALESCE(ev,0))/60000.0*buy_c), COUNT(buy_c), COUNT(*) "
-                "FROM samples WHERE day=?", (day,)).fetchone()
-        if r and r[1] and r[1] >= r[2] * 0.9 and r[2] >= 1300:  # prices and readings for nearly the whole day
-            return (r[0] or 0) / 100
+            prices = dict(self.db.execute("SELECT (ts/3600)*3600, AVG(buy_c) FROM samples WHERE day=? AND buy_c IS NOT NULL "
+                                          "GROUP BY 1", (day,)).fetchall())
+        if flows and len(prices) >= 20:  # prices for nearly every hour
+            avg = sum(prices.values()) / len(prices)
+            return sum(load * prices.get(h, avg) for h, imp, exp, load in flows) / 100
         # otherwise (an imported day): the day's home and car use at that day's average buy price
         with self.lock:
             imp = self.db.execute("SELECT load, ev FROM imported_days WHERE day=?", (day,)).fetchone()
@@ -505,7 +508,7 @@ class Store:
         cols = ",".join(f"MIN({c}),MAX({c})" for c in COUNTERS)
         with self.lock:
             rows = self.db.execute(
-                f"SELECT day, {cols}, MAX(soc), MIN(soc), SUM(ev)/60000.0, COUNT(*) FROM samples WHERE day>? "
+                f"SELECT day, {cols}, MAX(soc), MIN(soc), SUM(ev)/60000.0, MIN(ts), MAX(ts) FROM samples WHERE day>? "
                 "AND total_pv_kwh IS NOT NULL GROUP BY day ORDER BY day", (since,)).fetchall()
         out, prev_max = [], None
         names = ["pv", "load", "import", "export", "charge", "discharge"]
@@ -519,8 +522,12 @@ class Store:
             if r[15] is not None:  # the plant's load total includes the car; split it out
                 entry["ev"] = round(min(r[15], entry["load"]), 2)
                 entry["load"] = round(entry["load"] - entry["ev"], 2)
+            # complete: totals come from the meter's running counters, so a reading near the start of
+            # the day (or the previous day's last one) and near its end is all it takes
+            d0 = datetime.fromisoformat(r[0]).replace(tzinfo=TZ)
+            d1 = (d0 + timedelta(days=1, hours=2)).replace(hour=0)
+            entry["complete"] = r[17] >= d1.timestamp() - 1800 and (r[16] <= d0.timestamp() + 1800 or prev_max is not None)
             prev_max = maxs
-            entry["minutes"] = r[16]
             out.append(entry)
         # days from a mySigen export fill in what the collector didn't record (before it ran, or
         # a day it only saw part of); the collector's own complete days always win
@@ -530,7 +537,7 @@ class Store:
             by_day = {e["day"]: e for e in out}
             for day, v in imported.items():
                 own = by_day.get(day)
-                if own and (own["minutes"] >= 1300 or day == today):
+                if own and (own["complete"] or day == today):
                     continue
                 e = {"day": day, "imported": True, "soc_max": None, "soc_min": None}
                 for k in ("pv", "load", "import", "export", "charge", "discharge"):
@@ -540,7 +547,7 @@ class Store:
                 by_day[day] = e
             out = [by_day[d] for d in sorted(by_day)]
         for e in out:
-            e.pop("minutes", None)
+            e.pop("complete", None)
         with self.lock:
             billed = {r[0]: r for r in self.db.execute(
                 "SELECT day, import_cost, export_cost, estimated FROM amber_days WHERE day>?", (since,))}
@@ -550,7 +557,7 @@ class Store:
                 e["cost"] = round((b[1] + b[2]) / 100, 2)
                 e["bought"], e["earned"] = round(b[1] / 100, 2), round(-b[2] / 100, 2)
                 e["cost_source"] = "retailer-estimated" if b[3] else "retailer-billed"
-            else:
+            elif not e.get("imported"):  # an imported day has no minute readings worth pricing
                 c = self.cost_for_day(e["day"])
                 if c:
                     e["cost"], e["cost_source"] = c["net"], "calculated"

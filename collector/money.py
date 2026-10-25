@@ -190,6 +190,8 @@ class Money:
         out = {"enabled": True, "retailer": self.retailer_name, "fixed_known": fixed_known,
                "supply_c_day": self.supply_c_day, "fee_monthly": self.fee_monthly,
                "trades": self.trades(), "plans": None, "compare": None, "payback": None}
+        # imported days still waiting for the retailer's costs (fetched in the background)
+        out["waiting_days"] = sum(1 for d in days if d.get("imported") and d.get("bought") is None)
         if not priced:
             out["reason"] = "needs at least a day with prices from your retailer"
             return out
@@ -232,6 +234,9 @@ class Money:
             since = (now - timedelta(days=365)).strftime("%Y-%m-%d")
             window = [d for d in complete if d["day"] > since]
             tot = {"days": len(window), "actual": round(sum(actual[d["day"]] for d in window), 2),
+                   "actual_energy": round(sum(energy[d["day"]] for d in window), 2),
+                   "actual_fixed": round(fixed * len(window), 2),
+                   "first": window[0]["day"] if window else None, "last": window[-1]["day"] if window else None,
                    "plans": {p["name"]: 0.0 for p in plans["plans"]}}
             for d in window:
                 for n, v in self._day(d["day"], plans, today, d.get("imported"))["plans"].items():
