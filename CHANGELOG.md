@@ -3,6 +3,11 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## Unreleased
+
+- reMarkable uninstaller: fixed a harmless "head: invalid option" message on the tablet
+  (BusyBox's `head` needs `-n 1`)
+
 ## 1.6.2
 
 - reMarkable sleep screen: the tablet adds the owner name and number itself, on top of the

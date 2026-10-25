@@ -89,7 +89,7 @@ rm -f /etc/systemd/system/home-energy.service /etc/systemd/system/home-energy.ti
 systemctl daemon-reload
 sed -i '\|^SleepScreenPath=/home/root/home-energy/|d' "$CONF"
 # if a different custom sleep screen was set before, put it back
-OLD=$(grep '^SleepScreenPath=' "$DIR/xochitl.conf.before" 2>/dev/null | head -1)
+OLD=$(grep '^SleepScreenPath=' "$DIR/xochitl.conf.before" 2>/dev/null | head -n 1)
 [ -n "$OLD" ] && sed -i "/^\[General\]/a $OLD" "$CONF"
 rm -rf "$DIR"
 systemctl restart xochitl
