@@ -98,7 +98,7 @@ Screenshots switch between light and dark to match your GitHub theme; both versi
 numbers are realistic but not from a real home.
 
 **Live prices and the grid**: your retailer's buy and sell price with a 24-hour forecast,
-AEMO's wholesale price, and the region's generation mix.
+AEMO's wholesale price, your region's generation mix, and every NEM region side by side.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/prices-grid-dark.png">
@@ -350,6 +350,11 @@ your region and shows:
 * demand, the large-scale generation mix (coal, gas, solar, wind, hydro, battery) and
   the renewable share
 * interconnector flows to neighbouring regions, plus price-cap and market-suspension flags
+* **all regions at a glance**: a map of NSW, Queensland, Victoria, South Australia and
+  Tasmania with each one's wholesale price, demand, renewable share and whether it's
+  importing or exporting, the flows between them, and whole-market demand, renewable share
+  and average price (a table on phones). It comes from the same AEMO requests, so it costs
+  nothing extra.
 
 Set your region with `AEMO_REGION` (`NSW1`, `QLD1`, `VIC1`, `SA1` or `TAS1`; default
 `NSW1`), or turn it off with `AEMO_ENABLED=0`. These feeds power AEMO's own NEM data
@@ -546,7 +551,7 @@ Simulator only: `SIM_PV_KWP`, `SIM_BATTERY_KWH`, `SIM_INVERTER_KW`, `SIM_EXPORT_
 | `GET /api/history?hours=24` | Bucketed power and SoC series (up to 31 days) |
 | `GET /api/daily?days=30` | Daily kWh totals and net cost |
 | `GET /api/prices?hours=12` | Retailer (Amber or LocalVolts): current prices, 24 h forecast, recent history |
-| `GET /api/aemo?hours=24` | AEMO wholesale price, forecast, demand, generation mix, interconnectors |
+| `GET /api/aemo?hours=24` | AEMO wholesale price, forecast, demand, generation mix, interconnectors, every region (`regions`) and whole-market totals (`nem`) |
 | `GET /api/strings?hours=48&format=csv` | Per-minute voltage and current of each PV string (CSV download or JSON) |
 | `GET /api/ev?days=30` | AC charger: live state, charging sessions and the last two days of state changes |
 | `GET /api/ev-sessions?days=30&format=csv` | Charging sessions (CSV download or JSON) |

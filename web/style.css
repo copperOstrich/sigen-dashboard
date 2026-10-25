@@ -404,3 +404,26 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .mo-table td, .mo-table th { padding-left: 10px; white-space: nowrap; }
 .mo-table tr.sel td { background: color-mix(in srgb, var(--home) 9%, transparent); }
 .mo-table tr { cursor: pointer; }
+
+/* the grid: all NEM regions */
+.nem-map svg { width: 100%; height: auto; display: block; max-width: 900px; }
+.nem-map .rg { fill: var(--surface); stroke: var(--rule-strong); stroke-width: 1.5; }
+.nem-map .rg.home { stroke: var(--ink); stroke-width: 2.5; }
+.nem-map .rn { fill: var(--ink); font: 600 15px var(--font); }
+.nem-map .rp { fill: var(--ink); font: 600 30px var(--font-num); }
+.nem-map .rp.low { fill: var(--good); } .nem-map .rp.high { fill: var(--bad); }
+.nem-map .ru { fill: var(--ink-2); font: 500 13px var(--font); }
+.nem-map .rs { fill: var(--ink-2); font: 500 13px var(--font); }
+.nem-map .yours { fill: var(--ink-3); font: 500 12px var(--font); text-anchor: end; }
+.nem-map .ic { stroke: var(--ink-3); stroke-width: 2.5; }
+.nem-map .arrow { fill: var(--ink-2); }
+.nem-map .icl { fill: var(--ink-2); font: 500 13px var(--font-num); paint-order: stroke; stroke: var(--surface); stroke-width: 5px; }
+.nem-map .tot-k { fill: var(--ink-2); font: 500 14px var(--font); }
+.nem-map .tot-v { fill: var(--ink); font: 600 26px var(--font-num); }
+.nem-table { display: none; width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.nem-table th, .nem-table td { padding: 6px 5px; white-space: nowrap; text-align: right; border-top: 1px solid var(--rule); font-variant-numeric: tabular-nums; }
+.nem-table th { color: var(--ink-3); font-weight: 500; border-top: 0; }
+.nem-table th:first-child, .nem-table td:first-child { text-align: left; }
+.nem-table tr.home td { font-weight: 600; }
+.nem-table tr.total td { color: var(--ink-2); }
+@media (max-width: 640px) { .nem-map { display: none; } .nem-table { display: table; } }

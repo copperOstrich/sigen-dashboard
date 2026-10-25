@@ -5,6 +5,11 @@ update; the Docker image is tagged with the same version.
 
 ## 1.6.3
 
+- **The grid: all regions at a glance.** A map of every NEM region (NSW, Queensland,
+  Victoria, South Australia, Tasmania) with its wholesale price, demand, renewable share and
+  whether it's importing or exporting, arrows for the flows between regions, and
+  whole-market demand, renewable share and average price. A table on phones. Uses the same
+  AEMO requests as before; `/api/aemo` adds `regions` and `nem`.
 - reMarkable sleep screen away from home: after 3 hours without reaching the collector
   (`AWAY_HOURS`), the tablet shows an "Away from home" screen instead of old figures; the
   live figures come back with the next refresh at home (`/eink.png?away=1` draws it)

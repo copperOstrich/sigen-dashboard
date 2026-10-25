@@ -70,13 +70,39 @@ class Aemo:
         self.state = {"enabled": enabled, "mode": "simulator" if simulate else "live",
                       "status": "starting" if enabled else "off", "region": self.region, "error": None,
                       "current": None, "forecast": [], "history": [], "fuel": [], "interconnectors": [],
-                      "renewables_pct": None, "updated": None}
+                      "renewables_pct": None, "updated": None,
+                      "region_rows": {}, "region_mix": {}, "all_interconnectors": []}
 
     def snapshot(self, hours=24):
         with self.lock:
             s = json.loads(json.dumps(self.state))
         s["history"] = self.store.aemo_history(self.region, hours)
+        s["regions"], s["nem"] = self._regions(s.pop("region_rows", {}), s.pop("region_mix", {}))
         return s
+
+    @staticmethod
+    def _regions(rows, mixes):
+        """Every NEM region side by side, plus whole-market totals."""
+        out = []
+        for r in REGIONS:
+            row, mix = rows.get(r) or {}, mixes.get(r) or {}
+            if not row and not mix:
+                continue
+            out.append({"region": r, **row, "renewables_pct": mix.get("renewables_pct"),
+                        "generation_mw": mix.get("total_mw"), "top_fuel": mix.get("top_fuel")})
+        dem = [x for x in out if x.get("demand_mw") is not None]
+        total = sum(x["demand_mw"] for x in dem) if dem else None
+        priced = [x for x in dem if x.get("rrp") is not None]
+        wsum = sum(x["demand_mw"] for x in priced)
+        avg = sum(x["rrp"] * x["demand_mw"] for x in priced) / wsum if wsum > 0 else None
+        gen = sum(m.get("total_mw") or 0 for m in mixes.values())
+        ren = sum((m.get("total_mw") or 0) * (m.get("renewables_pct") or 0) / 100 for m in mixes.values())
+        nem = {"demand_mw": round(total) if total is not None else None,
+               "rrp": round(avg, 2) if avg is not None else None,
+               "price_c": round(avg / 10, 2) if avg is not None else None,
+               "generation_mw": round(gen) if gen else None,
+               "renewables_pct": round(ren / gen * 100, 1) if gen else None}
+        return out, nem
 
     def summary(self):
         with self.lock:
@@ -144,19 +170,37 @@ class Aemo:
                               "demand_mw": last[3]}
         return out
 
-    def _summary(self):
-        data = _request("ELEC_NEM_SUMMARY")
-        row = next((r for r in data.get("ELEC_NEM_SUMMARY", []) if r.get("REGIONID") == self.region), None)
-        if not row:
-            raise AemoError(f"no ELEC_NEM_SUMMARY row for {self.region}")
+    @staticmethod
+    def _flows(row):
         flows = row.get("INTERCONNECTORFLOWS") or "[]"
         if isinstance(flows, str):
             try:
                 flows = json.loads(flows)
             except ValueError:
                 flows = []
-        ics = [{"name": f.get("name"), "mw": _num(f.get("value")), "export_limit": _num(f.get("exportlimit")),
-                "import_limit": _num(f.get("importlimit"))} for f in flows if isinstance(f, dict)]
+        return [{"name": f.get("name"), "mw": _num(f.get("value")), "export_limit": _num(f.get("exportlimit")),
+                 "import_limit": _num(f.get("importlimit"))} for f in flows if isinstance(f, dict)]
+
+    def _summary(self):
+        data = _request("ELEC_NEM_SUMMARY")
+        all_rows = data.get("ELEC_NEM_SUMMARY", [])
+        # every region, for the whole-market overview
+        region_rows, all_ics = {}, {}
+        for r in all_rows:
+            rid = r.get("REGIONID")
+            if rid not in REGIONS:
+                continue
+            p = _num(r.get("PRICE"))
+            region_rows[rid] = {"rrp": p, "price_c": round(p / 10, 2) if p is not None else None,
+                                "price_status": r.get("PRICE_STATUS"), "demand_mw": _num(r.get("TOTALDEMAND")),
+                                "net_interchange_mw": _num(r.get("NETINTERCHANGE")),
+                                "apc": str(r.get("APCFLAG")) == "1"}
+            for f in self._flows(r):
+                all_ics.setdefault(f["name"], f)
+        row = next((r for r in all_rows if r.get("REGIONID") == self.region), None)
+        if not row:
+            raise AemoError(f"no ELEC_NEM_SUMMARY row for {self.region}")
+        ics = self._flows(row)
         rrp = _num(row.get("PRICE"))
         cur = {"price_status": row.get("PRICE_STATUS"), "demand_mw": _num(row.get("TOTALDEMAND")),
                "net_interchange_mw": _num(row.get("NETINTERCHANGE")),
@@ -167,17 +211,26 @@ class Aemo:
             cur.update(rrp=rrp, price_c=round(rrp / 10, 2))
             if row.get("SETTLEMENTDATE"):
                 cur["at"] = _nem_ts(row["SETTLEMENTDATE"])
-        return {"current": cur, "interconnectors": ics}
+        return {"current": cur, "interconnectors": ics, "region_rows": region_rows,
+                "all_interconnectors": list(all_ics.values())}
 
     def _fuel(self):
         data = _request("FUEL", {"type": ["CURRENT"]})
-        rows = [r for r in data.get("FUEL_CURRENT", []) if r.get("STATE") == self.region]
-        mix = {}
-        for r in rows:
+        mixes = {}
+        for r in data.get("FUEL_CURRENT", []):
             mw = _num(r.get("SUPPLY"))
-            if mw is not None and mw > 0:
-                mix[r.get("FUEL_TYPE") or "Other"] = mix.get(r.get("FUEL_TYPE") or "Other", 0) + mw
-        return self._mix(mix)
+            if r.get("STATE") in REGIONS and mw is not None and mw > 0:
+                m = mixes.setdefault(r["STATE"], {})
+                m[r.get("FUEL_TYPE") or "Other"] = m.get(r.get("FUEL_TYPE") or "Other", 0) + mw
+        out = self._mix(mixes.get(self.region, {}))
+        out["region_mix"] = {k: self._brief(v) for k, v in mixes.items()}
+        return out
+
+    @classmethod
+    def _brief(cls, mix):
+        m = cls._mix(mix)
+        return {"total_mw": round(sum(mix.values())), "renewables_pct": m["renewables_pct"],
+                "top_fuel": m["fuel"][0]["fuel"] if m["fuel"] else None}
 
     @staticmethod
     def _mix(mix):
@@ -209,9 +262,29 @@ class Aemo:
         cur = {"rrp": hist[0][2], "price_c": round(hist[0][2] / 10, 2), "at": hist[0][0] + 300,
                "price_status": "FIRM", "demand_mw": round(hist[0][3]), "net_interchange_mw": -640,
                "scheduled_gen_mw": 6900, "semischeduled_gen_mw": 2100, "apc": False, "suspended": False}
+        if self.region == "NSW1":
+            cur["net_interchange_mw"] = -1380
         ics = [{"name": "N-Q-MNSP1", "mw": -48, "export_limit": 115, "import_limit": -122},
                {"name": "NSW1-QLD1", "mw": -512, "export_limit": 700, "import_limit": -1200},
                {"name": "VIC1-NSW1", "mw": 820, "export_limit": 1400, "import_limit": -1000}]
+        # the other regions, loosely shaped like the real NEM
+        # net interchange (positive = exporting) matches the interconnector flows below
+        shape = {"NSW1": (7400, 0, 1.00, -1380), "QLD1": (6600, 0.10, 0.93, 560), "VIC1": (5200, 0.05, 0.85, 1000),
+                 "SA1": (1500, 0.25, 1.20, -190), "TAS1": (1100, 0.85, 0.70, 10)}
+        rows, mixes = {}, {}
+        for r, (dem, base_ren, pf, ni) in shape.items():
+            p = round(rrp(t) * pf, 2)
+            d = round(dem * (cur["demand_mw"] / 7400 if cur["demand_mw"] else 1))
+            rows[r] = {"rrp": p, "price_c": round(p / 10, 2), "price_status": "FIRM", "demand_mw": d,
+                       "net_interchange_mw": ni, "apc": False}
+            ren = min(98.0, base_ren * 100 + (m["renewables_pct"] or 0) * (1 - base_ren))
+            mixes[r] = {"total_mw": d + ni, "renewables_pct": round(ren, 1),
+                        "top_fuel": "Hydro" if r == "TAS1" else "Solar" if sun > 0.6 else "Wind" if r == "SA1" else
+                        "Brown coal" if r == "VIC1" else "Black coal"}
+        rows[self.region] = {**rows.get(self.region, {}), "rrp": cur["rrp"], "price_c": cur["price_c"]}
+        all_ics = ics + [{"name": "V-SA", "mw": 150, "export_limit": 600, "import_limit": -550},
+                         {"name": "V-S-MNSP1", "mw": 40, "export_limit": 220, "import_limit": -200},
+                         {"name": "T-V-MNSP1", "mw": 10, "export_limit": 478, "import_limit": -478}]
         with self.lock:
             self.state.update(status="ok", error=None, current=cur, forecast=forecast, interconnectors=ics,
-                              updated=now, **m)
+                              updated=now, region_rows=rows, region_mix=mixes, all_interconnectors=all_ics, **m)
