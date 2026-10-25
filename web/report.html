@@ -76,7 +76,7 @@
       kpi("Bought", m.import.toFixed(0), "kWh"), kpi("Sold", m.export.toFixed(0), "kWh"),
       kpi("Self-sufficient", m.self_sufficiency == null ? "–" : Math.round(m.self_sufficiency), m.self_sufficiency == null ? "" : "%"),
       kpi("Solar used at home", m.self_consumption == null ? "–" : Math.round(m.self_consumption), m.self_consumption == null ? "" : "%"),
-      kpi("Net cost", money(m.net), m.net != null && m.net < 0 ? "credit" : ""),
+      kpi("Net cost", money(m.net != null && m.net < 0 ? -m.net : m.net), m.net != null && m.net < 0 ? "credit" : ""),
       kpi("Solar and battery value", money(m.saved), ""));
     if (m.ev > 0.05) k.append(kpi("Car charged", m.ev.toFixed(0), "kWh"));
     // comparison: previous month and the same month last year

@@ -386,7 +386,7 @@
       tile("Bought", "var(--grid)", m.import.toFixed(0), "kWh", "import", "down"),
       tile("Sold", "var(--grid)", m.export.toFixed(0), "kWh", "export", "up"),
       tile("Self-sufficient", null, m.self_sufficiency == null ? "–" : Math.round(m.self_sufficiency), m.self_sufficiency == null ? "" : "%", "self_sufficiency", "up"),
-      tile("Net cost", null, dollars(m.net), m.net != null && m.net < 0 ? "credit" : "", "net", "down"),
+      tile("Net cost", null, dollars(m.net != null && m.net < 0 ? -m.net : m.net), m.net != null && m.net < 0 ? "credit" : "", "net", "down"),
       tile("Solar and battery value", null, dollars(m.saved), "", "saved", "up"));
     drawMonthly();
     const tb = $("mo-table"); tb.innerHTML = "";
