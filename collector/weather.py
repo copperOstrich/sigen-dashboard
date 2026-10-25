@@ -170,6 +170,12 @@ class Weather:
         d = datetime.fromtimestamp(ts, self.tz).replace(hour=0, minute=0, second=0, microsecond=0)
         return d.timestamp()
 
+    def location(self):
+        """Home as {lat, lon} (from SITE_LAT/SITE_LON or the looked-up SITE_ADDRESS), or None."""
+        if self.lat is None and not self.address:
+            return None
+        return self._locate()
+
     def _locate(self):
         if self.lat is not None and self.lon is not None:
             return {"lat": self.lat, "lon": self.lon, "name": None, "source": "SITE_LAT/SITE_LON"}

@@ -412,6 +412,30 @@ Each bill is spread over its days that have no costs yet, in proportion to each 
 and exports, after taking off any days already known, so monthly totals match the bills. A CSV with the same columns
 works too. The 5-minute **Power** export isn't needed and is skipped.
 
+### The car against a fuel car
+
+With an AC charger (or charging worked out from the inverter's figures), each charging session
+can be set against what a comparable petrol or diesel car would have spent on fuel for the same
+distance, at the servo prices near you that day. The Car charging panel shows the saving per
+session, this month and in total, and payback gets a third view, "+ fuel", where the car's
+energy is counted against fuel instead of grid power.
+
+| Setting | What it is |
+|---|---|
+| `EV_MODEL`, `EV_KWH_PER_100KM` | Your EV and its real-world energy use (kWh per 100 km) |
+| `COMPARE_VEHICLE`, `COMPARE_L_PER_100KM` | The fuel car to compare with and its fuel use (L per 100 km) |
+| `FUEL_TYPE` | `E10`, `U91`, `U95`, `U98` or `Diesel` (default `U91`) |
+| `FUEL_RADIUS_KM` | Stations within this distance of home, from `SITE_LAT`/`SITE_LON` or `SITE_ADDRESS` (default 10) |
+| `FUEL_EXCLUDE_BRANDS` | Brands to leave out, comma separated (default `Costco`, as members-only prices aren't what most people pay) |
+| `FUELCHECK_API_KEY`, `FUELCHECK_API_SECRET` | NSW (and Tasmania): live prices from FuelCheck. Free: sign up at [api.nsw.gov.au](https://api.nsw.gov.au), create an app and subscribe it to the Fuel API |
+| `FUELWATCH_SUBURB` | WA: live prices from FuelWatch, no account needed |
+| `FUEL_PRICE_C_L` | A fixed price (c/L), used where there's no live source and for sessions before prices were first recorded |
+
+The average price for your fuel type at the stations in range is recorded a few times a day, so
+every session is priced at its own day. A session's charging cost is its grid energy at what you
+paid, plus its solar energy at what that would have earned exported at the time (free when the
+export price is negative). The sessions download includes all of it.
+
 ## 3. AEMO market data (on by default, no account needed)
 
 Every 5 minutes the collector reads AEMO's public National Electricity Market feeds for

@@ -338,6 +338,36 @@ class Money:
                     if srem > 0 and savg > 0:
                         pay["standard"]["years_left"] = round(srem / savg / 365, 1)
                         pay["standard"]["payback_date"] = (date.today() + timedelta(days=int(srem / savg))).isoformat()
+                # a third view: as "your retailer's prices", but the car's charging counted against the
+                # fuel a comparable petrol or diesel car would have burnt (rather than grid power)
+                fuel = getattr(self, "fuel", None)
+                if fuel and fuel.enabled:
+                    ev_by_day = {d["day"]: d.get("ev") or 0 for d in days}
+                    series, extra, ev_total = [], 0.0, 0.0
+                    for day, v in per_day:
+                        ev, adj = ev_by_day.get(day, 0), 0.0
+                        if ev > 0:
+                            price, _ = fuel.price_on(day)
+                            buy = self.store.day_avg_buy_c(day)
+                            if buy is None and std_plan:
+                                buy = rates_on(std_plan, day).get("usage_c_kwh")
+                            if price and buy is not None:
+                                adj = ev * (fuel.per_kwh(price) - buy / 100)
+                                ev_total += ev
+                        extra += adj
+                        series.append((day, v + adj))
+                    ft = sum(x for _, x in series)
+                    rec = series[-365:]
+                    favg = sum(x for _, x in rec) / len(rec)
+                    fsaved = ft + (favg * pay["estimated_days"] if pay["estimated_days"] else 0)
+                    frem = self.system_cost - fsaved
+                    pay["with_fuel"] = {"saved": round(fsaved, 2), "per_day": round(favg, 2), "fuel_extra": round(extra, 2),
+                                        "car_kwh": round(ev_total, 1), "car": fuel.car, "fuel": fuel.fuel,
+                                        "pct": round(max(0, min(100, fsaved / self.system_cost * 100)), 1),
+                                        "paid_back": frem <= 0}
+                    if frem > 0 and favg > 0:
+                        pay["with_fuel"]["years_left"] = round(frem / favg / 365, 1)
+                        pay["with_fuel"]["payback_date"] = (date.today() + timedelta(days=int(frem / favg))).isoformat()
                 out["payback"] = pay
         return out
 

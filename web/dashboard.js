@@ -256,22 +256,27 @@
         ...(d.reason && !cmp ? [] : ["Set ", el("code", { text: "SYSTEM_COST" }), " (what the system cost, in dollars) and, optionally, ",
           el("code", { text: "SYSTEM_INSTALLED" }), " (the date it was switched on) to track when it pays for itself."])));
     } else {
-      const sd = pb.standard;
+      const sd = pb.standard, wf = pb.with_fuel;
+      // date on one line, years under it (so the cell never wraps mid-phrase)
       const when = (x) => (x.paid_back ? "already" : x.payback_date
-        ? `${new Date(x.payback_date + "T12:00:00").toLocaleDateString([], { month: "short", year: "numeric" })} (${x.years_left} yrs)` : "–");
+        ? el("span", {}, new Date(x.payback_date + "T12:00:00").toLocaleDateString([], { month: "short", year: "numeric" }),
+          el("small", { class: "yrs", text: `${x.years_left} yrs` })) : "–");
       const meter = (x, label) => el("div", {},
         el("div", { class: "meter-k" }, el("span", { text: label }), el("b", { text: `${Math.round(x.pct)}%` })),
         el("div", { class: "meter", role: "img", "aria-label": `${label}: ${Math.round(x.pct)}% of ${money$(pb.cost)} paid back` },
           x.estimated_before > 0 ? el("i", { class: "est", style: `width:${Math.min(100, x.estimated_before / pb.cost * 100)}%`, title: `Estimated before tracking: ${money$(x.estimated_before)}` }) : null,
           el("i", { style: `width:${Math.max(0, Math.min(100, x.pct) - Math.min(100, (x.estimated_before || 0) / pb.cost * 100))}%` })));
-      const lo = Math.round(sd ? Math.min(pb.pct, sd.pct) : pb.pct), hi = Math.round(sd ? Math.max(pb.pct, sd.pct) : pb.pct);
+      const views = [pb, sd, wf].filter(Boolean).map((x) => x.pct);
+      const lo = Math.round(Math.min(...views)), hi = Math.round(Math.max(...views));
       c2.append(el("div", { class: "big" }, lo === hi ? `${lo}%` : `${lo}–${hi}%`, el("small", { text: "paid back" })),
-        meter(pb, `Against ${me}'s prices`), sd ? meter(sd, `Against the ${sd.plan}`) : null);
+        meter(pb, `Against ${me}'s prices`), sd ? meter(sd, `Against the ${sd.plan}`) : null,
+        wf ? meter(wf, `${me} prices, car against fuel`) : null);
+      const cols = [[`${me}`, pb], sd ? [sd.plan === "Default Market Offer" ? "DMO" : sd.plan, sd] : null, wf ? ["+ fuel", wf] : null].filter(Boolean);
       const t = el("table", { class: "pb-table" },
-        el("tr", {}, el("th", { text: "" }), el("th", { text: `${me} prices` }), sd ? el("th", { text: sd.plan === "Default Market Offer" ? "DMO" : sd.plan }) : null),
-        el("tr", {}, el("td", { text: "Saved so far" }), el("td", { text: money$(pb.saved) }), sd ? el("td", { text: money$(sd.saved) }) : null),
-        el("tr", {}, el("td", { text: "Saving a day" }), el("td", { text: money$(pb.per_day, 2) }), sd ? el("td", { text: money$(sd.per_day, 2) }) : null),
-        el("tr", {}, el("td", { text: "Paid back" }), el("td", { text: when(pb) }), sd ? el("td", { text: when(sd) }) : null));
+        el("tr", {}, el("th", { text: "" }), ...cols.map(([h]) => el("th", { text: h }))),
+        el("tr", {}, el("td", { text: "Saved so far" }), ...cols.map(([, x]) => el("td", { text: money$(x.saved) }))),
+        el("tr", {}, el("td", { text: "Saving a day" }), ...cols.map(([, x]) => el("td", { text: money$(x.per_day, 2) }))),
+        el("tr", {}, el("td", { text: "Paid back" }), ...cols.map(([, x]) => el("td", {}, when(x)))));
       c2.append(t);
       if (sd) {
         const diff = sd.per_day - pb.per_day;
@@ -289,6 +294,7 @@
         `Daily savings are the average of ${pb.average_days} day${pb.average_days === 1 ? "" : "s"}` +
         (pb.average_days < 330 ? " and will swing with the seasons until there's a year of history." : ".") +
         (pb.estimated_days > 0 ? " Striped parts are estimated at that average for the days before the collector started." : "") +
+        (wf ? ` "+ fuel": as "${me}", but the car's ${wf.car_kwh} kWh counted against the ${wf.fuel === "DIESEL" ? "diesel" : "petrol"} ${wf.car} would have burnt (${money$(wf.fuel_extra)} more so far).` : "") +
         (pb.imported_days ? ` ${pb.imported_days} days come from a mySigen export, priced from ${me}'s bills or daily prices` +
           (pb.previous_days ? ` (the ${pb.previous_days} days before you joined ${me} are on the ${pb.previous_plan} in both views: an estimate)` : "") + "." : "") }));
     }
@@ -810,8 +816,11 @@
     const tb = $("ev-sessions"); tb.innerHTML = "";
     const list = (evData && evData.sessions || []).slice(0, 8);
     const inf = evInferred();
+    const fu = evData && evData.fuel && evData.fuel.enabled ? evData.fuel : null;
+    renderEvFuel(fu);
     tb.append(el("tr", {}, el("th", { text: inf ? "Started" : "Plugged in" }), inf ? null : el("th", { text: "For" }), el("th", { text: "Charging" }),
-      el("th", { text: "Energy" }), el("th", { class: "hide-sm", text: "From grid" }), el("th", { class: "hide-sm", text: "Grid cost" })));
+      el("th", { text: "Energy" }), el("th", { class: "hide-sm", text: "From grid" }), el("th", { class: "hide-sm", text: "Grid cost" }),
+      fu ? el("th", { class: "hide-sm", text: "Fuel equiv." }) : null, fu ? el("th", { text: "Saved" }) : null));
     if (!list.length) {
       tb.append(el("tr", {}, el("td", { colspan: 6, class: "muted", style: "font-family:var(--font)", text: "No charging sessions recorded yet." })));
     }
@@ -824,13 +833,37 @@
         el("td", {}, r.charging_s ? dur(r.charging_s) : el("span", { class: "tag warn", text: open ? "not yet" : "never charged" })),
         el("td", { text: S.kwh(r.kwh) }),
         el("td", { class: "hide-sm", text: S.kwh(r.grid_kwh) }),
-        el("td", { class: "hide-sm", text: r.cost == null ? "–" : `$${r.cost.toFixed(2)}` })));
+        el("td", { class: "hide-sm", text: r.cost == null ? "–" : `$${r.cost.toFixed(2)}` }),
+        fu ? el("td", { class: "hide-sm", title: r.fuel && r.fuel.fuel_cost != null ? `${r.fuel.km} km: ${r.fuel.litres} L at ${r.fuel.price_c}c/L` +
+          (r.fuel.price_from === "recorded" ? "" : r.fuel.price_from === "fixed" ? " (your fixed price)" : " (nearest recorded price)") +
+          `; charging cost $${(r.fuel.charge_cost ?? 0).toFixed(2)} (grid $${(r.cost ?? 0).toFixed(2)} + solar $${(r.fuel.solar_cost ?? 0).toFixed(2)} at the export price)` : null,
+          text: r.fuel && r.fuel.fuel_cost != null ? `$${r.fuel.fuel_cost.toFixed(2)}` : "–" }) : null,
+        fu ? el("td", { text: r.fuel && r.fuel.saved != null ? `${r.fuel.saved < 0 ? "−" : ""}$${Math.abs(r.fuel.saved).toFixed(2)}` : "–" }) : null));
     }
     const links = $("ev-links"); links.innerHTML = "";
     const base = S.apiBase();
     links.append(
       el("a", { href: `${base}/api/ev-sessions?format=csv&days=800`, download: "ev-charging-sessions.csv", target: "_blank", text: "Download all sessions (CSV)" }),
       el("a", { href: `${base}/api/ev-log?format=csv&days=800`, download: "ev-charger-states.csv", target: "_blank", text: "Download the charger's state log (CSV)" }));
+  }
+
+  function renderEvFuel(fu) {
+    const box = $("ev-fuel");
+    box.hidden = !fu; box.innerHTML = "";
+    if (!fu) return;
+    const t = fu.totals || {};
+    const where = fu.source === "fixed" ? "your fixed price" : fu.source === "simulator" ? "simulated prices"
+      : `the average of ${(fu.stations || []).length} stations within ${fu.radius_km} km (${fu.source})`;
+    box.append(
+      el("div", { class: "ev-fuel-head" },
+        el("span", { class: "big" }, t.saved != null ? `$${Math.abs(t.saved).toFixed(2)}` : "–",
+          el("small", { text: t.saved != null && t.saved < 0 ? "more than fuel" : "saved on fuel" })),
+        el("span", { class: "muted", text: t.sessions ? `${t.sessions} session${t.sessions === 1 ? "" : "s"}, ${t.km.toLocaleString()} km, ${t.litres} L of ${fu.fuel_label}` +
+          (t.this_month ? `; $${t.this_month.toFixed(2)} this month` : "") : "No charging sessions to compare yet" })),
+      el("p", { class: "chart-note", text: `${fu.ev_model} at ${fu.ev_kwh_per_100km} kWh/100 km against ${fu.car} at ${fu.car_l_per_100km} L/100 km` +
+        (fu.price_c ? `, ${fu.fuel_label} at ${fu.price_c}c/L today (${where})` : "") +
+        `. Each session uses that day's price. Charging costs the grid energy at what you paid, plus solar energy at what it would have earned exported (free when the export price is negative).` +
+        (fu.status === "error" ? ` Fuel prices: ${fu.error}.` : "") }));
   }
 
   async function loadEv() {

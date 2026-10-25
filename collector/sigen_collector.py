@@ -85,13 +85,14 @@ from weather import Weather  # noqa: E402
 from outlook import Outlook  # noqa: E402
 from money import Money  # noqa: E402
 from importer import import_folder  # noqa: E402
+from fuel import Fuel  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.7.5"
+VERSION = "1.8.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -140,6 +141,12 @@ SYSTEM_INSTALLED = (ENV("SYSTEM_INSTALLED", "") or "").strip()
 RETAILER_SUPPLY_C_DAY = _env_num("RETAILER_SUPPLY_C_DAY", None)
 RETAILER_FEE_MONTHLY = _env_num("RETAILER_FEE_MONTHLY", None)
 RETAILER_SINCE = (ENV("RETAILER_SINCE", "") or "").strip()
+# the car against a fuel car (see fuel.py)
+FUEL_SETTINGS = {k: (_env_num(k, None) if k in ("EV_KWH_PER_100KM", "COMPARE_L_PER_100KM", "FUEL_RADIUS_KM", "FUEL_PRICE_C_L")
+                     else (ENV(k, None) if k == "FUEL_EXCLUDE_BRANDS" else (ENV(k, "") or "").strip()))
+                 for k in ("EV_MODEL", "EV_KWH_PER_100KM", "COMPARE_VEHICLE", "COMPARE_L_PER_100KM", "FUEL_TYPE",
+                           "FUEL_RADIUS_KM", "FUEL_EXCLUDE_BRANDS", "FUEL_PRICE_C_L", "FUELCHECK_API_KEY",
+                           "FUELCHECK_API_SECRET", "FUELWATCH_SUBURB")}
 INSULATION_CONFIRM = 3  # consecutive readings either side of the limit before it counts
 
 COUNTERS = ["total_pv_kwh", "total_load_kwh", "total_import_kwh", "total_export_kwh",
@@ -189,6 +196,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS amber_days(
               day TEXT PRIMARY KEY, import_kwh REAL, import_cost REAL, export_kwh REAL,
               export_cost REAL, estimated INTEGER);
+            CREATE TABLE IF NOT EXISTS fuel_prices(
+              day TEXT, fuel TEXT, sum_c REAL, n INTEGER, stations INTEGER, source TEXT, PRIMARY KEY(day, fuel));
             CREATE TABLE IF NOT EXISTS imported_days(
               day TEXT PRIMARY KEY, pv REAL, load REAL, ev REAL, charge REAL, discharge REAL,
               import REAL, export REAL, source TEXT);
@@ -266,6 +275,45 @@ class Store:
             rows = self.db.execute("SELECT day, pv, load, ev, charge, discharge, import, export FROM imported_days "
                                    "WHERE day>? ORDER BY day", (since,)).fetchall()
         return {r[0]: dict(zip(("pv", "load", "ev", "charge", "discharge", "import", "export"), r[1:])) for r in rows}
+
+    # ---- fuel prices (for the car's fuel equivalent)
+    def save_fuel_price(self, day, fuel, price_c, stations, source):
+        """Add a reading to the day's average for that fuel."""
+        with self.lock:
+            self.db.execute("INSERT INTO fuel_prices VALUES (?,?,?,1,?,?) ON CONFLICT(day, fuel) DO UPDATE SET "
+                            "sum_c=sum_c+excluded.sum_c, n=n+1, stations=excluded.stations, source=excluded.source",
+                            (day, fuel, price_c, stations, source))
+            self.db.commit()
+
+    def fuel_price(self, day, fuel):
+        with self.lock:
+            r = self.db.execute("SELECT sum_c/n FROM fuel_prices WHERE day=? AND fuel=?", (day, fuel)).fetchone()
+        return r[0] if r else None
+
+    def fuel_price_nearest(self, day, fuel):
+        """The recorded price closest in time (before, else after) to a day."""
+        with self.lock:
+            r = (self.db.execute("SELECT sum_c/n FROM fuel_prices WHERE day<? AND fuel=? ORDER BY day DESC LIMIT 1",
+                                 (day, fuel)).fetchone() or
+                 self.db.execute("SELECT sum_c/n FROM fuel_prices WHERE day>? AND fuel=? ORDER BY day LIMIT 1",
+                                 (day, fuel)).fetchone())
+        return r[0] if r else None
+
+    def avg_sell_c(self, t0, t1):
+        """Average export price you'd have earned (c/kWh, positive = paid) between two times."""
+        with self.lock:
+            r = self.db.execute("SELECT AVG(-sell_c) FROM samples WHERE ts>=? AND ts<=? AND sell_c IS NOT NULL",
+                                (int(t0), int(t1))).fetchone()
+        return r[0] if r and r[0] is not None else None
+
+    def day_avg_buy_c(self, day):
+        with self.lock:
+            r = self.db.execute("SELECT AVG(buy_c), COUNT(buy_c) FROM samples WHERE day=? AND buy_c IS NOT NULL",
+                                (day,)).fetchone()
+            if r and r[1] and r[1] > 600:
+                return r[0]
+            a = self.db.execute("SELECT avg_buy_c FROM amber_days WHERE day=?", (day,)).fetchone()
+        return a[0] if a and a[0] is not None else None
 
     def imported_day(self, day):
         with self.lock:
@@ -1231,17 +1279,28 @@ class Api(BaseHTTPRequestHandler):
             return self._json([{"t": ts, "state_code": st, "state": code, "power": p, "set_current": a}
                                for ts, st, code, p, a in rows])
         sessions = self.store.ev_sessions(days)
+        if self.fuel.enabled:
+            for x in sessions:
+                x["fuel"] = self.fuel.session(x)
         if path == "/api/ev-sessions" and csv:
+            fcols = ",km,fuel_litres,fuel_price_c_per_l,fuel_price_from,fuel_cost_dollars,solar_kwh,solar_at_export_dollars," \
+                    "charging_cost_dollars,saved_dollars" if self.fuel.enabled else ""
             lines = ["plugged_in,unplugged,minutes_plugged_in,minutes_charging,kwh,kwh_from_grid,"
-                     "grid_cost_dollars,peak_kw,states_seen"]
+                     "grid_cost_dollars,peak_kw,states_seen" + fcols]
+            v = lambda n, f="{:.2f}": "" if n is None else f.format(n)
             for x in sessions:
                 mins = round(((x["end"] or time.time()) - x["start"]) / 60)
                 cost = "" if x["cost"] is None else f"{x['cost']:.2f}"
-                lines.append(f"{lt(x['start'])},{lt(x['end'])},{mins},{round((x['charging_s'] or 0) / 60)},"
-                             f"{x['kwh']:.2f},{x['grid_kwh']:.2f},{cost},{x['peak_w'] / 1000:.2f},"
-                             f"{(x['states'] or '').replace(',', ' ')}")
+                row = (f"{lt(x['start'])},{lt(x['end'])},{mins},{round((x['charging_s'] or 0) / 60)},"
+                       f"{x['kwh']:.2f},{x['grid_kwh']:.2f},{cost},{x['peak_w'] / 1000:.2f},"
+                       f"{(x['states'] or '').replace(',', ' ')}")
+                if self.fuel.enabled:
+                    f = x.get("fuel") or {}
+                    row += (f",{v(f.get('km'), '{}')},{v(f.get('litres'), '{}')},{v(f.get('price_c'), '{}')},{f.get('price_from') or ''},"
+                            f"{v(f.get('fuel_cost'))},{v(f.get('solar_kwh'))},{v(f.get('solar_cost'))},{v(f.get('charge_cost'))},{v(f.get('saved'))}")
+                lines.append(row)
             return self._csv("ev-charging-sessions.csv", lines)
-        out = {"sessions": sessions, "live": self.collector.charger.summary()}
+        out = {"sessions": sessions, "live": self.collector.charger.summary(), "fuel": self.fuel.summary(sessions)}
         if path == "/api/ev":
             out["log"] = [{"t": ts, "state_code": st, "state": code, "power": p}
                           for ts, st, code, p, _a in self.store.ev_states(min(days, 2))]
@@ -1320,6 +1379,10 @@ def main():
                   retailer_since=RETAILER_SINCE, log=log)
     Api.collector, Api.store, Api.retailer, Api.aemo, Api.weather = collector, store, retailer, aemo, weather
     Api.money = money
+    fuel = Fuel(store, TZ, FUEL_SETTINGS, locate=weather.location, simulate=SIMULATE, log=log)
+    Api.fuel = money.fuel = fuel
+    if fuel.enabled:
+        threading.Thread(target=fuel.run, daemon=True).start()
     httpd = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), Api)
     httpd.daemon_threads = True
     if SETTINGS_PATH:

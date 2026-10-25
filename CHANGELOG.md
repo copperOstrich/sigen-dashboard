@@ -3,6 +3,25 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.8.0
+
+### The car against a fuel car
+- Each charging session set against what a comparable petrol or diesel car would have spent on
+  fuel for the same distance (`EV_KWH_PER_100KM`, `COMPARE_L_PER_100KM`, `FUEL_TYPE`), at the
+  average price at stations within `FUEL_RADIUS_KM` of home that day, leaving out members-only
+  stations (`FUEL_EXCLUDE_BRANDS`, default Costco)
+- Live prices from NSW FuelCheck (free key) or WA FuelWatch, recorded a few times a day; or a
+  fixed price (`FUEL_PRICE_C_L`)
+- Charging cost counts solar energy at what it would have earned exported at the time
+- Car charging panel: saved on fuel per session, this month and in total; the sessions CSV has
+  distance, litres, fuel price and cost, charging cost and saving
+- Payback gets a third view, "+ fuel": the car's energy counted against fuel instead of grid power
+
+### Fixes
+- Net cost tiles and the printable report no longer show a minus sign next to "credit", which
+  could wrap onto its own line
+- Payback dates show the years on a line of their own, so the cells don't wrap mid-phrase
+
 ## 1.7.5
 
 - Payback shown two ways side by side: against your retailer's prices, and against the

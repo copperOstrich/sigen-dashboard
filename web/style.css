@@ -458,3 +458,9 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .pb-table th, .pb-table td { padding: 5px 0 5px 10px; text-align: right; border-top: 1px solid var(--rule); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pb-table th { color: var(--ink-3); font-weight: 500; border-top: 0; }
 .pb-table th:first-child, .pb-table td:first-child { text-align: left; padding-left: 0; color: var(--ink-2); }
+.ev-fuel { margin: 14px 0 6px; }
+.ev-fuel-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.ev-fuel .big { font: 600 28px/1.1 var(--font-num); font-variant-numeric: tabular-nums; }
+.ev-fuel .big small { font-size: 13px; font-weight: 500; color: var(--ink-2); margin-left: 4px; }
+.pb-table td small.yrs { display: block; font-size: 11.5px; color: var(--ink-3); }
+.pb-table td, .pb-table th { vertical-align: top; }
