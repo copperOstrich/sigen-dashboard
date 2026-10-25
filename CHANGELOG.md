@@ -7,13 +7,12 @@ update; the Docker image is tagged with the same version.
 
 ### Money
 - New **Money** panel
-- **Is your retailer worth it?** Your own grid use and exports, hour by hour, priced on other
-  retailers' plans (supply charge, usage rate flat or time of use, feed-in tariff) against what
-  you actually paid, month by month and over the last 12 months. Bundled 2026-27 standing
-  offers for AGL, Origin, EnergyAustralia and Red Energy on each NSW network
-  (`COMPARE_PLANS=nsw-ausgrid`, `nsw-endeavour` or `nsw-essential`), or your own plans in
-  `plans.json`. `RETAILER_SUPPLY_C_DAY` and `RETAILER_FEE_MONTHLY` add your own retailer's
-  fixed charges.
+- **Is your retailer worth it?** Your own grid use and exports, hour by hour, priced on the
+  Default Market Offer for your network (`COMPARE_PLANS=nsw-ausgrid`, `nsw-endeavour` or
+  `nsw-essential`; the standing-offer price cap, 2026-27) against what you actually paid, month
+  by month and over the last 12 months. Add your own quotes, time of use and feed-in in
+  `plans.json`. Plan prices are dated, so each year's apply from their start date.
+  `RETAILER_SUPPLY_C_DAY` and `RETAILER_FEE_MONTHLY` add your own retailer's fixed charges.
 - **Solar and battery payback** (`SYSTEM_COST`, `SYSTEM_INSTALLED`): savings so far against
   what the system cost, the daily saving and a projected payback date
 - **Battery trades with the grid**: each time the battery exported to the grid or charged from

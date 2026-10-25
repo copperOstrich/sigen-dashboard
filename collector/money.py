@@ -22,6 +22,14 @@ or, for time of use, rules checked in order (the last one with no conditions is 
 "hours": [start, end) in local time; "days": "weekdays" | "weekends" | "all". Public holidays
 are treated as ordinary days. "feed_in" takes the same rules as "usage".
 
+Prices change (usually each 1 July). To keep past months at the prices in force then, give a
+plan dated rate periods; each applies from its date until the next one (days before the first
+period use the first):
+
+  {"name": "Default Market Offer", "rates": [
+     {"from": "2026-07-01", "supply_c_day": 185.1, "usage_c_kwh": 33.7, "feed_in_c_kwh": 3.0},
+     {"from": "2027-07-01", "supply_c_day": ..., "usage_c_kwh": ..., "feed_in_c_kwh": ...}]}
+
 Payback
   SYSTEM_COST against savings: what the home and car would have cost from the grid without
   solar and battery, at your retailer's price each minute, minus what you actually paid for
@@ -64,6 +72,18 @@ def rate(rules, flat, lt):
                 return float(r.get("c_kwh") or 0)
         return 0.0
     return float(flat or 0)
+
+
+def rates_on(plan, day):
+    """The plan's prices in force on a local day ("YYYY-MM-DD"): its dated period, or the plan itself."""
+    periods = sorted(plan.get("rates") or [], key=lambda r: r.get("from", ""))
+    if not periods:
+        return plan
+    cur = periods[0]
+    for r in periods:
+        if r.get("from", "") <= day:
+            cur = r
+    return cur
 
 
 class Money:
@@ -117,16 +137,17 @@ class Money:
             return self._day_cache[key]
         flows = self.store.hourly_flows(day)
         out = {"plans": {}, "baseline": None, "import": 0.0, "export": 0.0, "load": 0.0}
-        for p in plans["plans"]:
+        for plan in plans["plans"]:
+            p = rates_on(plan, day)
             usage = feed = 0.0
             for h, imp, exp, load in flows:
                 lt = datetime.fromtimestamp(h, self.tz)
                 usage += imp * rate(p.get("usage"), p.get("usage_c_kwh"), lt)
                 feed += exp * rate(p.get("feed_in"), p.get("feed_in_c_kwh"), lt)
             supply = float(p.get("supply_c_day") or 0)
-            out["plans"][p["name"]] = {"supply": supply / 100, "usage": usage / 100, "feed_in": feed / 100,
-                                       "total": (supply + usage - feed) / 100}
-        base = plans["plans"][0] if plans["plans"] else None
+            out["plans"][plan["name"]] = {"supply": supply / 100, "usage": usage / 100, "feed_in": feed / 100,
+                                          "total": (supply + usage - feed) / 100}
+        base = rates_on(plans["plans"][0], day) if plans["plans"] else None
         if base:  # energy only (fallback for payback when there are no per-minute prices)
             out["baseline"] = sum(load * rate(base.get("usage"), base.get("usage_c_kwh"),
                                               datetime.fromtimestamp(h, self.tz)) for h, imp, exp, load in flows) / 100
@@ -176,10 +197,15 @@ class Money:
         # ---- comparison
         if plans and plans["plans"]:
             out["plans"] = {k: plans[k] for k in ("source", "title", "as_of", "note")}
-            out["plans"]["list"] = [{"name": p["name"], "plan": p.get("plan"), "source": p.get("source"),
-                                     "supply_c_day": p.get("supply_c_day"), "usage_c_kwh": p.get("usage_c_kwh"),
-                                     "feed_in_c_kwh": p.get("feed_in_c_kwh"), "tou": bool(p.get("usage"))}
-                                    for p in plans["plans"]]
+            lst = []
+            for p in plans["plans"]:
+                r = rates_on(p, today)  # today's prices, for the notes
+                firsts = sorted(x.get("from", "") for x in p.get("rates") or [])
+                lst.append({"name": p["name"], "plan": p.get("plan"), "source": r.get("source") or p.get("source"),
+                            "supply_c_day": r.get("supply_c_day"), "usage_c_kwh": r.get("usage_c_kwh"),
+                            "feed_in_c_kwh": r.get("feed_in_c_kwh"), "tou": bool(r.get("usage")),
+                            "from": r.get("from"), "first_from": firsts[0] if firsts else None})
+            out["plans"]["list"] = lst
             months = {}
             for d in complete:
                 r = self._day(d["day"], plans, today)

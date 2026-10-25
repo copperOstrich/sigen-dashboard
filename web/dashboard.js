@@ -215,14 +215,14 @@
     if (panel.hidden) return;
     const me = d.retailer || "Your retailer";
     const cmp = d.compare, pb = d.payback, tr = d.trades || {}, pl = d.plans;
-    $("money-sub").textContent = pl && pl.title ? `compared with standing offers, ${pl.title}` : "";
+    $("money-sub").textContent = pl ? `compared with ${pl.list.length === 1 ? `the ${pl.list[0].name}` : "other plans"}${pl.title ? `, ${pl.title}` : ""}` : "";
 
     // ---- is your retailer worth it?
     const c1 = $("money-compare"); c1.innerHTML = "";
     c1.append(el("h3", { text: `Is ${me} worth it?` }));
     if (!pl) {
       c1.append(el("div", { class: "setup" },
-        el("p", { text: "Compare what you pay with other retailers' standard plans, using your own usage hour by hour." }),
+        el("p", { text: "Compare what you pay with the Default Market Offer (the standard-plan price cap) or your own quotes, using your own usage hour by hour." }),
         el("p", {}, "Set ", el("code", { text: "COMPARE_PLANS" }), " to ", el("code", { text: "nsw-ausgrid" }), ", ",
           el("code", { text: "nsw-endeavour" }), " or ", el("code", { text: "nsw-essential" }),
           ", or put your own plans in ", el("code", { text: "plans.json" }), " in the data folder.")));
@@ -232,7 +232,7 @@
       const t = cmp.total, best = t.cheapest, diff = t.saving_vs_cheapest;
       const span = t.days >= 360 ? "the last 12 months" : `the last ${t.days} day${t.days === 1 ? "" : "s"}`;
       c1.append(el("div", { class: "big" }, money$(Math.abs(diff)), el("small", { text: diff >= 0 ? "saved" : "extra" })),
-        el("p", { class: "lead", text: `${me} cost ${money$(Math.abs(diff))} ${diff >= 0 ? "less" : "more"} than the cheapest standing offer (${best}) over ${span}${cmp.energy_only ? ", energy only" : ""}.` }));
+        el("p", { class: "lead", text: `${me} cost ${money$(Math.abs(diff))} ${diff >= 0 ? "less" : "more"} than ${pl.list.length === 1 ? `the ${best}` : `the cheapest alternative (${best})`} over ${span}${cmp.energy_only ? ", energy only" : ""}.` }));
       const rows = [[me, t.actual, true], ...Object.entries(t.plans).map(([n, v]) => [n, v, false])].sort((a, b) => a[1] - b[1]);
       const max = Math.max(...rows.map((r) => Math.abs(r[1])), 1);
       for (const [n, v, mine] of rows) {
@@ -316,7 +316,10 @@
       notes.push(`Each plan priced on your own grid use and exports, hour by hour${cmp && cmp.energy_only ? "" : ", with its daily supply charge"}. The same energy flows are used for every plan; on another plan the battery might be run differently, so treat this as a guide.`);
       if (cmp && cmp.energy_only) notes.push(`Energy only: set RETAILER_SUPPLY_C_DAY (and RETAILER_FEE_MONTHLY for a membership fee) from your ${me} bill to include supply charges.`);
       else if (d.fixed_known) notes.push(`${me} includes your ${d.supply_c_day}c/day supply charge${d.fee_monthly ? ` and ${money$(d.fee_monthly, 2)}/month fee` : ""}.`);
-      notes.push(`Plans (${pl.source}${pl.as_of ? `, prices from ${pl.as_of}` : ""}): ` + pl.list.map((p) => `${p.name} ${p.tou ? "time of use" : `${(+p.usage_c_kwh).toFixed(2)}c/kWh`}, ${(+p.supply_c_day).toFixed(2)}c/day, feed-in ${p.feed_in_c_kwh == null ? "–" : `${p.feed_in_c_kwh}c`}`).join("; ") + ".");
+      const fromTxt = (d) => new Date(d + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+      notes.push(`Current prices (${pl.source}): ` + pl.list.map((p) => `${p.name} ${p.tou ? "time of use" : `${(+p.usage_c_kwh).toFixed(2)}c/kWh`}, ${(+p.supply_c_day).toFixed(2)}c/day, feed-in ${p.feed_in_c_kwh == null ? "–" : `${p.feed_in_c_kwh}c`}${p.from ? ` from ${fromTxt(p.from)}` : ""}`).join("; ") + ".");
+      const early = pl.list.find((p) => p.first_from && cmp && cmp.months && cmp.months.length && cmp.months[0].month + "-31" < p.first_from);
+      if (early) notes.push(`Months before ${fromTxt(early.first_from)} use the earliest prices in the plans file.`);
     }
     $("money-note").textContent = notes.join(" ");
   }

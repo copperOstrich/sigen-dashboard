@@ -105,14 +105,14 @@ AEMO's wholesale price, your region's generation mix, and every NEM region side 
   <img alt="Electricity price chart with Amber buy and sell prices and AEMO wholesale price, and the grid generation mix" src="docs/screenshots/prices-grid-light.png">
 </picture>
 
-**Money**: whether your retailer is worth it against other retailers' standard plans, priced
-on your own usage hour by hour; how far the solar and battery are towards paying for
+**Money**: whether your retailer is worth it against the Default Market Offer (or your own
+quotes), priced on your own usage hour by hour; how far the solar and battery are towards paying for
 themselves; and every time the battery traded with the grid (for example Amber SmartShift),
 with what it earned.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/money-dark.png">
-  <img alt="Money panel: Amber compared with four standing offers, solar and battery payback progress with an estimated payback date, and recent battery exports to the grid with their value" src="docs/screenshots/money-light.png">
+  <img alt="Money panel: Amber compared with the Default Market Offer, solar and battery payback progress with an estimated payback date, and recent battery exports to the grid with their value" src="docs/screenshots/money-light.png">
 </picture>
 
 **Battery outlook**: where the battery's charge is heading until the end of tomorrow, with
@@ -354,17 +354,20 @@ Notes:
 
 The **Money** panel needs retailer prices (above) and a little setup in `sigen.env`:
 
-* **Is your retailer worth it?** Your own grid use and exports, hour by hour, priced on other
-  retailers' plans: daily supply charge, usage rate (flat or time of use) and feed-in tariff,
-  against what you actually paid, for each month and the last 12 months. Set
-  `COMPARE_PLANS` to a bundled set of standing offers (the default plans) for your network:
-  `nsw-ausgrid`, `nsw-endeavour` or `nsw-essential` (AGL, Origin, EnergyAustralia and Red
-  Energy, from 1 July 2026). Or copy one of [`collector/plans/`](collector/plans) to
-  `plans.json` in your data folder and edit it: any retailer, your own quote, time-of-use
-  windows, a different feed-in rate. Set `RETAILER_SUPPLY_C_DAY` (and `RETAILER_FEE_MONTHLY`
-  for a membership fee) from your own bill so your side includes them too; without them the
-  comparison is energy only. Every plan uses the same energy flows, so it's a guide: on a
-  different plan the battery might be run differently.
+* **Is your retailer worth it?** Your own grid use and exports, hour by hour, priced on
+  another plan (daily supply charge, usage rate flat or time of use, feed-in tariff) against
+  what you actually paid, for each month and the last 12 months. Set `COMPARE_PLANS` to your
+  network, `nsw-ausgrid`, `nsw-endeavour` or `nsw-essential`, to compare with the **Default
+  Market Offer**: the price cap the Australian Energy Regulator sets each year for standing
+  offers, which the big retailers' default plans sit at. It's official and changes once a year,
+  so nothing depends on retailer websites. Prices are dated: each year's apply from its 1 July,
+  so past months keep the prices in force then. To compare with a real quote too (market
+  offers are usually cheaper than the DMO), copy a file from [`collector/plans/`](collector/plans)
+  to `plans.json` in your data folder and add plans to it; time-of-use windows and your own
+  feed-in rate work there. Set `RETAILER_SUPPLY_C_DAY` (and `RETAILER_FEE_MONTHLY` for a
+  membership fee) from your own bill so your side includes them; without them the comparison
+  is energy only. Every plan uses the same energy flows, so it's a guide: on a different plan
+  the battery might be run differently.
 * **Payback**: set `SYSTEM_COST` (dollars) and optionally `SYSTEM_INSTALLED` (`2025-03-15`).
   Savings are what your home and car would have cost from the grid without solar and battery,
   at your retailer's price each minute, minus what you paid for energy (supply charges are paid
@@ -566,7 +569,7 @@ start; restart the container after editing).
 | `SOLAR_PLANES` | Roof faces as `tilt:azimuth:kW`, comma separated | one north face at 20° |
 | `WEATHER_ENABLED` | `0` to turn weather off | on |
 | **Checks** | | |
-| `COMPARE_PLANS` | Standing offers to compare with: `nsw-ausgrid`, `nsw-endeavour`, `nsw-essential` (or put `plans.json` in the data folder) | off |
+| `COMPARE_PLANS` | Compare with the Default Market Offer for your network: `nsw-ausgrid`, `nsw-endeavour`, `nsw-essential` (or put `plans.json` in the data folder) | off |
 | `RETAILER_SUPPLY_C_DAY` / `RETAILER_FEE_MONTHLY` | Your own retailer's daily supply charge (c/day) and monthly fee ($), from your bill | not included |
 | `SYSTEM_COST` / `SYSTEM_INSTALLED` | What the solar and battery cost ($) and the date it was switched on, for payback | off |
 | `INSULATION_WARN_MOHM` / `INSULATION_MIN_MOHM` | Insulation resistance warning and alarm levels, MΩ | `0.5` / `0.37` |

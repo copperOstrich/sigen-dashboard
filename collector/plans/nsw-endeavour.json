@@ -1,39 +1,19 @@
 {
   "title": "NSW, Endeavour Energy network",
-  "as_of": "2026-07-01",
-  "note": "Standing offers (the default plans) for residential single-rate customers, from 1 July 2026, incl. GST. AGL and EnergyAustralia from their published standing offer prices; Origin and Red Energy set to the Default Market Offer cap, which standing offers sit at or very close to. Feed-in: 3c/kWh, about what standard plans pay (IPART's 2026-27 benchmark is 3.4 to 6.5c). Check your own quote on Energy Made Easy and copy this file to plans.json in your data folder to change anything.",
+  "note": "The Default Market Offer: the price cap the Australian Energy Regulator sets each year for retailers' standing offers (the default plans you're on if you never chose one). Standing offers sit at or just under it (AGL's and EnergyAustralia's for 2026-27 are within a hundredth of a cent). Residential single rate, incl. GST. Feed-in 3c/kWh, about what standard plans pay (the DMO doesn't set a feed-in rate; IPART's 2026-27 benchmark is 3.4 to 6.5c). Each 1 July, add the new year to \"rates\"; earlier months keep the prices in force then. Most market offers are cheaper than the DMO: to compare with a real quote, copy this file to plans.json in your data folder and add it.",
   "plans": [
     {
-      "name": "AGL",
-      "plan": "Standing offer, single rate",
-      "supply_c_day": 185.00482,
-      "usage_c_kwh": 33.72732,
-      "feed_in_c_kwh": 3.0,
-      "source": "AGL standing offer prices NSW, 1 July 2026"
-    },
-    {
-      "name": "Origin",
-      "plan": "Standing offer, single rate",
-      "supply_c_day": 185.135,
-      "usage_c_kwh": 33.7273,
-      "feed_in_c_kwh": 3.0,
-      "source": "AER Default Market Offer 2026-27 cap (retailer's own standing offer not checked)"
-    },
-    {
-      "name": "EnergyAustralia",
-      "plan": "Standing offer, single rate",
-      "supply_c_day": 185.1344,
-      "usage_c_kwh": 33.71929,
-      "feed_in_c_kwh": 3.0,
-      "source": "EnergyAustralia standard retail contract rates NSW, 1 July 2026"
-    },
-    {
-      "name": "Red Energy",
-      "plan": "Standing offer, single rate",
-      "supply_c_day": 185.135,
-      "usage_c_kwh": 33.7273,
-      "feed_in_c_kwh": 3.0,
-      "source": "AER Default Market Offer 2026-27 cap (retailer's own standing offer not checked)"
+      "name": "Default Market Offer",
+      "plan": "Standing offer cap, single rate",
+      "rates": [
+        {
+          "from": "2026-07-01",
+          "supply_c_day": 185.135,
+          "usage_c_kwh": 33.7273,
+          "feed_in_c_kwh": 3.0,
+          "source": "AER Default Market Offer 2026-27 final determination (DMO 8)"
+        }
+      ]
     }
   ]
 }
