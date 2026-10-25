@@ -393,7 +393,20 @@ With Amber, the collector also fetches Amber's daily costs back to the first imp
 (a few requests at a time), so those days have real dollars. Amber's service only reaches back
 about 90 days; the log says how far it got. If you joined your retailer after the system was
 switched on, set `RETAILER_SINCE`: the days before count towards payback, priced on the
-comparison plan, and are left out of the comparison. A CSV with the same columns
+comparison plan, and are left out of the comparison.
+
+For older days than your retailer's service returns, use your bills: a CSV in the same
+`import` folder, one row per bill (dollars incl. GST):
+
+```
+start,end,energy_cost,export_credit,avg_buy_c
+2026-05-10,2026-05-31,18.94,30.48,19.35
+```
+
+`energy_cost` is the bill's usage and network demand charges (not the supply charge or fee),
+`export_credit` what it credited for exports, and `avg_buy_c` (optional) its average usage rate.
+Each bill is spread over its days that have no costs yet, in proportion to each day's grid use
+and exports, after taking off any days already known, so monthly totals match the bills. A CSV with the same columns
 works too. The 5-minute **Power** export isn't needed and is skipped.
 
 ## 3. AEMO market data (on by default, no account needed)

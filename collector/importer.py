@@ -8,7 +8,19 @@ export. The file is "stationData-...-Energy.xlsx" with one row per day:
   Grid Exported Energy (kWh) | Revenue(A$)
 
 Put it (or a CSV with the same columns) in the data folder's "import" folder and restart the
-collector. Each file is imported once and renamed to "*.imported". Imported days only fill in
+collector.
+
+Retailer bills for days older than the retailer's own service reaches (Amber: about 90 days)
+can go in the same folder as a CSV, one row per bill, amounts in dollars incl. GST:
+
+  start,end,energy_cost,export_credit,avg_buy_c
+  2026-05-10,2026-05-31,18.94,30.48,19.35
+
+energy_cost is the usage and network demand charges (not the supply charge or membership fee,
+which come from RETAILER_SUPPLY_C_DAY / RETAILER_FEE_MONTHLY); export_credit is what the bill
+credits for exports; avg_buy_c (optional) is the bill's average usage rate in c/kWh. Each bill is
+spread over its days that have no costs yet, in proportion to each day's grid use and exports
+from the imported mySigen days, after taking off days whose costs are already known. Each file is imported once and renamed to "*.imported". Imported days only fill in
 days the collector didn't record itself; they never replace its own readings. Other exports
 (the 5-minute "Power" file, or yearly totals) are recognised and skipped.
 
@@ -102,15 +114,48 @@ def parse_daily(rows):
     return out
 
 
+def parse_bills(rows):
+    """[{start, end, energy_cost, export_credit, avg_buy_c}] from a bills CSV, or None if it isn't one."""
+    if not rows:
+        return None
+    head = [(h or "").strip().lower() for h in rows[0]]
+    if not {"start", "end", "energy_cost", "export_credit"} <= set(head):
+        return None
+    ix = {h: i for i, h in enumerate(head)}
+    out = []
+    for r in rows[1:]:
+        if not r or not DAY.match((r[ix["start"]] or "").strip()):
+            continue
+        num = lambda k: float(r[ix[k]]) if k in ix and ix[k] < len(r) and (r[ix[k]] or "").strip() else None
+        b = {"start": r[ix["start"]].strip(), "end": r[ix["end"]].strip(), "energy_cost": num("energy_cost") or 0.0,
+             "export_credit": num("export_credit") or 0.0, "avg_buy_c": num("avg_buy_c")}
+        if not DAY.match(b["end"]) or b["end"] < b["start"]:
+            raise ValueError(f"bill {b['start']}: end date isn't a date after the start")
+        out.append(b)
+    if not out:
+        raise ValueError("the bills file has no rows")
+    return out
+
+
 def import_folder(store, data_dir, log=print):
-    """Import every new file in DATA_DIR/import. Returns the number of days imported."""
+    """Import every new file in DATA_DIR/import (mySigen days first, then bills). Returns days imported."""
     folder = Path(data_dir) / "import"
     if not folder.is_dir():
         return 0
     total = 0
-    for f in sorted(folder.iterdir()):
-        if f.suffix.lower() not in (".xlsx", ".csv") or f.name.startswith("."):
-            continue
+    files = [f for f in sorted(folder.iterdir()) if f.suffix.lower() in (".xlsx", ".csv") and not f.name.startswith(".")]
+    bills = []
+    for f in files:
+        if f.suffix.lower() == ".csv":
+            try:
+                b = parse_bills(read_rows(f))
+            except (ValueError, OSError, IndexError) as e:
+                log(f"Import: skipped {f.name}: {e}")
+                f.rename(f.with_name(f.name + ".skipped"))
+                continue
+            if b is not None:
+                bills.append((f, b))
+                continue
         try:
             days = parse_daily(read_rows(f))
         except (ValueError, zipfile.BadZipFile, ET.ParseError, OSError, KeyError, IndexError) as e:
@@ -122,4 +167,12 @@ def import_folder(store, data_dir, log=print):
         log(f"Import: {f.name}: {len(days)} days, {first} to {last} ({n} new or updated)")
         f.rename(f.with_name(f.name + ".imported"))
         total += n
+    for f, bs in bills:  # after the days, so each bill can be spread over them
+        for b in bs:
+            r = store.apply_bill(b)
+            log(f"Import: {f.name}: bill {b['start']} to {b['end']}: ${b['energy_cost']:.2f} energy, "
+                f"${b['export_credit']:.2f} credit, spread over {r['filled']} days"
+                + (f" ({r['known']} days already had costs)" if r["known"] else "")
+                + ("" if r["filled"] else "; no days without costs and with imported figures to spread it over"))
+        f.rename(f.with_name(f.name + ".imported"))
     return total

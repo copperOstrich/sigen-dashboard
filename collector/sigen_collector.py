@@ -91,7 +91,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.7.3"
+VERSION = "1.7.4"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -240,6 +240,26 @@ class Store:
                  v.get("export"), source) for d, v in days.items()])
             self.db.commit()
         return len(days)
+
+    def apply_bill(self, b):
+        """Spread a retailer bill over its days that have no costs yet (see importer.py)."""
+        with self.lock:
+            known = {r[0]: r for r in self.db.execute(
+                "SELECT day, import_cost, export_cost FROM amber_days WHERE day>=? AND day<=?", (b["start"], b["end"]))}
+            imp = {r[0]: (r[1] or 0.0, r[2] or 0.0) for r in self.db.execute(
+                "SELECT day, import, export FROM imported_days WHERE day>=? AND day<=?", (b["start"], b["end"]))}
+        energy = b["energy_cost"] * 100 - sum(r[1] or 0 for r in known.values())     # cents
+        credit = b["export_credit"] * 100 + sum(r[2] or 0 for r in known.values())   # cents (export_cost < 0 when paid)
+        todo = {d: v for d, v in imp.items() if d not in known}
+        ti, te = sum(v[0] for v in todo.values()), sum(v[1] for v in todo.values())
+        days = {}
+        for d, (i, e) in todo.items():
+            days[d] = {"import_kwh": i, "import_cost": max(0.0, energy) * (i / ti if ti else 1 / len(todo)),
+                       "export_kwh": e, "export_cost": -max(0.0, credit) * (e / te if te else 1 / len(todo)),
+                       "estimated": True, "avg_buy_c": b.get("avg_buy_c")}
+        if days:
+            self.save_amber_days(days)
+        return {"filled": len(days), "known": len(known)}
 
     def imported_days(self, since=""):
         with self.lock:

@@ -3,6 +3,13 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.7.4
+
+- Import retailer bills for days older than the retailer's service returns: a CSV of bill
+  periods (energy charges, export credit, average rate) in the `import` folder. Each bill is
+  spread over its days in proportion to each day's grid use and exports, so monthly totals match
+  the bills.
+
 ## 1.7.3
 
 - `RETAILER_SINCE`: the day you joined your current retailer. Days before it count towards
