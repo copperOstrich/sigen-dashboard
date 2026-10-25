@@ -3,8 +3,13 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
-## Unreleased
+## 1.6.3
 
+- reMarkable sleep screen away from home: after 3 hours without reaching the collector
+  (`AWAY_HOURS`), the tablet shows an "Away from home" screen instead of old figures; the
+  live figures come back with the next refresh at home (`/eink.png?away=1` draws it)
+- The tablet only uses a real image, so a Wi-Fi login page on a hotel or cafe network, or
+  another device at the same address, can't replace the sleep screen
 - reMarkable uninstaller: fixed a harmless "head: invalid option" message on the tablet
   (BusyBox's `head` needs `-n 1`)
 

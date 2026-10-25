@@ -89,7 +89,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.6.2"
+VERSION = "1.6.3"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -987,6 +987,12 @@ class Api(BaseHTTPRequestHandler):
                     return self._json({"error": "The e-ink image needs Pillow (included in the Docker image)."}, 501)
                 w = min(3000, max(300, int(q.get("w", ["1404"])[0])))
                 h = min(4000, max(300, int(q.get("h", ["1872"])[0])))
+                if q.get("away", [""])[0] == "1":
+                    body = eink.render_away(width=w, height=h, version=VERSION, title=(q.get("title", [""])[0] or None),
+                                            rm_owner=q.get("rm", [""])[0] == "1")
+                    self._headers(200, "image/png", {"Content-Length": str(len(body))})
+                    self.wfile.write(body)
+                    return
                 body = eink.render(self.collector.snapshot(), self.store.history(24), tz=TZ, width=w, height=h,
                                    version=VERSION, prices=self.retailer.snapshot() if self.retailer else None,
                                    aemo=self.aemo.snapshot(3) if self.aemo else None,

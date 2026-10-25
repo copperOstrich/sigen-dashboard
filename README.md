@@ -467,6 +467,14 @@ To change the heading, put `SLEEP_TITLE="..."` in front of `sh` (it's remembered
 re-runs). The reMarkable logo isn't included, as it's reMarkable's trademark. On the image
 itself: `/eink.png?rm=1&title=...` (`rm=1` keeps the owner strip clear).
 
+**Away from home.** The collector is only on your home network, so elsewhere the tablet
+can't refresh. It keeps the last figures for a while, then, after 3 hours without reaching the
+collector, switches to an "Away from home" screen so old figures never look current; back on
+your home Wi-Fi, the next refresh brings the live figures back. Change the delay with
+`AWAY_HOURS=6` in front of `sh` when installing. Only a real image is ever used, so a hotel
+or cafe Wi-Fi login page (or another device at the same address) can't replace the sleep
+screen.
+
 **To remove it completely:** `ssh` in again (over USB) and run `sh /home/root/home-energy/uninstall.sh`.
 That stops the refresh, deletes the files and puts the normal sleep screen back. After a
 reMarkable software update the sleep screen setting stays but the refresh stops, so run the

@@ -46,6 +46,40 @@ def _wrap(draw, text, font, width):
     return lines
 
 
+def render_away(width=1404, height=1872, version="", title=None, rm_owner=False):
+    """The screen a tablet shows when it hasn't reached the collector for a while (away from home,
+    or on a network that blocks it), instead of old figures that look current."""
+    if not AVAILABLE:
+        raise RuntimeError("Pillow isn't installed, so the e-ink image isn't available outside the Docker image")
+    s = width / 1404 * (0.86 if rm_owner else 1)
+    S = lambda v: int(round(v * s))
+    img = Image.new("L", (width, height), WHITE)
+    d = ImageDraw.Draw(img)
+    txt = lambda size: _font("Barlow-Medium.ttf", S(size))
+    txtb = lambda size: _font("Barlow-SemiBold.ttf", S(size))
+    M = int(round(72 * width / 1404))
+    x0, x1 = M, width - M
+    y = S(64)
+    d.text((x0, y), title or "Home energy", font=txtb(56 if not title or len(title) < 26 else 46), fill=BLACK)
+    y += S(100)
+    d.line([(x0, y), (x1, y)], fill=BLACK, width=S(4))
+    # the message, in the upper middle of the screen (clear of the owner strip at the bottom)
+    y = int(height * 0.30)
+    d.text((x0, y), "Away from home", font=txtb(84), fill=BLACK)
+    y += S(130)
+    msg = ("Your energy figures show here again when the tablet is back on your home Wi-Fi "
+           "and has been awake for a minute.")
+    for line in _wrap(d, msg, txt(46), x1 - x0):
+        d.text((x0, y), line, font=txt(46), fill=DARK)
+        y += S(64)
+    d.line([(x0, height - S(96)), (x1, height - S(96))], fill=LIGHT, width=S(3))
+    if version:
+        d.text((x1, height - S(76)), f"Home Energy {version}", font=txt(30), fill=MID, anchor="ra")
+    out = io.BytesIO()
+    img.save(out, "PNG", optimize=True)
+    return out.getvalue()
+
+
 def render(live, history=None, tz=None, width=1404, height=1872, version="", prices=None, aemo=None,
            title=None, owner=None, phone=None, rm_owner=False):
     if not AVAILABLE:
