@@ -88,7 +88,7 @@ def rates_on(plan, day):
 
 class Money:
     def __init__(self, store, tz, data_dir, preset="", system_cost=None, installed="", supply_c_day=None,
-                 fee_monthly=None, retailer_name="", log=print):
+                 fee_monthly=None, retailer_name="", retailer_since="", log=print):
         self.store, self.tz, self.log = store, tz, log
         self.data_dir, self.preset = Path(data_dir), (preset or "").strip()
         self.system_cost = system_cost
@@ -99,6 +99,12 @@ class Money:
             except ValueError:
                 log(f"SYSTEM_INSTALLED '{installed}' isn't a date like 2024-03-15; ignored")
         self.supply_c_day, self.fee_monthly = supply_c_day, fee_monthly
+        self.since = ""  # the day you started with your current retailer (earlier days were someone else)
+        if retailer_since:
+            try:
+                self.since = date.fromisoformat(retailer_since.strip()).isoformat()
+            except ValueError:
+                log(f"RETAILER_SINCE '{retailer_since}' isn't a date like 2026-05-10; ignored")
         self.retailer_name = retailer_name or "Your retailer"
         self._plans, self._plans_key = None, None
         self._day_cache = {}      # (day, plans key) -> {"flows": [...], "plans": {...}, "baseline": $}
@@ -191,7 +197,9 @@ class Money:
                "supply_c_day": self.supply_c_day, "fee_monthly": self.fee_monthly,
                "trades": self.trades(), "plans": None, "compare": None, "payback": None}
         # imported days still waiting for the retailer's costs (fetched in the background)
-        out["waiting_days"] = sum(1 for d in days if d.get("imported") and d.get("bought") is None)
+        out["waiting_days"] = sum(1 for d in days if d.get("imported") and d.get("bought") is None
+                                  and d["day"] >= self.since)
+        out["retailer_since"] = self.since or None
         if not priced:
             out["reason"] = "needs at least a day with prices from your retailer"
             return out
@@ -201,7 +209,8 @@ class Money:
         actual = {d["day"]: d["bought"] - d["earned"] + fixed for d in priced}
         energy = {d["day"]: d["bought"] - d["earned"] for d in priced}
         plan_total = (lambda v: v["total"]) if fixed_known else (lambda v: v["total"] - v["supply"])
-        complete = [d for d in priced if d["day"] != today]
+        # the comparison is about your current retailer, so only their days count
+        complete = [d for d in priced if d["day"] != today and d["day"] >= self.since]
 
         # ---- comparison
         if plans and plans["plans"]:
@@ -251,8 +260,24 @@ class Money:
 
         # ---- payback (energy only: supply charges are paid with or without solar)
         if self.system_cost:
-            per_day, method, n_imported = [], set(), 0
-            for d in complete:
+            per_day, method, n_imported, prev_days, prev_saved = [], set(), 0, 0, 0.0
+            for d in days:
+                if d["day"] == today:
+                    continue
+                if self.since and d["day"] < self.since:
+                    # with your previous retailer: no bills here, so price the day both ways (with and
+                    # without solar) on the first comparison plan, energy only
+                    if plans and plans["plans"]:
+                        r = self._day(d["day"], plans, today, d.get("imported"))
+                        first = r["plans"][plans["plans"][0]["name"]]
+                        if r["baseline"] is not None:
+                            v = r["baseline"] - (first["usage"] - first["feed_in"])
+                            per_day.append((d["day"], v))
+                            prev_days += 1; prev_saved += v
+                            n_imported += 1 if d.get("imported") else 0
+                    continue
+                if d.get("bought") is None:
+                    continue
                 b = self.store.no_solar_cost(d["day"])
                 if b is not None:
                     method.add("prices")
@@ -275,6 +300,8 @@ class Money:
                        "baseline_plan": plans["plans"][0]["name"] if "plan" in method else None,
                        "tracked": round(tracked, 2),
                        "tracked_days": len(per_day), "imported_days": n_imported, "since": per_day[0][0],
+                       "previous_days": prev_days, "previous_saved": round(prev_saved, 2),
+                       "previous_plan": plans["plans"][0]["name"] if prev_days else None,
                        "estimated_before": round(before, 2), "estimated_days": before_days,
                        "installed": self.installed.isoformat() if self.installed else None,
                        "saved": round(saved, 2), "pct": round(max(0, min(100, saved / self.system_cost * 100)), 1),

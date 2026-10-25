@@ -186,7 +186,8 @@ class Amber:
         end = date.today()
         self._usage_range(end - timedelta(days=35), end)
         if not getattr(self, "backfilled", False):
-            first = self.store.first_day()
+            starts = [x for x in (self.store.first_day(), getattr(self, "since", "")) if x]
+            first = max(starts) if starts else None
             if first:
                 start, stop = date.fromisoformat(first), end - timedelta(days=36)
                 have = self.store.amber_days_have(first)
@@ -199,6 +200,15 @@ class Amber:
                     except AmberError as e:  # keep what arrived; the rest is tried at the next sync
                         self.log(f"Amber: earlier costs paused ({e}); trying again later")
                         return
+                    got = sorted(set(self.store.amber_days_have(first)) & {d.isoformat() for d in missing})
+                    if got:
+                        self.log(f"Amber: had costs for {len(got)} of those days, from {got[0]}"
+                                 + ("" if len(got) == len(missing) else
+                                    "; Amber's usage history doesn't reach further back (a usage download from "
+                                    "the Amber web app can fill the rest)"))
+                    else:
+                        self.log("Amber: had no costs for those days; Amber's usage history only reaches back "
+                                 "about 90 days (a usage download from the Amber web app can fill them)")
             self.backfilled = True
 
     def _usage_range(self, start, end, pause=0):

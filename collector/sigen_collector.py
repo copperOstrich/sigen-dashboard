@@ -91,7 +91,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.7.2"
+VERSION = "1.7.3"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -139,6 +139,7 @@ SYSTEM_COST = _env_num("SYSTEM_COST", None)
 SYSTEM_INSTALLED = (ENV("SYSTEM_INSTALLED", "") or "").strip()
 RETAILER_SUPPLY_C_DAY = _env_num("RETAILER_SUPPLY_C_DAY", None)
 RETAILER_FEE_MONTHLY = _env_num("RETAILER_FEE_MONTHLY", None)
+RETAILER_SINCE = (ENV("RETAILER_SINCE", "") or "").strip()
 INSULATION_CONFIRM = 3  # consecutive readings either side of the limit before it counts
 
 COUNTERS = ["total_pv_kwh", "total_load_kwh", "total_import_kwh", "total_export_kwh",
@@ -1277,6 +1278,8 @@ def main():
     import_folder(store, DATA_DIR, log=log)  # past days from a mySigen export, if any were dropped in
     (DATA_DIR / "import").mkdir(exist_ok=True)
     retailer = make_retailer(store)
+    if retailer and RETAILER_SINCE:
+        retailer.since = RETAILER_SINCE  # no costs to fetch from before you joined
     if retailer:
         threading.Thread(target=retailer.run, daemon=True).start()
     aemo = Aemo(store, AEMO_REGION, enabled=AEMO_ENABLED, simulate=AEMO_SIMULATE, log=log)
@@ -1293,7 +1296,8 @@ def main():
     threading.Thread(target=collector.run, daemon=True).start()
     rname = (retailer.summary() or {}).get("provider") if retailer else None
     money = Money(store, TZ, DATA_DIR, preset=COMPARE_PLANS, system_cost=SYSTEM_COST, installed=SYSTEM_INSTALLED,
-                  supply_c_day=RETAILER_SUPPLY_C_DAY, fee_monthly=RETAILER_FEE_MONTHLY, retailer_name=rname, log=log)
+                  supply_c_day=RETAILER_SUPPLY_C_DAY, fee_monthly=RETAILER_FEE_MONTHLY, retailer_name=rname,
+                  retailer_since=RETAILER_SINCE, log=log)
     Api.collector, Api.store, Api.retailer, Api.aemo, Api.weather = collector, store, retailer, aemo, weather
     Api.money = money
     httpd = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), Api)

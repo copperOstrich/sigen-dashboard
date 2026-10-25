@@ -390,7 +390,10 @@ Copy it into the `import` folder inside the data folder (the collector creates i
 imported, and the file is renamed to `.imported`. Imported days fill the daily and monthly
 history, the Money panel and payback, but never replace days the collector recorded itself.
 With Amber, the collector also fetches Amber's daily costs back to the first imported day
-(once, a few requests at a time), so those days have real dollars. A CSV with the same columns
+(a few requests at a time), so those days have real dollars. Amber's service only reaches back
+about 90 days; the log says how far it got. If you joined your retailer after the system was
+switched on, set `RETAILER_SINCE`: the days before count towards payback, priced on the
+comparison plan, and are left out of the comparison. A CSV with the same columns
 works too. The 5-minute **Power** export isn't needed and is skipped.
 
 ## 3. AEMO market data (on by default, no account needed)
@@ -586,6 +589,7 @@ start; restart the container after editing).
 | **Checks** | | |
 | `COMPARE_PLANS` | Compare with the Default Market Offer for your network: `nsw-ausgrid`, `nsw-endeavour`, `nsw-essential` (or put `plans.json` in the data folder) | off |
 | `RETAILER_SUPPLY_C_DAY` / `RETAILER_FEE_MONTHLY` | Your own retailer's daily supply charge (c/day) and monthly fee ($), from your bill | not included |
+| `RETAILER_SINCE` | The day you started with your current retailer (`2026-05-10`); earlier days count towards payback (priced on the comparison plan, an estimate) but not the comparison | not set |
 | `SYSTEM_COST` / `SYSTEM_INSTALLED` | What the solar and battery cost ($) and the date it was switched on, for payback | off |
 | `INSULATION_WARN_MOHM` / `INSULATION_MIN_MOHM` | Insulation resistance warning and alarm levels, MΩ | `0.5` / `0.37` |
 | **Collector** | | |

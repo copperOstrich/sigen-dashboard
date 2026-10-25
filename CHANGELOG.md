@@ -3,6 +3,14 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.7.3
+
+- `RETAILER_SINCE`: the day you joined your current retailer. Days before it count towards
+  payback, priced on the comparison plan (an estimate), and stay out of "Is your retailer worth
+  it?"; costs aren't fetched for them
+- The log says how many earlier days Amber had costs for and from when (Amber's usage history
+  only reaches back about 90 days)
+
 ## 1.7.2
 
 - Money: days imported from mySigen are only priced from the retailer's own billed costs (some

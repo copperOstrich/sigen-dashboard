@@ -274,7 +274,8 @@
         `minus what you paid for energy. The daily saving is the average of ${pb.average_days} day${pb.average_days === 1 ? "" : "s"}` +
         (pb.average_days < 330 ? "; it will swing with the seasons until there's a year of history." : ".") +
         (pb.estimated_days > 0 ? " The striped part is estimated at that average for the days before the collector started." : "") +
-        (pb.imported_days ? ` ${pb.imported_days} days come from a mySigen export, priced at each day's average ${me} price.` : "") }));
+        (pb.imported_days ? ` ${pb.imported_days} days come from a mySigen export, priced at each day's average ${me} price` +
+          (pb.previous_days ? ` (or, for the ${pb.previous_days} days before you joined ${me}, at the ${pb.previous_plan}: an estimate)` : "") + "." : "") }));
     }
 
     // ---- battery trades
