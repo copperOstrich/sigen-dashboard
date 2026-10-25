@@ -1,0 +1,39 @@
+{
+  "title": "NSW, Ausgrid network",
+  "as_of": "2026-07-01",
+  "note": "Standing offers (the default plans) for residential single-rate customers, from 1 July 2026, incl. GST. AGL and EnergyAustralia from their published standing offer prices; Origin and Red Energy set to the Default Market Offer cap, which standing offers sit at or very close to. Feed-in: 3c/kWh, about what standard plans pay (IPART's 2026-27 benchmark is 3.4 to 6.5c). Check your own quote on Energy Made Easy and copy this file to plans.json in your data folder to change anything.",
+  "plans": [
+    {
+      "name": "AGL",
+      "plan": "Standing offer, single rate",
+      "supply_c_day": 166.18778,
+      "usage_c_kwh": 33.13717,
+      "feed_in_c_kwh": 3.0,
+      "source": "AGL standing offer prices NSW, 1 July 2026"
+    },
+    {
+      "name": "Origin",
+      "plan": "Standing offer, single rate",
+      "supply_c_day": 166.2289,
+      "usage_c_kwh": 33.1372,
+      "feed_in_c_kwh": 3.0,
+      "source": "AER Default Market Offer 2026-27 cap (retailer's own standing offer not checked)"
+    },
+    {
+      "name": "EnergyAustralia",
+      "plan": "Standing offer, single rate",
+      "supply_c_day": 166.2287,
+      "usage_c_kwh": 33.13497,
+      "feed_in_c_kwh": 3.0,
+      "source": "EnergyAustralia standard retail contract rates NSW, 1 July 2026"
+    },
+    {
+      "name": "Red Energy",
+      "plan": "Standing offer, single rate",
+      "supply_c_day": 166.2289,
+      "usage_c_kwh": 33.1372,
+      "feed_in_c_kwh": 3.0,
+      "source": "AER Default Market Offer 2026-27 cap (retailer's own standing offer not checked)"
+    }
+  ]
+}

@@ -193,12 +193,6 @@
     if (s.inverter_error) f.append(el("dt", { text: "Inverter details" }), el("dd", { text: "unavailable – check SIGEN_INVERTER_UNIT", style: "font-size:13px" }));
     $("sys-sub").textContent = d.mode === "simulator" ? "simulated" : (s.serial || "");
 
-    const st = $("strings"); st.innerHTML = "";
-    if (s.strings && s.strings.length) {
-      st.append(el("tr", {}, el("th", { text: "String" }), el("th", { text: "Voltage" }), el("th", { text: "Current" }), el("th", { text: "Power" })));
-      for (const r of s.strings) st.append(el("tr", {}, el("td", { text: `PV${r.n}` }), el("td", { text: `${r.v.toFixed(0)} V` }),
-        el("td", { text: `${r.a.toFixed(2)} A` }), el("td", { text: S.kw(r.w) })));
-    }
     const ev = $("events"); ev.innerHTML = "";
     for (const e of d.events || []) {
       ev.append(el("li", {}, el("time", { text: new Date(e.ts * 1000).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) }),
@@ -209,6 +203,123 @@
 
 
 
+
+  // ------------------------------------------------------------ money
+  const money$ = (v, d = 0) => (v == null ? "–" : `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`);
+  const mName = (m) => new Date(m + "-15T12:00:00").toLocaleDateString([], { month: "short", year: "2-digit" });
+  async function loadMoney() {
+    let d;
+    try { d = await S.fetchJSON("/api/money"); } catch (e) { return; }
+    const panel = $("money-panel");
+    panel.hidden = !d || !d.enabled;
+    if (panel.hidden) return;
+    const me = d.retailer || "Your retailer";
+    const cmp = d.compare, pb = d.payback, tr = d.trades || {}, pl = d.plans;
+    $("money-sub").textContent = pl && pl.title ? `compared with standing offers, ${pl.title}` : "";
+
+    // ---- is your retailer worth it?
+    const c1 = $("money-compare"); c1.innerHTML = "";
+    c1.append(el("h3", { text: `Is ${me} worth it?` }));
+    if (!pl) {
+      c1.append(el("div", { class: "setup" },
+        el("p", { text: "Compare what you pay with other retailers' standard plans, using your own usage hour by hour." }),
+        el("p", {}, "Set ", el("code", { text: "COMPARE_PLANS" }), " to ", el("code", { text: "nsw-ausgrid" }), ", ",
+          el("code", { text: "nsw-endeavour" }), " or ", el("code", { text: "nsw-essential" }),
+          ", or put your own plans in ", el("code", { text: "plans.json" }), " in the data folder.")));
+    } else if (!cmp || !cmp.total || !cmp.total.days) {
+      c1.append(el("p", { class: "setup", text: d.reason ? `Not yet: ${d.reason}.` : "Not enough history yet; check back after a full day." }));
+    } else {
+      const t = cmp.total, best = t.cheapest, diff = t.saving_vs_cheapest;
+      const span = t.days >= 360 ? "the last 12 months" : `the last ${t.days} day${t.days === 1 ? "" : "s"}`;
+      c1.append(el("div", { class: "big" }, money$(Math.abs(diff)), el("small", { text: diff >= 0 ? "saved" : "extra" })),
+        el("p", { class: "lead", text: `${me} cost ${money$(Math.abs(diff))} ${diff >= 0 ? "less" : "more"} than the cheapest standing offer (${best}) over ${span}${cmp.energy_only ? ", energy only" : ""}.` }));
+      const rows = [[me, t.actual, true], ...Object.entries(t.plans).map(([n, v]) => [n, v, false])].sort((a, b) => a[1] - b[1]);
+      const max = Math.max(...rows.map((r) => Math.abs(r[1])), 1);
+      for (const [n, v, mine] of rows) {
+        c1.append(el("div", { class: "mix-row cmp-row" + (mine ? " mine" : ""), title: `${n}: ${money$(v, 2)} over ${span}` },
+          el("span", { class: "mix-k", text: n }),
+          el("span", { class: "mix-bar" }, el("i", { style: `width:${Math.max(1, Math.abs(v) / max * 100)}%` })),
+          el("span", { class: "mix-v", text: money$(v) })));
+      }
+    }
+
+    // ---- payback
+    const c2 = $("money-payback"); c2.innerHTML = "";
+    c2.append(el("h3", { text: "Solar and battery payback" }));
+    if (!pb) {
+      c2.append(el("p", { class: "setup" }, d.reason && !cmp ? `Not yet: ${d.reason}.` : "",
+        ...(d.reason && !cmp ? [] : ["Set ", el("code", { text: "SYSTEM_COST" }), " (what the system cost, in dollars) and, optionally, ",
+          el("code", { text: "SYSTEM_INSTALLED" }), " (the date it was switched on) to track when it pays for itself."])));
+    } else {
+      const trackedPct = Math.max(0, Math.min(100, pb.tracked / pb.cost * 100));
+      const estPct = Math.max(0, Math.min(100 - trackedPct, pb.estimated_before / pb.cost * 100));
+      c2.append(el("div", { class: "big" }, `${Math.round(pb.pct)}%`, el("small", { text: "paid back" })),
+        el("div", { class: "meter", role: "img", "aria-label": `${Math.round(pb.pct)}% of ${money$(pb.cost)} paid back` },
+          estPct > 0 ? el("i", { class: "est", style: `width:${estPct}%`, title: `Estimated before tracking: ${money$(pb.estimated_before)}` }) : null,
+          el("i", { style: `width:${trackedPct}%`, title: `Recorded: ${money$(pb.tracked)}` })),
+        el("dl", { class: "facts" },
+          el("dt", { text: "Saved so far" }), el("dd", { text: `${money$(pb.saved)} of ${money$(pb.cost)}` }),
+          pb.estimated_days > 0 ? el("dt", { text: `Estimated before ${new Date(pb.since + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}` }) : null,
+          pb.estimated_days > 0 ? el("dd", { text: money$(pb.estimated_before) }) : null,
+          el("dt", { text: "Saving" }), el("dd", { text: `${money$(pb.per_day, 2)} a day` }),
+          el("dt", { text: "Paid back" }), el("dd", { text: pb.paid_back ? "already" : pb.payback_date
+            ? `${new Date(pb.payback_date + "T12:00:00").toLocaleDateString([], { month: "short", year: "numeric" })} (${pb.years_left} yrs)` : "–" })));
+      c2.append(el("p", { class: "chart-note", text: `What your home and car would have cost from the grid without solar and battery, ` +
+        (pb.method === "plan" ? `at ${pb.baseline_plan}'s rates, ` : `at ${me}'s price each minute, `) +
+        `minus what you paid for energy. The daily saving is the average of ${pb.average_days} day${pb.average_days === 1 ? "" : "s"}` +
+        (pb.average_days < 330 ? "; it will swing with the seasons until there's a year of history." : ".") +
+        (pb.estimated_days > 0 ? " The striped part is estimated at that average for the days before the collector started." : "") }));
+    }
+
+    // ---- battery trades
+    const c3 = $("money-trades"); c3.innerHTML = "";
+    c3.append(el("h3", { text: "Battery trades with the grid" }));
+    const tm = (tr.months || {})[tr.this_month], lm = (tr.months || {})[tr.last_month];
+    const sumLine = (label, m) => {
+      if (!m) return el("p", { class: "lead", text: `${label}: none` });
+      const parts = [];
+      if (m.exported_kwh) parts.push(`sent ${m.exported_kwh.toFixed(1)} kWh to the grid for ${m.priced ? money$(m.export_value, 2) : "–"}`);
+      if (m.imported_kwh) parts.push(`charged ${m.imported_kwh.toFixed(1)} kWh from the grid for ${m.priced ? money$(m.import_cost, 2) : "–"}`);
+      return el("p", { class: "lead", text: `${label}: ${parts.join("; ")}.` });
+    };
+    if (!(tr.events || []).length) {
+      c3.append(el("p", { class: "lead", text: "None in the last 60 days. When the battery sends power to the grid, or charges from it, beyond what the house needs (usually your retailer's battery control, such as Amber SmartShift), it shows here." }));
+    } else {
+      const net = tm ? (tm.export_value || 0) - (tm.import_cost || 0) : 0;
+      c3.append(el("div", { class: "big" }, money$(net, 2), el("small", { text: "this month" })),
+        sumLine("This month", tm), sumLine("Last month", lm));
+      const ul = el("ul", { class: "trade-list" });
+      for (const e of tr.events.slice(0, 6)) {
+        const st = new Date(e.start * 1000), en = new Date(e.end * 1000);
+        const when = `${st.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}, ${st.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} to ${en.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+        ul.append(el("li", {}, el("span", { class: "when", text: when }),
+          el("span", { text: `${e.kind === "export" ? "Sent" : "Charged"} ${e.kwh.toFixed(1)} kWh${e.avg_c != null ? ` at ${Math.round(e.avg_c)}c` : ""}` }),
+          el("span", { class: "amt", text: e.value == null ? "–" : `${e.kind === "export" ? "+" : "−"}${money$(e.value, 2)}` })));
+      }
+      c3.append(ul);
+    }
+
+    // ---- month by month table
+    const tb = $("money-table"); tb.innerHTML = "";
+    if (pl && cmp && cmp.months && cmp.months.length) {
+      const names = pl.list.map((p) => p.name);
+      tb.append(el("tr", {}, el("th", { text: "Month" }), el("th", { class: "mine", text: me }), ...names.map((n) => el("th", { text: n }))));
+      for (const m of cmp.months.slice().reverse()) {
+        const vals = [m.actual, ...names.map((n) => m.plans[n])];
+        const min = Math.min(...vals);
+        tb.append(el("tr", {}, el("td", { text: `${mName(m.month)}${m.days < 28 ? ` (${m.days} d)` : ""}` }),
+          ...vals.map((v, i) => el("td", { class: (i === 0 ? "mine " : "") + (v === min ? "best" : ""), text: money$(v, 2) }))));
+      }
+    }
+    const notes = [];
+    if (pl) {
+      notes.push(`Each plan priced on your own grid use and exports, hour by hour${cmp && cmp.energy_only ? "" : ", with its daily supply charge"}. The same energy flows are used for every plan; on another plan the battery might be run differently, so treat this as a guide.`);
+      if (cmp && cmp.energy_only) notes.push(`Energy only: set RETAILER_SUPPLY_C_DAY (and RETAILER_FEE_MONTHLY for a membership fee) from your ${me} bill to include supply charges.`);
+      else if (d.fixed_known) notes.push(`${me} includes your ${d.supply_c_day}c/day supply charge${d.fee_monthly ? ` and ${money$(d.fee_monthly, 2)}/month fee` : ""}.`);
+      notes.push(`Plans (${pl.source}${pl.as_of ? `, prices from ${pl.as_of}` : ""}): ` + pl.list.map((p) => `${p.name} ${p.tou ? "time of use" : `${(+p.usage_c_kwh).toFixed(2)}c/kWh`}, ${(+p.supply_c_day).toFixed(2)}c/day, feed-in ${p.feed_in_c_kwh == null ? "–" : `${p.feed_in_c_kwh}c`}`).join("; ") + ".");
+    }
+    $("money-note").textContent = notes.join(" ");
+  }
 
   // ------------------------------------------------------------ monthly summary
   let moData = [], moIdx = -1;
@@ -1313,7 +1424,7 @@
   dlg.addEventListener("close", () => {
     if (dlg.returnValue !== "save") return;
     S.setApiBase($("api-input").value.trim());
-    sub.restart(); evData = null; loadWeather(); loadOutlook(); loadMonthly(); loadTrends(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
+    sub.restart(); evData = null; loadWeather(); loadOutlook(); loadMonthly(); loadTrends(); loadMoney(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
   });
 
   // ------------------------------------------------------------ desktop: widget switch + updates
@@ -1382,8 +1493,8 @@
   setInterval(loadWeather, 10 * 60000);
   loadOutlook();
   setInterval(loadOutlook, 5 * 60000);
-  loadMonthly(); loadTrends();
-  setInterval(() => { loadMonthly(); loadTrends(); }, 30 * 60000);
+  loadMonthly(); loadTrends(); loadMoney();
+  setInterval(() => { loadMonthly(); loadTrends(); loadMoney(); }, 30 * 60000);
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);
   setInterval(loadDaily, 10 * 60000);

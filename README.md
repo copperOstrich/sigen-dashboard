@@ -105,6 +105,16 @@ AEMO's wholesale price, your region's generation mix, and every NEM region side 
   <img alt="Electricity price chart with Amber buy and sell prices and AEMO wholesale price, and the grid generation mix" src="docs/screenshots/prices-grid-light.png">
 </picture>
 
+**Money**: whether your retailer is worth it against other retailers' standard plans, priced
+on your own usage hour by hour; how far the solar and battery are towards paying for
+themselves; and every time the battery traded with the grid (for example Amber SmartShift),
+with what it earned.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/money-dark.png">
+  <img alt="Money panel: Amber compared with four standing offers, solar and battery payback progress with an estimated payback date, and recent battery exports to the grid with their value" src="docs/screenshots/money-light.png">
+</picture>
+
 **Battery outlook**: where the battery's charge is heading until the end of tomorrow, with
 plain answers: will it last the night, what the grid will cost until sunrise, when solar fills
 it again, and whether charging from the grid overnight is worth it.
@@ -340,6 +350,31 @@ Notes:
 * **Other retailers** (GloBird and most others) don't offer a public price API. You
   still get the AEMO wholesale price below, which is what dynamic tariffs follow.
 
+### Money: plans, payback and battery trades
+
+The **Money** panel needs retailer prices (above) and a little setup in `sigen.env`:
+
+* **Is your retailer worth it?** Your own grid use and exports, hour by hour, priced on other
+  retailers' plans: daily supply charge, usage rate (flat or time of use) and feed-in tariff,
+  against what you actually paid, for each month and the last 12 months. Set
+  `COMPARE_PLANS` to a bundled set of standing offers (the default plans) for your network:
+  `nsw-ausgrid`, `nsw-endeavour` or `nsw-essential` (AGL, Origin, EnergyAustralia and Red
+  Energy, from 1 July 2026). Or copy one of [`collector/plans/`](collector/plans) to
+  `plans.json` in your data folder and edit it: any retailer, your own quote, time-of-use
+  windows, a different feed-in rate. Set `RETAILER_SUPPLY_C_DAY` (and `RETAILER_FEE_MONTHLY`
+  for a membership fee) from your own bill so your side includes them too; without them the
+  comparison is energy only. Every plan uses the same energy flows, so it's a guide: on a
+  different plan the battery might be run differently.
+* **Payback**: set `SYSTEM_COST` (dollars) and optionally `SYSTEM_INSTALLED` (`2025-03-15`).
+  Savings are what your home and car would have cost from the grid without solar and battery,
+  at your retailer's price each minute, minus what you paid for energy (supply charges are paid
+  either way). Days before the collector started are estimated at the average daily saving;
+  the payback date is a projection from the last 12 months (or what's recorded so far).
+* **Battery trades**: whenever the battery sends power to the grid, or charges from it, beyond
+  what the house needs. Under normal self-consumption it does neither, so these are your
+  retailer's battery control (Amber SmartShift) or VPP events. Each is shown with its energy,
+  average price and value, with totals for this month and last. Needs no setup.
+
 ## 3. AEMO market data (on by default, no account needed)
 
 Every 5 minutes the collector reads AEMO's public National Electricity Market feeds for
@@ -531,6 +566,9 @@ start; restart the container after editing).
 | `SOLAR_PLANES` | Roof faces as `tilt:azimuth:kW`, comma separated | one north face at 20° |
 | `WEATHER_ENABLED` | `0` to turn weather off | on |
 | **Checks** | | |
+| `COMPARE_PLANS` | Standing offers to compare with: `nsw-ausgrid`, `nsw-endeavour`, `nsw-essential` (or put `plans.json` in the data folder) | off |
+| `RETAILER_SUPPLY_C_DAY` / `RETAILER_FEE_MONTHLY` | Your own retailer's daily supply charge (c/day) and monthly fee ($), from your bill | not included |
+| `SYSTEM_COST` / `SYSTEM_INSTALLED` | What the solar and battery cost ($) and the date it was switched on, for payback | off |
 | `INSULATION_WARN_MOHM` / `INSULATION_MIN_MOHM` | Insulation resistance warning and alarm levels, MΩ | `0.5` / `0.37` |
 | **Collector** | | |
 | `HTTP_PORT` | Dashboard and API port | `8080` |
@@ -558,6 +596,7 @@ Simulator only: `SIM_PV_KWP`, `SIM_BATTERY_KWH`, `SIM_INVERTER_KW`, `SIM_EXPORT_
 | `GET /api/ev-log?days=30&format=csv` | Every charger state change with power and offered current (CSV or JSON) |
 | `GET /api/monthly?months=13&format=csv` | Monthly totals, costs and value (JSON or CSV) |
 | `GET /api/trends?days=365` | Daily string energy, insulation, battery health and temperatures |
+| `GET /api/money` | Plan comparison by month and for the last 12 months, payback, battery trades with the grid |
 | `GET /api/outlook` | Battery outlook: projected charge to the end of tomorrow, milestones and advice |
 | `GET /api/weather` | Current weather, hourly and daily forecast, and the solar forecast in kWh |
 | `GET /api/health` | `{ok, status, updated, version}` for monitoring |

@@ -3,6 +3,27 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.7.0
+
+### Money
+- New **Money** panel
+- **Is your retailer worth it?** Your own grid use and exports, hour by hour, priced on other
+  retailers' plans (supply charge, usage rate flat or time of use, feed-in tariff) against what
+  you actually paid, month by month and over the last 12 months. Bundled 2026-27 standing
+  offers for AGL, Origin, EnergyAustralia and Red Energy on each NSW network
+  (`COMPARE_PLANS=nsw-ausgrid`, `nsw-endeavour` or `nsw-essential`), or your own plans in
+  `plans.json`. `RETAILER_SUPPLY_C_DAY` and `RETAILER_FEE_MONTHLY` add your own retailer's
+  fixed charges.
+- **Solar and battery payback** (`SYSTEM_COST`, `SYSTEM_INSTALLED`): savings so far against
+  what the system cost, the daily saving and a projected payback date
+- **Battery trades with the grid**: each time the battery exported to the grid or charged from
+  it beyond the house's needs (Amber SmartShift, VPP events), with its energy, price and value,
+  and totals for this month and last
+- `/api/money`
+
+### System
+- The solar strings table is gone from the System panel; the Solar strings panel has it all
+
 ## 1.6.4
 
 - The grid: the all-regions map is centred in the panel

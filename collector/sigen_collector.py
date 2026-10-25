@@ -83,13 +83,14 @@ from aemo import Aemo  # noqa: E402
 from charger import ChargerWatch  # noqa: E402
 from weather import Weather  # noqa: E402
 from outlook import Outlook  # noqa: E402
+from money import Money  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.6.4"
+VERSION = "1.7.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -131,6 +132,12 @@ SOLAR_KWP = _env_num("SOLAR_KWP", None)
 SOLAR_PLANES = ENV("SOLAR_PLANES", "").strip()
 WEATHER_ENABLED = ENV("WEATHER_ENABLED", "1") != "0"
 INSULATION_WARN = max(INSULATION_MIN, _env_num("INSULATION_WARN_MOHM", 0.5))
+# money: plan comparison and payback
+COMPARE_PLANS = (ENV("COMPARE_PLANS", "") or "").strip().lower()
+SYSTEM_COST = _env_num("SYSTEM_COST", None)
+SYSTEM_INSTALLED = (ENV("SYSTEM_INSTALLED", "") or "").strip()
+RETAILER_SUPPLY_C_DAY = _env_num("RETAILER_SUPPLY_C_DAY", None)
+RETAILER_FEE_MONTHLY = _env_num("RETAILER_FEE_MONTHLY", None)
 INSULATION_CONFIRM = 3  # consecutive readings either side of the limit before it counts
 
 COUNTERS = ["total_pv_kwh", "total_load_kwh", "total_import_kwh", "total_export_kwh",
@@ -337,6 +344,39 @@ class Store:
                 "GROUP BY b ORDER BY b", (bucket, bucket, region, since)).fetchall()
         return [{"t": b, "rrp": round(r, 2), "price_c": round(r / 10, 2),
                  "demand_mw": round(d) if d is not None else None} for b, r, d in rows]
+
+    # ---- money: hourly grid flows, battery trades, cost without solar
+    def hourly_flows(self, day):
+        """[(hour start, import kWh, export kWh, home + car kWh)] for a local day, from the meter counters."""
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT ts, total_import_kwh, total_export_kwh, total_load_kwh FROM samples WHERE day=? "
+                "AND total_import_kwh IS NOT NULL ORDER BY ts", (day,)).fetchall()
+        hours, prev = {}, None
+        for ts, imp, exp, load in rows:
+            if prev and ts - prev[0] <= 900:
+                h = hours.setdefault(ts // 3600 * 3600, [0.0, 0.0, 0.0])
+                for i, (a, b) in enumerate(((imp, prev[1]), (exp, prev[2]), (load, prev[3]))):
+                    d = (a or 0) - (b or 0)
+                    if 0 <= d <= 50:  # skip counter resets and gaps
+                        h[i] += d
+            prev = (ts, imp, exp, load)
+        return [(h, *v) for h, v in sorted(hours.items())]
+
+    def trade_rows(self, day):
+        with self.lock:
+            return self.db.execute("SELECT ts, battery, grid, buy_c, sell_c FROM samples WHERE day=? ORDER BY ts",
+                                   (day,)).fetchall()
+
+    def no_solar_cost(self, day):
+        """$ the home and car would have cost from the grid at the retailer's price each minute."""
+        with self.lock:
+            r = self.db.execute(
+                "SELECT SUM((COALESCE(load,0)+COALESCE(ev,0))/60000.0*buy_c), COUNT(buy_c), COUNT(*) "
+                "FROM samples WHERE day=?", (day,)).fetchone()
+        if not r or not r[1] or r[1] < r[2] * 0.9:  # needs prices for nearly the whole day
+            return None
+        return (r[0] or 0) / 100
 
     def cost_for_day(self, day):
         """Estimated $ from our own minute readings x the Amber price in force at the time."""
@@ -1044,6 +1084,8 @@ class Api(BaseHTTPRequestHandler):
                                      car.get("cost"))))
                     return self._csv("home-energy-monthly.csv", lines)
                 return self._json(rows)
+            if url.path == "/api/money":
+                return self._json(self.money.summary())
             if url.path == "/api/outlook":
                 return self._json(self.collector.outlook.result or {"enabled": False, "reason": "not worked out yet"})
             if url.path == "/api/weather":
@@ -1170,7 +1212,11 @@ def main():
     if SIMULATE:
         collector.state["target"] = "built-in simulator"
     threading.Thread(target=collector.run, daemon=True).start()
+    rname = (retailer.summary() or {}).get("provider") if retailer else None
+    money = Money(store, TZ, DATA_DIR, preset=COMPARE_PLANS, system_cost=SYSTEM_COST, installed=SYSTEM_INSTALLED,
+                  supply_c_day=RETAILER_SUPPLY_C_DAY, fee_monthly=RETAILER_FEE_MONTHLY, retailer_name=rname, log=log)
     Api.collector, Api.store, Api.retailer, Api.aemo, Api.weather = collector, store, retailer, aemo, weather
+    Api.money = money
     httpd = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), Api)
     httpd.daemon_threads = True
     if SETTINGS_PATH:

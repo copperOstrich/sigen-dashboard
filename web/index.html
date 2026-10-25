@@ -285,6 +285,17 @@
       <p class="chart-note" id="mo-note"></p>
     </section>
 
+    <section class="panel span-12" aria-labelledby="money-h" data-panel="money" data-name="Money" id="money-panel" hidden>
+      <div class="panel-head"><h2 id="money-h">Money</h2><span class="sub" id="money-sub"></span></div>
+      <div class="money">
+        <div class="money-col" id="money-compare"></div>
+        <div class="money-col" id="money-payback"></div>
+        <div class="money-col" id="money-trades"></div>
+      </div>
+      <div style="overflow-x:auto"><table class="strings money-table" id="money-table"></table></div>
+      <p class="chart-note" id="money-note"></p>
+    </section>
+
     <section class="panel span-12" aria-labelledby="tr-h" data-panel="trends" data-name="Trends" id="tr-panel" hidden>
       <div class="panel-head">
         <h2 id="tr-h">Trends</h2>
@@ -331,8 +342,7 @@
       <div id="alarms"></div>
       <dl class="facts" id="sys-facts"></dl>
       <details class="more">
-        <summary>Solar strings and recent events</summary>
-        <table class="strings" id="strings"></table>
+        <summary>Recent events</summary>
         <ul class="events" id="events" style="margin-top:12px"></ul>
       </details>
     </section>
