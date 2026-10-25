@@ -89,7 +89,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.6.1"
+VERSION = "1.6.2"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -991,7 +991,8 @@ class Api(BaseHTTPRequestHandler):
                                    version=VERSION, prices=self.retailer.snapshot() if self.retailer else None,
                                    aemo=self.aemo.snapshot(3) if self.aemo else None,
                                    title=(q.get("title", [""])[0] or None), owner=(q.get("owner", [""])[0] or None),
-                                   phone=(q.get("phone", [""])[0] or None))
+                                   phone=(q.get("phone", [""])[0] or None),
+                                   rm_owner=q.get("rm", [""])[0] == "1")
                 self._headers(200, "image/png", {"Content-Length": str(len(body))})
                 self.wfile.write(body)
                 return

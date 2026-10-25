@@ -3,9 +3,9 @@
 #
 # Run on the tablet over SSH:   wget -qO- http://<collector>/remarkable/install.sh | sh
 #
-# To keep the owner details the normal sleep screen shows, add them in front of "sh":
-#   wget -qO- http://<collector>/remarkable/install.sh | OWNER_NAME="Your Name" OWNER_PHONE="0400 000 000" sh
-# SLEEP_TITLE changes the heading (default "Paper tablet is sleeping"; set it to "" for "Home energy").
+# The tablet still adds the owner name and number from its own settings; the image leaves
+# room for them. SLEEP_TITLE changes the heading, in front of "sh":
+#   wget -qO- http://<collector>/remarkable/install.sh | SLEEP_TITLE="Home energy" sh
 # Undo everything:              sh /home/root/home-energy/uninstall.sh
 # After a reMarkable software update, run the first line again (updates remove the timer).
 #
@@ -18,20 +18,16 @@ CONF=/home/root/.config/remarkable/xochitl.conf
 
 echo "Setting up the Home Energy sleep screen from $BASE"
 
-# The heading and owner details drawn on the image. Re-running the installer keeps the
-# previous values unless new ones are given.
+# The heading drawn on the image. Re-running the installer keeps the previous one unless a
+# new one is given. rm=1 leaves room for the owner details the tablet draws on top.
 [ -f "$DIR/settings" ] && . "$DIR/settings"
 SLEEP_TITLE="${SLEEP_TITLE-${SAVED_TITLE-Paper tablet is sleeping}}"
-OWNER_NAME="${OWNER_NAME-$SAVED_OWNER}"
-OWNER_PHONE="${OWNER_PHONE-$SAVED_PHONE}"
-urlenc() { printf '%s' "$1" | od -An -tx1 -v | tr -d ' \n' | sed 's/../%&/g'; }
-QUERY="title=$(urlenc "$SLEEP_TITLE")&owner=$(urlenc "$OWNER_NAME")&phone=$(urlenc "$OWNER_PHONE")"
+# percent-encode with sed only (the tablet's busybox has a minimal od)
+urlenc() { printf '%s' "$1" | sed -e 's/%/%25/g' -e 's/ /%20/g' -e 's/&/%26/g' -e 's/#/%23/g' \
+  -e 's/+/%2B/g' -e 's/?/%3F/g' -e 's/=/%3D/g' -e "s/'/%27/g" -e 's/"/%22/g'; }
+QUERY="rm=1&title=$(urlenc "$SLEEP_TITLE")"
 mkdir -p "$DIR"
-{
-  printf "SAVED_TITLE='%s'\n" "$(printf '%s' "$SLEEP_TITLE" | sed "s/'/'\\\\''/g")"
-  printf "SAVED_OWNER='%s'\n" "$(printf '%s' "$OWNER_NAME" | sed "s/'/'\\\\''/g")"
-  printf "SAVED_PHONE='%s'\n" "$(printf '%s' "$OWNER_PHONE" | sed "s/'/'\\\\''/g")"
-} > "$DIR/settings"
+printf "SAVED_TITLE='%s'\n" "$(printf '%s' "$SLEEP_TITLE" | sed "s/'/'\\\\''/g")" > "$DIR/settings"
 wget -q -T 20 -O "$DIR/install.sh" "$BASE/remarkable/install.sh" || true
 
 cat > "$DIR/fetch.sh" <<EOF

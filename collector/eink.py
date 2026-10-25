@@ -47,10 +47,16 @@ def _wrap(draw, text, font, width):
 
 
 def render(live, history=None, tz=None, width=1404, height=1872, version="", prices=None, aemo=None,
-           title=None, owner=None, phone=None):
+           title=None, owner=None, phone=None, rm_owner=False):
     if not AVAILABLE:
         raise RuntimeError("Pillow isn't installed, so the e-ink image isn't available outside the Docker image")
     s = width / 1404  # scale everything from the reMarkable 2 layout
+    # rm_owner: a reMarkable draws its owner name and number itself, centred near the bottom of
+    # its sleep screen, on top of a custom image. Keep that strip clear and fit the rest above it
+    # (a slightly smaller layout, the same width).
+    band = (int(height * 1575 / 1872), int(height * 1752 / 1872)) if rm_owner else None
+    if band:
+        s *= 0.86
     S = lambda v: int(round(v * s))
     img = Image.new("L", (width, height), WHITE)
     d = ImageDraw.Draw(img)
@@ -58,9 +64,10 @@ def render(live, history=None, tz=None, width=1404, height=1872, version="", pri
     numb = lambda size: _font("BarlowSemiCondensed-Bold.ttf", S(size))
     txt = lambda size: _font("Barlow-Medium.ttf", S(size))
     txtb = lambda size: _font("Barlow-SemiBold.ttf", S(size))
-    M = S(72)  # margin
+    M = int(round(72 * width / 1404))  # margin (full width even in the smaller layout)
     x0, x1 = M, width - M
     y = S(64)
+    limit = band[0] if band else height - S(96)  # content stays above this
 
     now = datetime.now(tz)
     updated = (live or {}).get("updated")
@@ -271,7 +278,7 @@ def render(live, history=None, tz=None, width=1404, height=1872, version="", pri
             if dd:
                 kwh = f"{dd['pv_kwh']:.0f} kWh" if dd.get("pv_kwh") is not None else "–"
                 cols.append((lab, kwh, f"{dd['desc'].lower()}, {round(dd['tmin'])}–{round(dd['tmax'])}°"))
-        if cols and y + S(100) <= height - S(100):
+        if cols and y + S(126) <= limit:
             d.line([(x0, y), (x1, y)], fill=LIGHT, width=S(3))
             y += S(22)
             half = (x1 - x0) // 2
@@ -286,12 +293,12 @@ def render(live, history=None, tz=None, width=1404, height=1872, version="", pri
 
     # ---- solar and battery over the last 24 hours
     h = history or {}
-    if h.get("t") and len(h["t"]) > 10 and height - S(96) - y >= S(300):
+    if h.get("t") and len(h["t"]) > 10 and limit - y >= S(300):
         d.line([(x0, y), (x1, y)], fill=LIGHT, width=S(3))
         y += S(26)
         d.text((x0, y), "Last 24 hours: solar (filled) and battery charge (line)", font=txt(34), fill=DARK)
         y += S(52)
-        gh = min(S(320), height - S(96) - y - S(70))
+        gh = min(S(320), limit - y - S(70))
         tt, pv, soc = h["t"], h.get("pv") or [], h.get("soc") or []
         t0, t1 = tt[0], tt[-1]
         X = lambda v: x0 + (v - t0) / max(1, t1 - t0) * (x1 - x0)

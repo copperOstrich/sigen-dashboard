@@ -460,17 +460,12 @@ with that time printed at the top. Needs reMarkable software 3.20 or later.
    ```
 4. Put the tablet to sleep.
 
-**Keeping your name and number on the sleep screen.** The image replaces reMarkable's own
-sleep screen, so the installer draws the usual heading ("Paper tablet is sleeping") at the
-top, and can draw your owner details at the bottom so a found tablet can still be returned.
-Put them in front of `sh`:
-```sh
-wget -qO- http://<collector address>/remarkable/install.sh | OWNER_NAME="Your Name" OWNER_PHONE="0400 000 000" sh
-```
-They're saved on the tablet, so re-running the installer later keeps them. `SLEEP_TITLE="..."`
-changes the heading (`SLEEP_TITLE=""` shows "Home energy"). The reMarkable logo isn't
-included, as it's reMarkable's trademark. The same options work directly on the image:
-`/eink.png?title=...&owner=...&phone=...`.
+**Heading and owner details.** The image keeps reMarkable's usual heading ("Paper tablet is
+sleeping") at the top. The tablet still adds the owner name and phone number from its own
+settings, centred near the bottom, on top of the image, so the layout leaves that strip clear.
+To change the heading, put `SLEEP_TITLE="..."` in front of `sh` (it's remembered for
+re-runs). The reMarkable logo isn't included, as it's reMarkable's trademark. On the image
+itself: `/eink.png?rm=1&title=...` (`rm=1` keeps the owner strip clear).
 
 **To remove it completely:** `ssh` in again (over USB) and run `sh /home/root/home-energy/uninstall.sh`.
 That stops the refresh, deletes the files and puts the normal sleep screen back. After a

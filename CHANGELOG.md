@@ -3,6 +3,14 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.6.2
+
+- reMarkable sleep screen: the tablet adds the owner name and number itself, on top of the
+  image, so the layout now leaves that strip clear instead of drawing them again
+  (`/eink.png?rm=1`); run the installer again to switch
+- Fixed the heading not showing on the tablet: the installer's text encoding didn't work with
+  the tablet's built-in tools
+
 ## 1.6.1
 
 - reMarkable sleep screen: keeps the "Paper tablet is sleeping" heading and can show the
