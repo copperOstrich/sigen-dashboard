@@ -84,6 +84,7 @@ from charger import ChargerWatch  # noqa: E402
 from weather import Weather  # noqa: E402
 from outlook import Outlook  # noqa: E402
 from money import Money  # noqa: E402
+from importer import import_folder  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
@@ -187,7 +188,13 @@ class Store:
             CREATE TABLE IF NOT EXISTS amber_days(
               day TEXT PRIMARY KEY, import_kwh REAL, import_cost REAL, export_kwh REAL,
               export_cost REAL, estimated INTEGER);
+            CREATE TABLE IF NOT EXISTS imported_days(
+              day TEXT PRIMARY KEY, pv REAL, load REAL, ev REAL, charge REAL, discharge REAL,
+              import REAL, export REAL, source TEXT);
             """)
+            acols = {r[1] for r in self.db.execute("PRAGMA table_info(amber_days)")}
+            if "avg_buy_c" not in acols:  # the day's average buy price (for days without minute readings)
+                self.db.execute("ALTER TABLE amber_days ADD COLUMN avg_buy_c REAL")
             cols = {r[1] for r in self.db.execute("PRAGMA table_info(samples)")}
             # buy_c/sell_c: retailer price (c/kWh, Amber sign) in force that minute; ev: AC charger W
             for c in ("buy_c", "sell_c", "ev"):
@@ -214,10 +221,46 @@ class Store:
 
     def save_amber_days(self, days):
         with self.lock:
-            self.db.executemany("INSERT OR REPLACE INTO amber_days VALUES (?,?,?,?,?,?)", [
-                (d, v["import_kwh"], v["import_cost"], v["export_kwh"], v["export_cost"], int(v["estimated"]))
-                for d, v in days.items()])
+            self.db.executemany("INSERT OR REPLACE INTO amber_days (day, import_kwh, import_cost, export_kwh, "
+                                "export_cost, estimated, avg_buy_c) VALUES (?,?,?,?,?,?,?)", [
+                (d, v["import_kwh"], v["import_cost"], v["export_kwh"], v["export_cost"], int(v["estimated"]),
+                 v.get("avg_buy_c")) for d, v in days.items()])
             self.db.commit()
+
+    def amber_days_have(self, since):
+        with self.lock:
+            return {r[0] for r in self.db.execute("SELECT day FROM amber_days WHERE day>=?", (since,))}
+
+    # ---- days imported from a mySigen export (before the collector was running)
+    def save_imported_days(self, days, source=""):
+        with self.lock:
+            self.db.executemany("INSERT OR REPLACE INTO imported_days VALUES (?,?,?,?,?,?,?,?,?)", [
+                (d, v.get("pv"), v.get("load"), v.get("ev"), v.get("charge"), v.get("discharge"), v.get("import"),
+                 v.get("export"), source) for d, v in days.items()])
+            self.db.commit()
+        return len(days)
+
+    def imported_days(self, since=""):
+        with self.lock:
+            rows = self.db.execute("SELECT day, pv, load, ev, charge, discharge, import, export FROM imported_days "
+                                   "WHERE day>? ORDER BY day", (since,)).fetchall()
+        return {r[0]: dict(zip(("pv", "load", "ev", "charge", "discharge", "import", "export"), r[1:])) for r in rows}
+
+    def imported_day(self, day):
+        with self.lock:
+            r = self.db.execute("SELECT load, ev, import, export FROM imported_days WHERE day=?", (day,)).fetchone()
+        return {"load": r[0] or 0, "ev": r[1] or 0, "import": r[2] or 0, "export": r[3] or 0} if r else None
+
+    def first_day(self):
+        with self.lock:
+            a = self.db.execute("SELECT MIN(day) FROM imported_days").fetchone()[0]
+            b = self.db.execute("SELECT MIN(day) FROM samples").fetchone()[0]
+        return min(x for x in (a, b) if x) if (a or b) else None
+
+    def recorded_minutes(self, day):
+        with self.lock:
+            return self.db.execute("SELECT COUNT(*) FROM samples WHERE day=? AND total_import_kwh IS NOT NULL",
+                                   (day,)).fetchone()[0]
 
     def close(self):
         with self.lock:
@@ -369,14 +412,21 @@ class Store:
                                    (day,)).fetchall()
 
     def no_solar_cost(self, day):
-        """$ the home and car would have cost from the grid at the retailer's price each minute."""
+        """$ the home and car would have cost from the grid at the retailer's price each minute
+        (or, for imported days, at the day's average price)."""
         with self.lock:
             r = self.db.execute(
                 "SELECT SUM((COALESCE(load,0)+COALESCE(ev,0))/60000.0*buy_c), COUNT(buy_c), COUNT(*) "
                 "FROM samples WHERE day=?", (day,)).fetchone()
-        if not r or not r[1] or r[1] < r[2] * 0.9:  # needs prices for nearly the whole day
-            return None
-        return (r[0] or 0) / 100
+        if r and r[1] and r[1] >= r[2] * 0.9 and r[2] >= 1300:  # prices and readings for nearly the whole day
+            return (r[0] or 0) / 100
+        # otherwise (an imported day): the day's home and car use at that day's average buy price
+        with self.lock:
+            imp = self.db.execute("SELECT load, ev FROM imported_days WHERE day=?", (day,)).fetchone()
+            a = self.db.execute("SELECT avg_buy_c FROM amber_days WHERE day=?", (day,)).fetchone()
+        if imp and a and a[0] is not None:
+            return ((imp[0] or 0) + (imp[1] or 0)) * a[0] / 100
+        return None
 
     def cost_for_day(self, day):
         """Estimated $ from our own minute readings x the Amber price in force at the time."""
@@ -455,7 +505,7 @@ class Store:
         cols = ",".join(f"MIN({c}),MAX({c})" for c in COUNTERS)
         with self.lock:
             rows = self.db.execute(
-                f"SELECT day, {cols}, MAX(soc), MIN(soc), SUM(ev)/60000.0 FROM samples WHERE day>? "
+                f"SELECT day, {cols}, MAX(soc), MIN(soc), SUM(ev)/60000.0, COUNT(*) FROM samples WHERE day>? "
                 "AND total_pv_kwh IS NOT NULL GROUP BY day ORDER BY day", (since,)).fetchall()
         out, prev_max = [], None
         names = ["pv", "load", "import", "export", "charge", "discharge"]
@@ -470,7 +520,27 @@ class Store:
                 entry["ev"] = round(min(r[15], entry["load"]), 2)
                 entry["load"] = round(entry["load"] - entry["ev"], 2)
             prev_max = maxs
+            entry["minutes"] = r[16]
             out.append(entry)
+        # days from a mySigen export fill in what the collector didn't record (before it ran, or
+        # a day it only saw part of); the collector's own complete days always win
+        imported = self.imported_days(since)
+        if imported:
+            today = datetime.now(TZ).strftime("%Y-%m-%d")
+            by_day = {e["day"]: e for e in out}
+            for day, v in imported.items():
+                own = by_day.get(day)
+                if own and (own["minutes"] >= 1300 or day == today):
+                    continue
+                e = {"day": day, "imported": True, "soc_max": None, "soc_min": None}
+                for k in ("pv", "load", "import", "export", "charge", "discharge"):
+                    e[k] = round(v[k] or 0.0, 2)
+                if v.get("ev"):
+                    e["ev"] = round(v["ev"], 2)
+                by_day[day] = e
+            out = [by_day[d] for d in sorted(by_day)]
+        for e in out:
+            e.pop("minutes", None)
         with self.lock:
             billed = {r[0]: r for r in self.db.execute(
                 "SELECT day, import_cost, export_cost, estimated FROM amber_days WHERE day>?", (since,))}
@@ -1197,6 +1267,8 @@ def main():
         sys.exit("Set SIGEN_HOST to your inverter's IP address, or SIGEN_SIMULATE=1 to use the simulator.")
     store = Store(DATA_DIR / ("simulator.db" if SIMULATE else "sigen.db"))
     host, port = (start_simulator(store) if SIMULATE else (HOST, PORT))
+    import_folder(store, DATA_DIR, log=log)  # past days from a mySigen export, if any were dropped in
+    (DATA_DIR / "import").mkdir(exist_ok=True)
     retailer = make_retailer(store)
     if retailer:
         threading.Thread(target=retailer.run, daemon=True).start()

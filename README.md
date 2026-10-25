@@ -378,6 +378,21 @@ The **Money** panel needs retailer prices (above) and a little setup in `sigen.e
   retailer's battery control (Amber SmartShift) or VPP events. Each is shown with its energy,
   average price and value, with totals for this month and last. Needs no setup.
 
+### History from before the collector (mySigen import)
+
+The collector only knows what it has recorded itself. To bring in everything since your system
+was switched on, export the daily figures from the mySigen app: the station's statistics,
+**Energy**, **Day** view (one row per day; not Month, Year or Lifetime), export. You get a file
+named like `stationData-...-Energy.xlsx`.
+
+Copy it into the `import` folder inside the data folder (the collector creates it; on a QNAP,
+`/share/Container/sigen-dashboard/import`) and restart the container. The log says what it
+imported, and the file is renamed to `.imported`. Imported days fill the daily and monthly
+history, the Money panel and payback, but never replace days the collector recorded itself.
+With Amber, the collector also fetches Amber's daily costs back to the first imported day
+(once, a few requests at a time), so those days have real dollars. A CSV with the same columns
+works too. The 5-minute **Power** export isn't needed and is skipped.
+
 ## 3. AEMO market data (on by default, no account needed)
 
 Every 5 minutes the collector reads AEMO's public National Electricity Market feeds for

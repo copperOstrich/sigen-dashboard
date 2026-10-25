@@ -268,7 +268,8 @@
         (pb.method === "plan" ? `at ${pb.baseline_plan}'s rates, ` : `at ${me}'s price each minute, `) +
         `minus what you paid for energy. The daily saving is the average of ${pb.average_days} day${pb.average_days === 1 ? "" : "s"}` +
         (pb.average_days < 330 ? "; it will swing with the seasons until there's a year of history." : ".") +
-        (pb.estimated_days > 0 ? " The striped part is estimated at that average for the days before the collector started." : "") }));
+        (pb.estimated_days > 0 ? " The striped part is estimated at that average for the days before the collector started." : "") +
+        (pb.imported_days ? ` ${pb.imported_days} days come from a mySigen export, priced at each day's average ${me} price.` : "") }));
     }
 
     // ---- battery trades
@@ -320,6 +321,7 @@
       notes.push(`Current prices (${pl.source}): ` + pl.list.map((p) => `${p.name} ${p.tou ? "time of use" : `${(+p.usage_c_kwh).toFixed(2)}c/kWh`}, ${(+p.supply_c_day).toFixed(2)}c/day, feed-in ${p.feed_in_c_kwh == null ? "–" : `${p.feed_in_c_kwh}c`}${p.from ? ` from ${fromTxt(p.from)}` : ""}`).join("; ") + ".");
       const early = pl.list.find((p) => p.first_from && cmp && cmp.months && cmp.months.length && cmp.months[0].month + "-31" < p.first_from);
       if (early) notes.push(`Months before ${fromTxt(early.first_from)} use the earliest prices in the plans file.`);
+      if (cmp && cmp.imported_days) notes.push(`${cmp.imported_days} of these days come from a mySigen export (daily totals${pl.list.some((p) => p.tou) ? ", so time-of-use plans are approximate for them" : ""}).`);
     }
     $("money-note").textContent = notes.join(" ");
   }

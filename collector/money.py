@@ -131,11 +131,18 @@ class Money:
 
 
     # ---------------------------------------------------------------- per day
-    def _day(self, day, plans, today):
+    def _day(self, day, plans, today, imported=False):
         key = (day, self._plans_key)
         if key in self._day_cache and day != today:
             return self._day_cache[key]
-        flows = self.store.hourly_flows(day)
+        flows = [] if imported else self.store.hourly_flows(day)
+        if imported:
+            # a day from a mySigen export: daily totals only, counted at midday. Exact for flat rates;
+            # time-of-use plans are priced as if all of it were at midday.
+            v = self.store.imported_day(day)
+            if v:
+                noon = datetime.fromisoformat(day + "T12:00:00").replace(tzinfo=self.tz).timestamp()
+                flows = [(int(noon), v["import"], v["export"], v["load"] + v["ev"])]
         out = {"plans": {}, "baseline": None, "import": 0.0, "export": 0.0, "load": 0.0}
         for plan in plans["plans"]:
             p = rates_on(plan, day)
@@ -208,7 +215,7 @@ class Money:
             out["plans"]["list"] = lst
             months = {}
             for d in complete:
-                r = self._day(d["day"], plans, today)
+                r = self._day(d["day"], plans, today, d.get("imported"))
                 m = months.setdefault(d["day"][:7], {"month": d["day"][:7], "days": 0, "actual": 0.0,
                                                      "plans": {p["name"]: 0.0 for p in plans["plans"]}})
                 m["days"] += 1
@@ -227,27 +234,29 @@ class Money:
             tot = {"days": len(window), "actual": round(sum(actual[d["day"]] for d in window), 2),
                    "plans": {p["name"]: 0.0 for p in plans["plans"]}}
             for d in window:
-                for n, v in self._day(d["day"], plans, today)["plans"].items():
+                for n, v in self._day(d["day"], plans, today, d.get("imported"))["plans"].items():
                     tot["plans"][n] += plan_total(v)
             tot["plans"] = {n: round(v, 2) for n, v in tot["plans"].items()}
             if tot["plans"]:
                 best = min(tot["plans"], key=tot["plans"].get)
                 tot["cheapest"] = best
                 tot["saving_vs_cheapest"] = round(tot["plans"][best] - tot["actual"], 2)
-            out["compare"] = {"months": rows, "total": tot, "energy_only": not fixed_known}
+            out["compare"] = {"months": rows, "total": tot, "energy_only": not fixed_known,
+                              "imported_days": sum(1 for d in window if d.get("imported"))}
 
         # ---- payback (energy only: supply charges are paid with or without solar)
         if self.system_cost:
-            per_day, method = [], set()
+            per_day, method, n_imported = [], set(), 0
             for d in complete:
                 b = self.store.no_solar_cost(d["day"])
                 if b is not None:
                     method.add("prices")
                 elif plans and plans["plans"]:
-                    b = self._day(d["day"], plans, today)["baseline"]
+                    b = self._day(d["day"], plans, today, d.get("imported"))["baseline"]
                     method.add("plan")
                 if b is not None:
                     per_day.append((d["day"], b - energy[d["day"]]))
+                    n_imported += 1 if d.get("imported") else 0
             if per_day:
                 tracked = sum(v for _, v in per_day)
                 recent = per_day[-365:]
@@ -260,7 +269,7 @@ class Money:
                 pay = {"cost": self.system_cost, "method": "plan" if method == {"plan"} else "prices",
                        "baseline_plan": plans["plans"][0]["name"] if "plan" in method else None,
                        "tracked": round(tracked, 2),
-                       "tracked_days": len(per_day), "since": per_day[0][0],
+                       "tracked_days": len(per_day), "imported_days": n_imported, "since": per_day[0][0],
                        "estimated_before": round(before, 2), "estimated_days": before_days,
                        "installed": self.installed.isoformat() if self.installed else None,
                        "saved": round(saved, 2), "pct": round(max(0, min(100, saved / self.system_cost * 100)), 1),

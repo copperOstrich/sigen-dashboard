@@ -181,24 +181,51 @@ class Amber:
         return [by[k] for k in sorted(by)]
 
     def _sync_usage(self):
-        """Billing-grade usage & cost from the meter (lags ~1 day). Last 35 days, 7-day windows."""
+        """Billing-grade usage & cost from the meter (lags ~1 day). Last 35 days, 7-day windows;
+        the first time, also back to the first day of history (for days imported from mySigen)."""
         end = date.today()
-        start = end - timedelta(days=35)
+        self._usage_range(end - timedelta(days=35), end)
+        if not getattr(self, "backfilled", False):
+            first = self.store.first_day()
+            if first:
+                start, stop = date.fromisoformat(first), end - timedelta(days=36)
+                have = self.store.amber_days_have(first)
+                missing = [start + timedelta(days=i) for i in range((stop - start).days + 1)
+                           if (start + timedelta(days=i)).isoformat() not in have]
+                if missing:
+                    self.log(f"Amber: fetching costs for {len(missing)} earlier days, from {missing[0]}")
+                    try:
+                        self._usage_range(missing[0], missing[-1], pause=2)
+                    except AmberError as e:  # keep what arrived; the rest is tried at the next sync
+                        self.log(f"Amber: earlier costs paused ({e}); trying again later")
+                        return
+            self.backfilled = True
+
+    def _usage_range(self, start, end, pause=0):
         days = {}
-        while start < end:
+        while start <= end:
             stop = min(end, start + timedelta(days=6))
             data = self.client.get(f"/sites/{self.site_id}/usage", startDate=start.isoformat(), endDate=stop.isoformat())
+            prices = {}
             for u in data:
                 d = days.setdefault(u["date"], {"import_kwh": 0.0, "import_cost": 0.0, "export_kwh": 0.0,
                                                 "export_cost": 0.0, "estimated": False})
                 if u["channelType"] in ("general", "controlledLoad"):
                     d["import_kwh"] += u["kwh"]; d["import_cost"] += u["cost"]
+                    if u["channelType"] == "general" and u.get("perKwh") is not None:
+                        prices.setdefault(u["date"], []).append(u["perKwh"])
                 elif u["channelType"] == "feedIn":
                     d["export_kwh"] += abs(u["kwh"]); d["export_cost"] += u["cost"]
                 if u.get("quality") == "estimated":
                     d["estimated"] = True
+            for day, ps in prices.items():
+                days[day]["avg_buy_c"] = sum(ps) / len(ps)  # the day's average buy price, c/kWh
+            if days:  # save each window as it arrives
+                self.store.save_amber_days(days)
+                days = {}
             start = stop + timedelta(days=1)
-        self.store.save_amber_days(days)
+            if pause and start <= end:
+                time.sleep(pause)
 
     def _publish(self, current, forecast):
         with self.lock:
