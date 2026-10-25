@@ -447,9 +447,12 @@ It updates while the tablet is awake (every 5 minutes, and when it wakes); a sle
 reMarkable has Wi-Fi off, so the sleep screen shows the figures from when you put it down,
 with that time printed at the top. Needs reMarkable software 3.20 or later.
 
-1. On the tablet, open **Settings → Help → Copyrights and licenses** and note the IP address
-   and root password at the bottom.
-2. From a computer on the same network: `ssh root@<tablet IP>` and enter that password.
+1. On the tablet, open **Settings → Help → Copyrights and licenses** and note the root
+   password at the bottom.
+2. Plug the tablet into a computer with its USB-C cable, keep it awake and unlocked, and run
+   `ssh root@10.11.99.1`, entering that password. (Recent reMarkable software turns SSH over
+   Wi-Fi off, so `ssh root@<tablet's Wi-Fi IP>` is refused; the USB connection always works.
+   The tablet still needs to be on the same Wi-Fi as the collector.)
 3. Run this, using the address you open the dashboard at (for example `192.168.1.50:8088`):
    ```sh
    wget -qO- http://<collector address>/remarkable/install.sh | sh
@@ -468,7 +471,7 @@ changes the heading (`SLEEP_TITLE=""` shows "Home energy"). The reMarkable logo 
 included, as it's reMarkable's trademark. The same options work directly on the image:
 `/eink.png?title=...&owner=...&phone=...`.
 
-**To remove it completely:** `ssh` in again and run `sh /home/root/home-energy/uninstall.sh`.
+**To remove it completely:** `ssh` in again (over USB) and run `sh /home/root/home-energy/uninstall.sh`.
 That stops the refresh, deletes the files and puts the normal sleep screen back. After a
 reMarkable software update the sleep screen setting stays but the refresh stops, so run the
 install command again (or the uninstaller).
