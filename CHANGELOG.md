@@ -3,6 +3,10 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.6.4
+
+- The grid: the all-regions map is centred in the panel
+
 ## 1.6.3
 
 - **The grid: all regions at a glance.** A map of every NEM region (NSW, Queensland,

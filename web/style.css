@@ -406,7 +406,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .mo-table tr { cursor: pointer; }
 
 /* the grid: all NEM regions */
-.nem-map svg { width: 100%; height: auto; display: block; max-width: 900px; }
+.nem-map svg { width: 100%; height: auto; display: block; max-width: 900px; margin: 0 auto; }
 .nem-map .rg { fill: var(--surface); stroke: var(--rule-strong); stroke-width: 1.5; }
 .nem-map .rg.home { stroke: var(--ink); stroke-width: 2.5; }
 .nem-map .rn { fill: var(--ink); font: 600 15px var(--font); }
