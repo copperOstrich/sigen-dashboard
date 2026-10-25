@@ -452,7 +452,8 @@ with that time printed at the top. Needs reMarkable software 3.20 or later.
 2. Plug the tablet into a computer with its USB-C cable, keep it awake and unlocked, and run
    `ssh root@10.11.99.1`, entering that password. (Recent reMarkable software turns SSH over
    Wi-Fi off, so `ssh root@<tablet's Wi-Fi IP>` is refused; the USB connection always works.
-   The tablet still needs to be on the same Wi-Fi as the collector.)
+   The tablet still needs to be on the same Wi-Fi as the collector. To use SSH over Wi-Fi
+   from then on, run `rm-ssh-over-wlan on` once over USB.)
 3. Run this, using the address you open the dashboard at (for example `192.168.1.50:8088`):
    ```sh
    wget -qO- http://<collector address>/remarkable/install.sh | sh
