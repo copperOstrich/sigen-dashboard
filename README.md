@@ -5,7 +5,7 @@
 [![Collector image build](https://img.shields.io/github/actions/workflow/status/copperOstrich/sigen-dashboard/docker.yml?label=image%20build)](https://github.com/copperOstrich/sigen-dashboard/actions/workflows/docker.yml)
 [![Licence: MIT](https://img.shields.io/github/license/copperOstrich/sigen-dashboard)](LICENSE)
 
-A local dashboard and desktop widget for a SigenStor system that reads the inverter
+A local dashboard for a SigenStor system that reads the inverter
 directly over **Modbus TCP**, so it keeps working when Sigenergy's cloud is down.
 Live retailer prices from **Amber Electric** or **LocalVolts** add buy/sell prices, spike
 warnings, forecasts and what your power is costing, and free **AEMO** market data shows
@@ -24,7 +24,7 @@ SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) �
   (inverter, battery, AC charger)        │  SQLite history,      ◀── Open-Meteo weather (optional)
                                          │  web dashboard, JSON API
                      ┌───────────────────┼─────────────────────┐
-              Browser dashboard    Windows widget app    Phone / tablet browser
+              Browser dashboard    Installed as an app   Phone / tablet browser
 ```
 
 * **Collector** (`collector/`): Python standard library only, no packages to install.
@@ -43,10 +43,9 @@ SigenStor ──Modbus TCP (read-only)──▶ Collector (Docker / Pi / NAS) �
   * system status, decoded alarms, insulation resistance check and an event log
 
   Light and dark mode, works on a phone, and shows the version you're running at the bottom.
-* **Desktop app** (`desktop/`, Windows): a small always-on-top widget plus the full
-  dashboard window, living in the system tray, with "Start at login". On a Mac, use the
-  dashboard in a browser; a Mac app will return once it can be signed with an Apple
-  developer certificate.
+* **Compact widget** (`/widget.html`): solar, home, battery and grid in a small window.
+  The dashboard and the widget can each be installed as an app from Edge or Chrome, or added
+  to a phone's home screen: see [On your computer or phone](#5-on-your-computer-or-phone).
 
 It never writes to the inverter. The Modbus client has no write functions, so it can't
 interfere with retailer battery control such as Amber SmartShift or a VPP.
@@ -79,8 +78,8 @@ SOLAR_KWP=10                 # optional: your array size in kW
 
 Every setting is listed under [Settings](#settings).
 
-Restart the container after changing `sigen.env`. The Windows desktop app is on
-the [releases page](https://github.com/copperOstrich/sigen-dashboard/releases/latest).
+Restart the container after changing `sigen.env`. To have it as an app on your computer or
+phone, see [On your computer or phone](#5-on-your-computer-or-phone).
 On a QNAP, see [the ready-made setup](#ready-made-image-qnap-synology-unraid-portainer).
 
 ## Keep it on your home network
@@ -190,13 +189,13 @@ solar, battery health and temperatures.
   <img alt="Arrange panels window listing each panel with a show checkbox, a width choice and up and down buttons" src="docs/screenshots/arrange-light.png" width="480">
 </picture>
 
-**Desktop widget and phone**: the always-on-top widget for Windows, and the
-dashboard on a phone.
+**Compact widget and phone**: the small widget view (`/widget.html`), and the dashboard
+on a phone.
 
 <p>
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/widget-dark.png">
-  <img alt="Compact desktop widget showing solar, home, battery and grid" src="docs/screenshots/widget-light.png" width="360">
+  <img alt="Compact widget showing solar, home, battery and grid" src="docs/screenshots/widget-light.png" width="360">
 </picture>
 &nbsp;
 <picture>
@@ -316,7 +315,7 @@ else, the charger is only read, never controlled.
 
 ## 2. Add your retailer's prices (optional)
 
-Pick one. The keys stay on the collector; the desktop apps never see them.
+Pick one. The keys stay on the collector; browsers never see them.
 
 **Amber Electric**
 
@@ -503,36 +502,24 @@ again and what's left over, and whether charging from the grid overnight is wort
 model of self-consumption, not of your retailer's control: with Amber SmartShift or another
 VPP managing the battery, it may export or charge differently, and the panel says so.
 
-## 5. Desktop widget app (Windows)
+## 5. On your computer or phone
 
-Download the installer from the
-[latest release](https://github.com/copperOstrich/sigen-dashboard/releases/latest):
-the `.msi` (or `-setup.exe`).
-It's built with Tauri, so it's small (about 10 MB) and uses the system's own web view.
+There's nothing to install: open the dashboard's address in a browser. To give it its own
+window, taskbar or dock icon and Start menu entry, install it as an app from the browser:
 
-The app checks for a new release when it starts and every 6 hours (or from the tray menu,
-**Check for updates**) and offers **Download and install**, which runs the new installer.
+* **Edge (Windows):** open the dashboard, then **⋯ → Apps → Install this site as an app**.
+* **Chrome (Windows, Mac):** **⋮ → Cast, save and share → Install page as app** (or
+  **Create shortcut** with **Open as window** ticked).
+* **iPhone, iPad:** in Safari, **Share → Add to Home Screen**.
+* **Android:** in Chrome, **⋮ → Add to Home screen**.
 
-Switch between the full window and the compact widget with the **Compact widget** button in
-the dashboard, the expand button on the widget, or a left click on the tray icon.
+The **compact widget** works the same way: open `http://<collector>/widget.html`, install it
+as its own app and size the window to suit. It shows solar, home, battery and grid, the price
+and the car, and opens the full dashboard from its button.
 
-On first launch the dashboard window asks for the collector address, e.g.
-`http://192.168.1.50:8080`. The widget then appears; drag it by its top bar.
-Tray icon: show widget, open dashboard, keep on top, start at login, quit.
-Closing a window hides it.
-
-The app isn't code-signed yet, so the first time Windows SmartScreen warns about it: click
-**More info → Run anyway**.
-
-**Mac:** there's no Mac app for now. Unsigned apps won't open on current macOS, so the Mac
-build is paused until it can be signed and notarised with an Apple developer certificate.
-The dashboard works fully in Safari or any browser in the meantime.
-
-**Building it yourself:** the installers are built by GitHub Actions
-(`.github/workflows/desktop.yml`). In a fork, **Actions → Build desktop widget apps → Run
-workflow** builds them as run artifacts; pushing a tag like `v1.2.1` publishes a release
-with notes from that version's section of [CHANGELOG.md](CHANGELOG.md). To build locally,
-install Rust and Node, then `cd desktop && npm install && npm run build`.
+Earlier versions had a Windows desktop app. It's been withdrawn: without a paid code-signing
+certificate, Windows Smart App Control (and macOS) block it, and the browser does the same job.
+If you installed it, uninstall it from **Settings → Apps**.
 
 ## reMarkable 2 sleep screen (optional)
 

@@ -18,7 +18,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Shown in the desktop app's "Collector address" box, or at /api/health on the collector.
+      description: Shown at the bottom of the dashboard, or at /api/health on the collector.
       placeholder: "1.2.0"
     validations:
       required: true
@@ -51,8 +51,7 @@ body:
       options:
         - Collector / Modbus readings
         - Web dashboard
-        - Desktop app (Windows)
-        - Desktop app (Mac)
+        - Installed as an app (Edge or Chrome)
         - Amber prices
         - LocalVolts prices
         - AEMO data

@@ -1,7 +1,7 @@
 """SigenStor local dashboard collector.
 
 Polls the SigenStor over Modbus TCP (read-only), keeps minute-level history in SQLite,
-and serves the dashboard + a small JSON API for the desktop widgets.
+and serves the dashboard + a small JSON API.
 
 Standard library only - runs anywhere Python 3.9+ runs (Docker, Raspberry Pi, NAS, PC).
 
@@ -92,7 +92,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")

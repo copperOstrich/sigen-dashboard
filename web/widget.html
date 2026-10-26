@@ -1,6 +1,9 @@
 <!doctype html>
 <html lang="en">
 <head>
+<link rel="manifest" href="manifest-widget.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Energy widget</title>
@@ -44,7 +47,7 @@
     <span class="dot" id="dot" data-tauri-drag-region></span>
     <span class="t" id="head" data-tauri-drag-region>Connecting…</span>
     <button type="button" id="upd" class="tag" hidden title="An update is available; open the dashboard to install it" style="line-height:1.4;padding:0 8px;font-size:11.5px;color:var(--home);border-color:var(--home)">Update</button>
-    <button type="button" id="open" title="Switch to dashboard" aria-label="Switch to dashboard">
+    <button type="button" id="open" title="Open the dashboard" aria-label="Open the dashboard">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2" y="2" width="12" height="12" rx="2.5"/><path d="M2 6.5h12M6.5 6.5V14"/></svg>
     </button>
     <button type="button" id="hide" title="Hide widget" aria-label="Hide widget">
@@ -66,7 +69,7 @@
 (function () {
   const S = window.Sigen, $ = (id) => document.getElementById(id);
   const T = window.__TAURI__;
-  if (!T) document.body.classList.add("browser");
+  if (!T) { document.body.classList.add("browser"); document.getElementById("hide").hidden = true; }  // close the window instead
   let lastOk = 0, live = null;
 
   function val(id, w) {

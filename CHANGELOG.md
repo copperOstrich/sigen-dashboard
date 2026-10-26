@@ -3,6 +3,15 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.9.0
+
+- **The Windows desktop app is withdrawn.** Without a paid code-signing certificate, Windows
+  Smart App Control (like macOS before it) blocks it. Install the dashboard as an app from
+  Edge or Chrome instead (its own window, taskbar icon and Start menu entry), or add it to a
+  phone's home screen; the compact widget (`/widget.html`) can be installed the same way.
+  If you have the old app, uninstall it from Settings → Apps.
+- The dashboard and widget now have app icons and an install manifest for this
+
 ## 1.8.0
 
 ### The car against a fuel car
