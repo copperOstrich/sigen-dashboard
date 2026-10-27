@@ -429,7 +429,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 @media (max-width: 640px) { .nem-map { display: none; } .nem-table { display: table; } }
 
 /* money */
-.money { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+.money { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 1fr); gap: 28px; align-items: start; }
 @media (max-width: 1080px) { .money { grid-template-columns: 1fr 1fr; } .money > :first-child { grid-column: 1 / -1; } }
 @media (max-width: 640px) { .money { grid-template-columns: 1fr; } }
 .money-col h3 { font: 600 14px var(--font); margin: 0 0 8px; color: var(--ink); }
@@ -464,3 +464,13 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .ev-fuel .big small { font-size: 13px; font-weight: 500; color: var(--ink-2); margin-left: 4px; }
 .pb-table td small.yrs { display: block; font-size: 11.5px; color: var(--ink-3); }
 .pb-table td, .pb-table th { vertical-align: top; }
+.pb-bars { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; margin: 8px 0 4px; font-size: 12.5px; }
+.pb-bars .pb-k { color: var(--ink-2); white-space: nowrap; }
+.pb-bars .meter { margin: 0; height: 10px; }
+.pb-bars .pb-v { font-family: var(--font-num); font-weight: 600; text-align: right; }
+.pb-table th.grp { text-align: center; color: var(--ink-2); border-bottom: 1px solid var(--rule); }
+.pb-table th.sub { font-size: 11.5px; }
+.pb-table.four { font-size: 12.5px; }
+.pb-wrap { overflow-x: auto; }
+.pb-table.four th, .pb-table.four td { padding-left: 4px; }
+.pb-table.four td:first-child { white-space: normal; }

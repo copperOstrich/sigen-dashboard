@@ -266,18 +266,33 @@
         el("div", { class: "meter", role: "img", "aria-label": `${label}: ${Math.round(x.pct)}% of ${money$(pb.cost)} paid back` },
           x.estimated_before > 0 ? el("i", { class: "est", style: `width:${Math.min(100, x.estimated_before / pb.cost * 100)}%`, title: `Estimated before tracking: ${money$(x.estimated_before)}` }) : null,
           el("i", { style: `width:${Math.max(0, Math.min(100, x.pct) - Math.min(100, (x.estimated_before || 0) / pb.cost * 100))}%` })));
-      const views = [pb, sd, wf].filter(Boolean).map((x) => x.pct);
-      const lo = Math.round(Math.min(...views)), hi = Math.round(Math.max(...views));
-      c2.append(el("div", { class: "big" }, lo === hi ? `${lo}%` : `${lo}–${hi}%`, el("small", { text: "paid back" })),
-        meter(pb, `Against ${me}'s prices`), sd ? meter(sd, `Against the ${sd.plan}`) : null,
-        wf ? meter(wf, `${me} prices, car against fuel`) : null);
-      const cols = [[`${me}`, pb], sd ? [sd.plan === "Default Market Offer" ? "DMO" : sd.plan, sd] : null, wf ? ["+ fuel", wf] : null].filter(Boolean);
-      const t = el("table", { class: "pb-table" },
-        el("tr", {}, el("th", { text: "" }), ...cols.map(([h]) => el("th", { text: h }))),
-        el("tr", {}, el("td", { text: "Saved so far" }), ...cols.map(([, x]) => el("td", { text: money$(x.saved) }))),
-        el("tr", {}, el("td", { text: "Saving a day" }), ...cols.map(([, x]) => el("td", { text: money$(x.per_day, 2) }))),
-        el("tr", {}, el("td", { text: "Paid back" }), ...cols.map(([, x]) => el("td", {}, when(x)))));
-      c2.append(t);
+      const sf = pb.standard_with_fuel;
+      const dmo = sd ? (sd.plan === "Default Market Offer" ? "DMO" : sd.plan) : null;
+      // columns: retailer, retailer + fuel, standard plan, standard plan + fuel
+      const cols = [[me, "", pb], wf ? [me, "+ fuel", wf] : null, sd ? [dmo, "", sd] : null, sf ? [dmo, "+ fuel", sf] : null].filter(Boolean);
+      const pcts = cols.map(([, , x]) => x.pct);
+      const lo = Math.round(Math.min(...pcts)), hi = Math.round(Math.max(...pcts));
+      c2.append(el("div", { class: "big" }, lo === hi ? `${lo}%` : `${lo}–${hi}%`, el("small", { text: "paid back" })));
+      const bars = el("div", { class: "pb-bars" });
+      for (const [g, f, x] of cols) {
+        const label = `${g}${f ? " " + f : ""}`;
+        bars.append(el("span", { class: "pb-k", text: label }),
+          el("span", { class: "meter", role: "img", "aria-label": `${label}: ${Math.round(x.pct)}% of ${money$(pb.cost)} paid back` },
+            x.estimated_before > 0 ? el("i", { class: "est", style: `width:${Math.min(100, x.estimated_before / pb.cost * 100)}%` }) : null,
+            el("i", { style: `width:${Math.max(0, Math.min(100, x.pct) - Math.min(100, (x.estimated_before || 0) / pb.cost * 100))}%` })),
+          el("b", { class: "pb-v", text: `${Math.round(x.pct)}%` }));
+      }
+      c2.append(bars);
+      // two header rows: the price basis, then with or without fuel
+      const groups = [];
+      for (const [g] of cols) { const last = groups[groups.length - 1]; if (last && last[0] === g) last[1]++; else groups.push([g, 1]); }
+      const t = el("table", { class: "pb-table" + (cols.length > 3 ? " four" : "") },
+        el("tr", {}, el("th", { text: "" }), ...groups.map(([g, n]) => el("th", { colspan: n, class: "grp", text: g }))),
+        el("tr", {}, el("th", { text: "" }), ...cols.map(([, f]) => el("th", { class: "sub", text: f || "energy" }))),
+        el("tr", {}, el("td", { text: "Saved so far" }), ...cols.map(([, , x]) => el("td", { text: money$(x.saved) }))),
+        el("tr", {}, el("td", { text: "Saving a day" }), ...cols.map(([, , x]) => el("td", { text: money$(x.per_day, 2) }))),
+        el("tr", {}, el("td", { text: "Paid back" }), ...cols.map(([, , x]) => el("td", {}, when(x)))));
+      c2.append(el("div", { class: "pb-wrap" }, t));
       if (sd) {
         const diff = sd.per_day - pb.per_day;
         const yrs = pb.years_left != null && sd.years_left != null ? pb.years_left - sd.years_left : null;
@@ -294,7 +309,8 @@
         `Daily savings are the average of ${pb.average_days} day${pb.average_days === 1 ? "" : "s"}` +
         (pb.average_days < 330 ? " and will swing with the seasons until there's a year of history." : ".") +
         (pb.estimated_days > 0 ? " Striped parts are estimated at that average for the days before the collector started." : "") +
-        (wf ? ` "+ fuel": as "${me}", but the car's ${wf.car_kwh} kWh counted against the ${wf.fuel === "DIESEL" ? "diesel" : "petrol"} ${wf.car} would have burnt (${money$(wf.fuel_extra)} more so far).` : "") +
+        (wf ? ` "+ fuel": the same, but the car's ${wf.car_kwh} kWh counted against the ${wf.fuel === "DIESEL" ? "diesel" : "petrol"} ${wf.car} would have burnt instead of grid power` +
+          ` (${money$(wf.fuel_extra)} more against ${me}'s prices` + (sf ? `, ${money$(sf.fuel_extra)} against the ${sd.plan}` : "") + " so far)." : "") +
         (pb.imported_days ? ` ${pb.imported_days} days come from a mySigen export, priced from ${me}'s bills or daily prices` +
           (pb.previous_days ? ` (the ${pb.previous_days} days before you joined ${me} are on the ${pb.previous_plan} in both views: an estimate)` : "") + "." : "") }));
     }

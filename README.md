@@ -373,7 +373,9 @@ The **Money** panel needs retailer prices (above) and a little setup in `sigen.e
   what you paid for energy (supply charges cancel out). **Against the comparison plan** (the
   Default Market Offer): the same use on a standard plan with its supply charge, minus everything
   you paid including supply and fee, since without a battery a wholesale-price retailer may not
-  have suited you. The gap between them is what being with your retailer adds. Days before the collector started are estimated at the average daily saving;
+  have suited you. The gap between them is what being with your retailer adds. With the car-against-fuel settings (below),
+  each also gets a "+ fuel" column, where the car's charging is counted against the fuel a
+  comparable car would have burnt: four paybacks in all. Days before the collector started are estimated at the average daily saving;
   the payback date is a projection from the last 12 months (or what's recorded so far).
 * **Battery trades**: whenever the battery sends power to the grid, or charges from it, beyond
   what the house needs. Under normal self-consumption it does neither, so these are your

@@ -3,6 +3,12 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.9.1
+
+- Payback in four views, side by side: your retailer's prices, the same + fuel, the Default
+  Market Offer, and the DMO + fuel, each with saved so far, daily saving and payback date
+  ("+ fuel" counts the car's charging against the fuel a comparable car would have burnt)
+
 ## 1.9.0
 
 - **The Windows desktop app is withdrawn.** Without a paid code-signing certificate, Windows
