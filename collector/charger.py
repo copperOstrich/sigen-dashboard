@@ -23,6 +23,7 @@ OFFLINE_AFTER = 12           # consecutive failed reads before the charger count
 PLANT_ON_W = 300             # car counts as charging above this
 PLANT_OFF_AFTER = 10 * 60    # ...and as stopped once below PLANT_IDLE_W for this long
 PLANT_IDLE_W = 100
+PLANT_COUNTER_S = 360        # charging only while the plant's charger energy counter has risen this recently (it may update coarsely)
 BLOCK_START = CHARGER[0][1]
 BLOCK_LEN = CHARGER[-1][1] + reg_count(CHARGER[-1][2]) - BLOCK_START
 
@@ -91,10 +92,13 @@ class SessionTracker:
             if s.get("start_kwh") is None and total is not None:
                 s["start_kwh"] = total
             inc = power * dt / 3.6e6
+            before = s["kwh"]
             if total is not None and s.get("start_kwh") is not None:
                 s["kwh"] = max(0.0, total - s["start_kwh"])
             else:
                 s["kwh"] += inc
+            if s["kwh"] > before:
+                s["last_rise"] = int(now)  # when energy last went into the car
             if grid_w is not None:
                 from_grid = min(power, max(0.0, grid_w)) * dt / 3.6e6
                 s["grid_kwh"] += from_grid
@@ -115,6 +119,16 @@ class SessionTracker:
                 event(f"Power offered for {duration(now - self.since)} but the car hasn't started charging")
             if not plugged:
                 s["end"] = int(now)
+                if self.inferred and s["kwh"] > 0:
+                    # worked out from the plant: the session ended when energy stopped going in, not
+                    # when that was noticed (or, for a session saved before this was tracked, at the
+                    # time its energy takes at its peak power)
+                    last = s.get("last_rise")
+                    if not last and s.get("peak_w"):
+                        last = s["start"] + int(s["kwh"] * 3.6e6 / s["peak_w"])
+                    if last:
+                        s["end"] = min(s["end"], int(last) + 60)
+                        s["charging_s"] = min(s["charging_s"], s["end"] - s["start"])
                 self.store.save_ev_session(s)
                 if self.inferred:
                     event(f"Charging finished after {duration(s['charging_s'])}: {s['kwh']:.1f} kWh")
@@ -158,6 +172,7 @@ class ChargerWatch:
         self.counter = deque()        # (time, plant EV energy counter) for the last few minutes
         self.charging_since_low = None
         self.plant_charging = False
+        self.counter_last, self.counter_moved_at = None, None
         self.plant_logged = False
 
     # ---- discovery ---------------------------------------------------------------
@@ -214,6 +229,10 @@ class ChargerWatch:
 
         Power: total load minus general load (the plant's split of the car from the house),
         or, if that stays at zero, the rise of the plant's AC-charger energy counter.
+
+        The counter is the judge of whether the car is charging at all: the two load figures can
+        briefly disagree by a few hundred watts (for example while the battery exports hard), which
+        would otherwise look like the car drawing power and keep a finished session open.
         """
         total = p.get("total_evac_kwh")
         if total is None:
@@ -221,6 +240,10 @@ class ChargerWatch:
         self.counter.append((now, total))
         while self.counter and now - self.counter[0][0] > 6 * 60:
             self.counter.popleft()
+        if self.counter_last is not None and total > self.counter_last:
+            self.counter_moved_at = now
+        self.counter_last = total
+        moved = self.counter_moved_at is not None and now - self.counter_moved_at <= PLANT_COUNTER_S
         diff = None
         if p.get("load_power") is not None and p.get("general_load_power") is not None:
             diff = max(0.0, float(p["load_power"]) - float(p["general_load_power"]))
@@ -228,11 +251,15 @@ class ChargerWatch:
         t0, k0 = self.counter[0]
         if w < 50 and now - t0 >= 120 and total > k0:  # counter moved: 0.01 kWh steps, so average
             w = (total - k0) * 3.6e6 / (now - t0)
+        if not moved:
+            w = 0.0  # the counter hasn't moved: whatever the load figures say, the car isn't charging
         self.plant_ev_w = w
-        if w >= PLANT_ON_W:
+        if moved and w >= PLANT_ON_W:
             self.plant_charging, self.charging_since_low = True, None
         elif self.plant_charging:
-            if w < PLANT_IDLE_W:
+            if not moved:
+                self.plant_charging, self.charging_since_low = False, None
+            elif w < PLANT_IDLE_W:
                 self.charging_since_low = self.charging_since_low or now
                 if now - self.charging_since_low >= PLANT_OFF_AFTER:
                     self.plant_charging = False

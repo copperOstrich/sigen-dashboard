@@ -3,6 +3,16 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.9.3
+
+- Car charging worked out from the inverter: the inverter's own charger energy counter now
+  decides whether the car is charging. Brief disagreements between the two load figures (for
+  example while the battery exports hard) could look like the car drawing power and keep a
+  finished session open for hours
+- Such a session now ends when energy stopped going into the car, not when that was noticed,
+  so its end time and charging time are right; a session left open by the old behaviour is
+  closed at the time its energy takes at its peak power
+
 ## 1.9.2
 
 - Car charging sessions show the fuel price (c/L) each session was compared at, marked * when
