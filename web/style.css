@@ -474,3 +474,8 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .pb-wrap { overflow-x: auto; }
 .pb-table.four th, .pb-table.four td { padding-left: 4px; }
 .pb-table.four td:first-child { white-space: normal; }
+.ev-sessions td, .ev-sessions th { white-space: nowrap; }
+.ev-grid > * { min-width: 0; }
+@media (max-width: 560px) {
+  table.ev-sessions { display: block; overflow-x: auto; max-width: 100%; font-size: 13px; }
+}

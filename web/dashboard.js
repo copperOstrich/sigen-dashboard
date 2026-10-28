@@ -724,6 +724,10 @@
     return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
   };
   const dayTime = (ts) => new Date(ts * 1000).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  // compact forms for the sessions table, so rows stay on one line on a phone
+  const dayShort = (ts) => { const d = new Date(ts * 1000);
+    return `${d.toLocaleDateString([], { day: "numeric", month: "short" })}, ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`; };
+  const durShort = (sec) => { const m = Math.round(sec / 60); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`; };
   let evData = null;
 
   function evFact(e) {
@@ -834,8 +838,9 @@
     const inf = evInferred();
     const fu = evData && evData.fuel && evData.fuel.enabled ? evData.fuel : null;
     renderEvFuel(fu);
-    tb.append(el("tr", {}, el("th", { text: inf ? "Started" : "Plugged in" }), inf ? null : el("th", { text: "For" }), el("th", { text: "Charging" }),
-      el("th", { text: "Energy" }), el("th", { class: "hide-sm", text: "From grid" }), el("th", { class: "hide-sm", text: "Grid cost" }),
+    tb.append(el("tr", {}, el("th", { text: inf ? "Started" : "Plugged in" }), inf ? null : el("th", { class: "hide-sm", text: "For" }), el("th", { class: "hide-sm", text: "Charging" }),
+      el("th", { text: "kWh" }), el("th", { class: "hide-sm", text: "Grid kWh" }), el("th", { class: "hide-sm", text: "Grid cost" }),
+      fu ? el("th", { title: `${fu.fuel_label} price used for the session, cents per litre`, text: "Fuel c/L" }) : null,
       fu ? el("th", { class: "hide-sm", text: "Fuel equiv." }) : null, fu ? el("th", { text: "Saved" }) : null));
     if (!list.length) {
       tb.append(el("tr", {}, el("td", { colspan: 6, class: "muted", style: "font-family:var(--font)", text: "No charging sessions recorded yet." })));
@@ -844,12 +849,15 @@
       const open = r.end == null;
       const span = (open ? Date.now() / 1000 : r.end) - r.start;
       tb.append(el("tr", {},
-        el("td", { style: "font-family:var(--font)", text: dayTime(r.start) }),
-        inf ? null : el("td", { text: open ? `${dur(span)} so far` : dur(span) }),
-        el("td", {}, r.charging_s ? dur(r.charging_s) : el("span", { class: "tag warn", text: open ? "not yet" : "never charged" })),
-        el("td", { text: S.kwh(r.kwh) }),
-        el("td", { class: "hide-sm", text: S.kwh(r.grid_kwh) }),
+        el("td", { style: "font-family:var(--font)", title: dayTime(r.start), text: dayShort(r.start) }),
+        inf ? null : el("td", { class: "hide-sm", text: open ? `${durShort(span)} so far` : durShort(span) }),
+        el("td", { class: "hide-sm" }, r.charging_s ? durShort(r.charging_s) : el("span", { class: "tag warn", text: open ? "not yet" : "never charged" })),
+        el("td", { text: (r.kwh || 0).toFixed(1) }),
+        el("td", { class: "hide-sm", text: (r.grid_kwh || 0).toFixed(1) }),
         el("td", { class: "hide-sm", text: r.cost == null ? "–" : `$${r.cost.toFixed(2)}` }),
+        fu ? el("td", { title: r.fuel && r.fuel.price_c != null ? (r.fuel.price_from === "recorded" ? "Average price recorded that day"
+            : r.fuel.price_from === "fixed" ? "Your fixed price (no price recorded that day)" : "Nearest recorded price (none recorded that day)") : null,
+          text: r.fuel && r.fuel.price_c != null ? `${r.fuel.price_c.toFixed(1)}${r.fuel.price_from === "recorded" ? "" : "*"}` : "–" }) : null,
         fu ? el("td", { class: "hide-sm", title: r.fuel && r.fuel.fuel_cost != null ? `${r.fuel.km} km: ${r.fuel.litres} L at ${r.fuel.price_c}c/L` +
           (r.fuel.price_from === "recorded" ? "" : r.fuel.price_from === "fixed" ? " (your fixed price)" : " (nearest recorded price)") +
           `; charging cost $${(r.fuel.charge_cost ?? 0).toFixed(2)} (grid $${(r.cost ?? 0).toFixed(2)} + solar $${(r.fuel.solar_cost ?? 0).toFixed(2)} at the export price)` : null,
@@ -857,6 +865,10 @@
         fu ? el("td", { text: r.fuel && r.fuel.saved != null ? `${r.fuel.saved < 0 ? "−" : ""}$${Math.abs(r.fuel.saved).toFixed(2)}` : "–" }) : null));
     }
     const links = $("ev-links"); links.innerHTML = "";
+    if (fu && list.some((r) => r.fuel && r.fuel.price_c != null && r.fuel.price_from !== "recorded")) {
+      links.append(el("span", { class: "muted", style: "flex-basis:100%;font-size:12.5px",
+        text: "* No fuel price was recorded that day, so the nearest recorded price (or your fixed price) is used." }));
+    }
     const base = S.apiBase();
     links.append(
       el("a", { href: `${base}/api/ev-sessions?format=csv&days=800`, download: "ev-charging-sessions.csv", target: "_blank", text: "Download all sessions (CSV)" }),

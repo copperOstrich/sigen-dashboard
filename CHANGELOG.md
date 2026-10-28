@@ -3,6 +3,13 @@
 Release notes for each tagged version. The desktop app offers the latest release as an
 update; the Docker image is tagged with the same version.
 
+## 1.9.2
+
+- Car charging sessions show the fuel price (c/L) each session was compared at, marked * when
+  no price was recorded that day (nearest recorded or your fixed price)
+- The sessions table is compact on a phone: start, kWh, fuel price and saving; the rest shows
+  on wider screens
+
 ## 1.9.1
 
 - Payback in four views, side by side: your retailer's prices, the same + fuel, the Default
