@@ -1,7 +1,14 @@
 # Changelog
 
-Release notes for each tagged version. The desktop app offers the latest release as an
-update; the Docker image is tagged with the same version.
+Release notes for each tagged version. The Docker image is tagged with the same version.
+
+## 1.9.4
+
+- Car charging: the sessions table has a c/kWh column, the session's charging cost per kWh
+  (grid energy at what you paid plus solar energy at the export price, free when that price is
+  negative). Also in the sessions CSV as `charging_c_per_kwh`
+- Monthly summary: on wide screens the tiles size to their content, so labels such as "Solar
+  and battery value" stay on one line and only wrap when space is tight
 
 ## 1.9.3
 

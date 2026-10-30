@@ -92,7 +92,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.9.3"
+VERSION = "1.9.4"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -1284,7 +1284,7 @@ class Api(BaseHTTPRequestHandler):
                 x["fuel"] = self.fuel.session(x)
         if path == "/api/ev-sessions" and csv:
             fcols = ",km,fuel_litres,fuel_price_c_per_l,fuel_price_from,fuel_cost_dollars,solar_kwh,solar_at_export_dollars," \
-                    "charging_cost_dollars,saved_dollars" if self.fuel.enabled else ""
+                    "charging_cost_dollars,charging_c_per_kwh,saved_dollars" if self.fuel.enabled else ""
             lines = ["plugged_in,unplugged,minutes_plugged_in,minutes_charging,kwh,kwh_from_grid,"
                      "grid_cost_dollars,peak_kw,states_seen" + fcols]
             v = lambda n, f="{:.2f}": "" if n is None else f.format(n)
@@ -1297,7 +1297,7 @@ class Api(BaseHTTPRequestHandler):
                 if self.fuel.enabled:
                     f = x.get("fuel") or {}
                     row += (f",{v(f.get('km'), '{}')},{v(f.get('litres'), '{}')},{v(f.get('price_c'), '{}')},{f.get('price_from') or ''},"
-                            f"{v(f.get('fuel_cost'))},{v(f.get('solar_kwh'))},{v(f.get('solar_cost'))},{v(f.get('charge_cost'))},{v(f.get('saved'))}")
+                            f"{v(f.get('fuel_cost'))},{v(f.get('solar_kwh'))},{v(f.get('solar_cost'))},{v(f.get('charge_cost'))},{v(f.get('charge_c_per_kwh'), '{}')},{v(f.get('saved'))}")
                 lines.append(row)
             return self._csv("ev-charging-sessions.csv", lines)
         out = {"sessions": sessions, "live": self.collector.charger.summary(), "fuel": self.fuel.summary(sessions)}

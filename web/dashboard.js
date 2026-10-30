@@ -840,6 +840,7 @@
     renderEvFuel(fu);
     tb.append(el("tr", {}, el("th", { text: inf ? "Started" : "Plugged in" }), inf ? null : el("th", { class: "hide-sm", text: "For" }), el("th", { class: "hide-sm", text: "Charging" }),
       el("th", { text: "kWh" }), el("th", { class: "hide-sm", text: "Grid kWh" }), el("th", { class: "hide-sm", text: "Grid cost" }),
+      fu ? el("th", { title: "Charging cost per kWh: grid energy at what you paid plus solar energy at the export price (free when negative)", text: "c/kWh" }) : null,
       fu ? el("th", { title: `${fu.fuel_label} price used for the session, cents per litre`, text: "Fuel c/L" }) : null,
       fu ? el("th", { class: "hide-sm", text: "Fuel equiv." }) : null, fu ? el("th", { text: "Saved" }) : null));
     if (!list.length) {
@@ -855,6 +856,8 @@
         el("td", { text: (r.kwh || 0).toFixed(1) }),
         el("td", { class: "hide-sm", text: (r.grid_kwh || 0).toFixed(1) }),
         el("td", { class: "hide-sm", text: r.cost == null ? "–" : `$${r.cost.toFixed(2)}` }),
+        fu ? el("td", { title: r.fuel && r.fuel.charge_cost != null ? `$${r.fuel.charge_cost.toFixed(2)} for ${(r.kwh || 0).toFixed(1)} kWh` : null,
+          text: r.fuel && r.fuel.charge_c_per_kwh != null ? r.fuel.charge_c_per_kwh.toFixed(1) : "–" }) : null,
         fu ? el("td", { title: r.fuel && r.fuel.price_c != null ? (r.fuel.price_from === "recorded" ? "Average price recorded that day"
             : r.fuel.price_from === "fixed" ? "Your fixed price (no price recorded that day)" : "Nearest recorded price (none recorded that day)") : null,
           text: r.fuel && r.fuel.price_c != null ? `${r.fuel.price_c.toFixed(1)}${r.fuel.price_from === "recorded" ? "" : "*"}` : "–" }) : null,

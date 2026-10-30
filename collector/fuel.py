@@ -221,6 +221,7 @@ class Fuel:
                 "price_from": how, "fuel_cost": round(fuel, 2) if fuel is not None else None,
                 "solar_kwh": round(solar, 2), "solar_cost": round(solar_cost, 2) if solar_cost is not None else None,
                 "charge_cost": round(charge, 2) if charge is not None else None,
+                "charge_c_per_kwh": round(charge / s["kwh"] * 100, 1) if charge is not None else None,
                 "saved": round(fuel - charge, 2) if fuel is not None and charge is not None else None}
 
     def summary(self, sessions=None):
