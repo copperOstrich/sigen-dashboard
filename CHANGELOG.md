@@ -13,14 +13,14 @@ update; the Docker image is tagged with the same version.
   so its end time and charging time are right; a session left open by the old behaviour is
   closed at the time its energy takes at its peak power
 
-## 1.9.2
+## 1.9.2 (Not Published)
 
 - Car charging sessions show the fuel price (c/L) each session was compared at, marked * when
   no price was recorded that day (nearest recorded or your fixed price)
 - The sessions table is compact on a phone: start, kWh, fuel price and saving; the rest shows
   on wider screens
 
-## 1.9.1
+## 1.9.1 (Not Published)
 
 - Payback in four views, side by side: your retailer's prices, the same + fuel, the Default
   Market Offer, and the DMO + fuel, each with saved so far, daily saving and payback date
