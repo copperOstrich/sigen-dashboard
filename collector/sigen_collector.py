@@ -210,6 +210,12 @@ class Store:
             for c in ("buy_c", "sell_c", "ev"):
                 if c not in cols:
                     self.db.execute(f"ALTER TABLE samples ADD COLUMN {c} REAL")
+            # own_kwh/own_value/own_priced: car energy not from the grid (solar or battery), measured
+            # each poll, and what it would have earned exported at that moment's price ($, never < 0)
+            ecols = {r[1] for r in self.db.execute("PRAGMA table_info(ev_sessions)")}
+            for c, t in (("own_kwh", "REAL"), ("own_value", "REAL"), ("own_priced", "INTEGER")):
+                if c not in ecols:
+                    self.db.execute(f"ALTER TABLE ev_sessions ADD COLUMN {c} {t}")
             self.db.commit()
 
     def empty(self):
@@ -379,7 +385,8 @@ class Store:
                  "max_v": round(mv or 0, 1)} for n, kwh, pw, mv in rows]
 
     # ---- AC charger
-    EV_COLS = ["start", "end", "start_kwh", "kwh", "grid_kwh", "cost", "peak_w", "charging_s", "states", "priced"]
+    EV_COLS = ["start", "end", "start_kwh", "kwh", "grid_kwh", "cost", "peak_w", "charging_s", "states", "priced",
+               "own_kwh", "own_value", "own_priced"]
 
     def open_ev_session(self):
         with self.lock:
@@ -414,6 +421,8 @@ class Store:
             s["cost"] = round(s["cost"], 2) if s.pop("priced") else None
             s["kwh"], s["grid_kwh"] = round(s["kwh"] or 0, 2), round(s["grid_kwh"] or 0, 2)
             s["peak_w"] = round(s["peak_w"] or 0)
+            if s.get("own_kwh") is not None:
+                s["own_kwh"], s["own_value"] = round(s["own_kwh"], 3), round(s["own_value"] or 0, 4)
             out.append(s)
         return out
 
@@ -798,8 +807,8 @@ class Collector:
                     log(f"Inverter reports {count} PV string{'s' if count != 1 else ''}")
             except Exception as e:  # inverter unit id may be wrong - plant data still useful
                 inv = {"_error": str(e)}
-        buy = self.retailer.prices_now()[0] if self.retailer else None
-        ev = self.charger.read(time.time(), p.get("grid_power"), buy, p)
+        buy, sell = self.retailer.prices_now() if self.retailer else (None, None)
+        ev = self.charger.read(time.time(), p.get("grid_power"), buy, p, sell_c=sell)
         self.raw = {"plant": p, "inverter": inv, "charger": self.charger.debug(), "read_at": time.time(),
                     "unsupported": {"plant": sorted(self.plant.unsupported),
                                     "inverter": sorted(self.inverter.unsupported) if self.inverter else []}}

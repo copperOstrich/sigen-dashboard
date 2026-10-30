@@ -7,6 +7,12 @@ Release notes for each tagged version. The Docker image is tagged with the same 
 - Car charging: the sessions table has a c/kWh column, the session's charging cost per kWh
   (grid energy at what you paid plus solar energy at the export price, free when that price is
   negative). Also in the sessions CSV as `charging_c_per_kwh`
+- Car charging: energy not from the grid (solar or battery) is now valued at the export price
+  at each moment the car drew it, the same way grid energy is priced at each moment's buy
+  price. Before, it used the plain average export price over the whole time the car was
+  plugged in, including hours it wasn't charging. Sessions recorded before 1.9.4 keep the
+  old method; hover over c/kWh to see which was used
+- A session still in progress shows its c/kWh greyed as "so far"
 - Monthly summary: on wide screens the tiles size to their content, so labels such as "Solar
   and battery value" stay on one line and only wrap when space is tight
 

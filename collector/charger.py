@@ -57,7 +57,7 @@ class SessionTracker:
         self.waiting_flagged = False
         self.inferred = False  # True when states come from the plant's figures, not the charger
 
-    def update(self, now, v, grid_w=None, buy_c=None, quiet=False):
+    def update(self, now, v, grid_w=None, buy_c=None, quiet=False, sell_c=None):
         code = int(v.get("state", -1))
         _short, label, plugged = CHARGER_STATE.get(code, ("?", f"Unknown state {code}", False))
         power = max(0.0, float(v.get("power") or 0))
@@ -86,7 +86,8 @@ class SessionTracker:
 
         if plugged and self.session is None:
             self.session = {"start": int(now), "end": None, "start_kwh": total, "kwh": 0.0, "grid_kwh": 0.0,
-                            "cost": 0.0, "peak_w": 0.0, "charging_s": 0, "states": "", "priced": 0}
+                            "cost": 0.0, "peak_w": 0.0, "charging_s": 0, "states": "", "priced": 0,
+                            "own_kwh": 0.0, "own_value": 0.0, "own_priced": 0}
         s = self.session
         if s is not None:
             if s.get("start_kwh") is None and total is not None:
@@ -105,6 +106,15 @@ class SessionTracker:
                 if buy_c is not None:
                     s["cost"] += from_grid * buy_c / 100
                     s["priced"] = 1
+                # The rest came from solar or the battery: value it at this moment's export price
+                # (Amber sign, negative = paid; free when exporting would have cost you). Sessions
+                # already open before this was tracked (own_kwh None) keep the session-average method.
+                if s.get("own_kwh") is not None:
+                    own = max(0.0, inc - from_grid)
+                    s["own_kwh"] += own
+                    if sell_c is not None:
+                        s["own_value"] = (s.get("own_value") or 0.0) + own * max(0.0, -sell_c) / 100
+                        s["own_priced"] = 1
             s["peak_w"] = max(s["peak_w"], power)
             if code == 5:
                 s["charging_s"] += int(round(dt))
@@ -270,7 +280,7 @@ class ChargerWatch:
         return {"state": 5 if self.plant_charging else 8, "total_kwh": total, "power": w,
                 "alarm1": 0, "alarm2": 0, "alarm3": 0}
 
-    def read(self, now, grid_w=None, buy_c=None, plant=None):
+    def read(self, now, grid_w=None, buy_c=None, plant=None, sell_c=None):
         """Called once per collector poll. Returns the charger's live summary (or None if off)."""
         if self.mode == "off":
             return None
@@ -288,7 +298,7 @@ class ChargerWatch:
                     # While still searching, a charger may yet turn up with its real states, so
                     # don't start or end sessions from the plant's figures until the search is over.
                     if self.status != "scanning":
-                        self.alarms = self.tracker.update(now, pv, grid_w, buy_c)
+                        self.alarms = self.tracker.update(now, pv, grid_w, buy_c, sell_c=sell_c)
                     if now - self.last_save >= 60:
                         self.tracker.save()
                         self.last_save = now
@@ -319,7 +329,7 @@ class ChargerWatch:
                 self.log(f"Reading the AC charger at Modbus unit {self.unit}")
             self.source, self.tracker.inferred = "charger", False
             self.values = v
-            self.alarms = self.tracker.update(now, v, grid_w, buy_c)
+            self.alarms = self.tracker.update(now, v, grid_w, buy_c, sell_c=sell_c)
             if now - self.last_save >= 60:
                 self.tracker.save()
                 self.last_save = now

@@ -213,13 +213,19 @@ class Fuel:
         litres = km * self.car_l / 100
         grid = s.get("grid_kwh") or 0
         solar = max(0.0, s["kwh"] - grid)
-        sell = self.store.avg_sell_c(s["start"], s.get("end") or time.time())
+        if s.get("own_priced") and (s.get("own_kwh") or 0) > 0.01:
+            # priced at each poll's export price while the car drew it: the energy-weighted price
+            sell, solar_from = s["own_value"] / s["own_kwh"] * 100, "interval"
+        else:
+            # sessions from before 1.9.4: the plain average export price over the plug-in time
+            sell, solar_from = self.store.avg_sell_c(s["start"], s.get("end") or time.time()), "average"
         solar_cost = solar * max(0.0, sell) / 100 if sell is not None else None
         charge = None if s.get("cost") is None else s["cost"] + (solar_cost or 0)
         fuel = litres * price / 100 if price else None
         return {"km": round(km), "litres": round(litres, 1), "price_c": round(price, 1) if price else None,
                 "price_from": how, "fuel_cost": round(fuel, 2) if fuel is not None else None,
                 "solar_kwh": round(solar, 2), "solar_cost": round(solar_cost, 2) if solar_cost is not None else None,
+                "solar_c": round(max(0.0, sell), 1) if sell is not None else None, "solar_price_from": solar_from,
                 "charge_cost": round(charge, 2) if charge is not None else None,
                 "charge_c_per_kwh": round(charge / s["kwh"] * 100, 1) if charge is not None else None,
                 "saved": round(fuel - charge, 2) if fuel is not None and charge is not None else None}

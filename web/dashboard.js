@@ -856,8 +856,12 @@
         el("td", { text: (r.kwh || 0).toFixed(1) }),
         el("td", { class: "hide-sm", text: (r.grid_kwh || 0).toFixed(1) }),
         el("td", { class: "hide-sm", text: r.cost == null ? "–" : `$${r.cost.toFixed(2)}` }),
-        fu ? el("td", { title: r.fuel && r.fuel.charge_cost != null ? `$${r.fuel.charge_cost.toFixed(2)} for ${(r.kwh || 0).toFixed(1)} kWh` : null,
-          text: r.fuel && r.fuel.charge_c_per_kwh != null ? r.fuel.charge_c_per_kwh.toFixed(1) : "–" }) : null,
+        fu ? el("td", { class: open ? "muted" : null, title: r.fuel && r.fuel.charge_cost != null ? (open ? "So far: " : "") +
+            `$${r.fuel.charge_cost.toFixed(2)} for ${(r.kwh || 0).toFixed(1)} kWh` +
+            (r.fuel.solar_kwh > 0.05 ? `, including ${r.fuel.solar_kwh.toFixed(1)} kWh not from the grid at ${r.fuel.solar_c}c/kWh ` +
+              (r.fuel.solar_price_from === "interval" ? "(export price while charging)" : "(average export price over the plug-in time)") : "") : null,
+          text: r.fuel && r.fuel.charge_c_per_kwh != null ? r.fuel.charge_c_per_kwh.toFixed(1) : "–" },
+          open && r.fuel && r.fuel.charge_c_per_kwh != null ? el("span", { class: "hide-sm", text: " so far" }) : null) : null,
         fu ? el("td", { title: r.fuel && r.fuel.price_c != null ? (r.fuel.price_from === "recorded" ? "Average price recorded that day"
             : r.fuel.price_from === "fixed" ? "Your fixed price (no price recorded that day)" : "Nearest recorded price (none recorded that day)") : null,
           text: r.fuel && r.fuel.price_c != null ? `${r.fuel.price_c.toFixed(1)}${r.fuel.price_from === "recorded" ? "" : "*"}` : "–" }) : null,
