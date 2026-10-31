@@ -2,6 +2,22 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.10.0
+
+- New **Settings** page (the gear, top right of the dashboard): every setting in `sigen.env`,
+  grouped, with what each does, its default and where its value comes from. Values are checked
+  before saving (numbers, dates, roof faces, time zone and so on)
+- Saving writes `sigen.env` in the data folder, keeping your comments and order (the previous
+  file is kept as `sigen.env.bak`), then restarts the collector in place: no need to touch
+  Container Station. Editing the file by hand still works as before
+- Settings can only be changed from a device on the collector's own network. From anywhere
+  else the gear is greyed out, the page is read-only, and API keys, the inverter's address and
+  your location are never sent. Keys are masked at home too, with Show to reveal one
+- `SETTINGS_EDIT_FROM` sets which addresses may change settings instead (useful behind a
+  reverse proxy, where every visitor looks local), or `none` to make the page read-only
+- The dashboard port and data folder are shown but can only be changed in `sigen.env` or the
+  container, so a typo can't make the dashboard unreachable
+
 ## 1.9.4
 
 - Car charging: the sessions table has a c/kWh column, the session's charging cost per kWh

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings · Home energy</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<style>
+  .set-wrap { max-width: 920px; margin: 0 auto; padding: 20px 24px 110px; }
+  .set-intro { color: var(--ink-2); font-size: 14px; margin: -6px 0 16px; }
+  .set-banner { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 16px; padding: 12px 16px; border-radius: var(--r-panel);
+    background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--rule)); font-size: 14px; }
+  .set-banner.ok { background: color-mix(in srgb, var(--good) 10%, var(--surface)); border-color: color-mix(in srgb, var(--good) 35%, var(--rule)); }
+  .set-banner.bad { background: color-mix(in srgb, var(--bad) 10%, var(--surface)); border-color: color-mix(in srgb, var(--bad) 35%, var(--rule)); }
+  .set-banner svg { flex: none; margin-top: 2px; }
+  .set-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+  .set-nav a { font-size: 13px; color: var(--ink-2); text-decoration: none; border: 1px solid var(--rule); background: var(--surface);
+    border-radius: 999px; padding: 3px 11px; }
+  .set-nav a:hover { border-color: var(--rule-strong); color: var(--ink); }
+  .set-group { margin-bottom: 16px; scroll-margin-top: 12px; }
+  .set-group h2 { font: 600 16px var(--font); margin: 0 0 4px; }
+  .set-row { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 4px 20px; padding: 12px 0; border-top: 1px solid var(--rule); }
+  .set-row:first-of-type { border-top: 0; }
+  .set-row > label { font-size: 14px; color: var(--ink); padding-top: 7px; }
+  .set-row .key { display: block; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink-3); margin-top: 2px; word-break: break-all; }
+  .set-ctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .set-ctl input, .set-ctl select { font: inherit; font-size: 14px; padding: 7px 10px; border-radius: var(--r-ctl); border: 1px solid var(--rule-strong);
+    background: var(--surface-2); color: var(--ink); min-width: 0; flex: 1 1 260px; max-width: 420px; }
+  .set-ctl input.short { flex: 0 1 140px; }
+  .set-ctl input:disabled, .set-ctl select:disabled { opacity: .6; cursor: not-allowed; }
+  .set-ctl .unit { font-size: 13px; color: var(--ink-3); }
+  .set-ctl .secret { font: 14px var(--font-num); color: var(--ink-2); padding: 7px 0; min-width: 90px; }
+  .set-help { grid-column: 2; font-size: 12.5px; color: var(--ink-3); }
+  .set-help .tag { font-size: 11.5px; border: 1px solid var(--rule-strong); border-radius: 999px; padding: 0 7px; margin-right: 6px; color: var(--ink-2); white-space: nowrap; }
+  .set-err { grid-column: 2; font-size: 13px; color: var(--bad); }
+  .set-row.changed > label { color: var(--home); }
+  .set-row.changed > label::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--home); margin-right: 7px; vertical-align: 1px; }
+  .set-row.has-err input, .set-row.has-err select { border-color: var(--bad); }
+  .small-btn { border: 1px solid var(--rule); background: var(--surface); border-radius: var(--r-ctl); padding: 5px 10px; font-size: 13px; cursor: pointer; color: var(--ink-2); }
+  .small-btn:hover:not(:disabled) { border-color: var(--rule-strong); color: var(--ink); }
+  .set-bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--rule-strong);
+    box-shadow: 0 -4px 16px rgba(0,0,0,.08); transform: translateY(110%); transition: transform .18s ease; z-index: 5; }
+  .set-bar:not(.show) { visibility: hidden; }
+  .set-bar.show { transform: none; }
+  .set-bar .in { max-width: 920px; margin: 0 auto; padding: 12px 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .set-bar .msg { flex: 1; font-size: 14px; color: var(--ink-2); min-width: 160px; }
+  .set-other-add { margin-top: 10px; }
+  .set-busy { position: fixed; inset: 0; background: color-mix(in srgb, var(--page) 80%, transparent); display: none; align-items: center;
+    justify-content: center; z-index: 10; font: 600 16px var(--font); }
+  .set-busy.show { display: flex; }
+  .set-busy .box { background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--r-panel); padding: 20px 24px; max-width: 340px; text-align: center; }
+  .set-busy .box p { font: 400 14px var(--font); color: var(--ink-2); margin: 6px 0 0; }
+  @media (max-width: 640px) {
+    .set-wrap { padding: 16px 14px 120px; }
+    .set-row { grid-template-columns: minmax(0, 1fr); }
+    .set-row > label { padding-top: 0; }
+    .set-help, .set-err { grid-column: 1; }
+    .set-ctl input, .set-ctl select { max-width: none; }
+    .set-bar .in { padding: 10px 14px; }
+    .set-bar .msg { flex-basis: 100%; }
+    .set-bar button { flex: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="set-wrap">
+  <header class="topbar">
+    <a class="ghost-btn" href="./" style="text-decoration:none">← Dashboard</a>
+    <h1>Settings</h1>
+    <span class="pill" id="access"><span class="dot" id="access-dot"></span><span id="access-text">Checking…</span></span>
+  </header>
+  <div id="banner"></div>
+  <p class="set-intro" id="intro"></p>
+  <nav class="set-nav" id="nav" aria-label="Setting groups"></nav>
+  <div id="groups"></div>
+</div>
+<div class="set-bar" id="bar">
+  <div class="in">
+    <span class="msg" id="bar-msg"></span>
+    <button class="ghost-btn" id="discard" type="button">Discard</button>
+    <button class="primary-btn" id="save" type="button">Save and restart</button>
+  </div>
+</div>
+<div class="set-busy" id="busy" role="status" aria-live="polite"><div class="box"><span id="busy-title">Restarting the collector…</span><p id="busy-text">Applying your settings. This takes a few seconds.</p></div></div>
+<script src="common.js"></script>
+<script src="settings.js"></script>
+</body>
+</html>

@@ -88,6 +88,8 @@ button { font: inherit; color: inherit; }
   padding: 5px 12px; font-size: 13px; cursor: pointer; color: var(--ink-2);
 }
 .ghost-btn:hover { border-color: var(--rule-strong); color: var(--ink); }
+.gear-btn { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; text-decoration: none; }
+.gear-btn.locked { opacity: .4; }
 
 .banner {
   display: none; margin-bottom: 16px; padding: 12px 16px; border-radius: var(--r-panel);

@@ -33,10 +33,16 @@ Configuration (environment variables):
   INSULATION_MIN_MOHM   insulation fault below this (inverter's shutdown point)   default 0.37
   SIGEN_CHARGER_UNIT    Sigen AC charger's Modbus unit id         default auto (scan for it); 0 = none;
                         plant = charger has no Modbus address, use the inverter's figures only
+  SETTINGS_EDIT_FROM    who may change settings from the dashboard: blank = the collector's own
+                        network; or addresses/ranges, comma separated; or none
+
+Most settings can be changed on the dashboard's Settings page (settings.py), which writes
+sigen.env and restarts this process in place.
 """
 import json
 import mimetypes
 import os
+import re
 import signal
 import sqlite3
 import sys
@@ -50,6 +56,14 @@ from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import settings as settings_page  # noqa: E402  (standard library only, no settings of its own)
+
+CONTAINER_ENV = dict(os.environ)  # before sigen.env is applied: what the container itself sets
+
+
+def settings_file_path():
+    data_dir = Path(os.environ.get("DATA_DIR") or Path(__file__).resolve().parent.parent / "data")
+    return Path(os.environ.get("SETTINGS_FILE") or data_dir / "sigen.env")
 
 
 def load_settings_file():
@@ -58,22 +72,10 @@ def load_settings_file():
     Read on every start, so on a NAS you can edit the file and just restart the
     container. Values in the file override the container's environment.
     """
-    data_dir = Path(os.environ.get("DATA_DIR") or Path(__file__).resolve().parent.parent / "data")
-    path = Path(os.environ.get("SETTINGS_FILE") or data_dir / "sigen.env")
+    path = settings_file_path()
     if not path.is_file():
         return None
-    for line in path.read_text(encoding="utf-8-sig").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key, value = key.strip(), value.strip()
-        if key.startswith("export "):
-            key = key[7:].strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        elif " #" in value:
-            value = value.split(" #", 1)[0].rstrip()
+    for key, value in settings_page.read_file(path).items():
         os.environ[key] = value
     return path
 
@@ -92,7 +94,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.9.4"
+VERSION = "1.10.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -116,6 +118,7 @@ AEMO_REGION = (ENV("AEMO_REGION", "") or "NSW1").strip().upper()
 AEMO_ENABLED = ENV("AEMO_ENABLED", "1") != "0"
 AEMO_SIMULATE = ENV("AEMO_SIMULATE", "0") == "1"
 CHARGER_SETTING = (ENV("SIGEN_CHARGER_UNIT", "") or "auto").strip()
+SETTINGS_EDIT_FROM = ENV("SETTINGS_EDIT_FROM", "") or ""
 def _env_num(name, default):
     v = (ENV(name, "") or "").strip()
     if not v:
@@ -1115,6 +1118,7 @@ class Api(BaseHTTPRequestHandler):
     retailer = None
     aemo = None
     weather = None
+    restart = None
 
     def log_message(self, fmt, *args):
         pass
@@ -1132,6 +1136,81 @@ class Api(BaseHTTPRequestHandler):
         body = json.dumps(obj, separators=(",", ":")).encode()
         self._headers(code, "application/json", {"Content-Length": str(len(body))})
         self.wfile.write(body)
+
+    def _settings_access(self):
+        return settings_page.access(self.client_address[0], SETTINGS_EDIT_FROM)
+
+    def _settings_get(self, q):
+        editable, why = self._settings_access()
+        path = SETTINGS_PATH or settings_file_path()
+        fv = settings_page.read_file(path)
+        reveal = q.get("reveal", [""])[0]
+        if reveal:
+            if not editable:
+                return self._json({"error": "Settings can only be read from your home network"}, 403)
+            return self._json({"key": reveal, "value": fv.get(reveal, CONTAINER_ENV.get(reveal, ""))})
+        out = settings_page.describe(path, fv, CONTAINER_ENV, os.environ, editable)
+        out.update(reason=why, version=VERSION, client=self.client_address[0] if editable else None)
+        return self._json(out)
+
+    def do_POST(self):
+        url = urlparse(self.path)
+        try:
+            if url.path != "/api/settings":
+                return self._json({"error": "not found"}, 404)
+            editable, why = self._settings_access()
+            if not editable:
+                return self._json({"error": f"Settings can't be changed from here: {why}"}, 403)
+            # only the dashboard's own page: a JSON body (other sites can't send one without the
+            # browser asking first, which is refused) from the same origin
+            origin = self.headers.get("Origin")
+            if (self.headers.get("Content-Type") or "").split(";")[0].strip() != "application/json" or (
+                    origin and urlparse(origin).netloc != self.headers.get("Host")):
+                return self._json({"error": "Changes are only accepted from the dashboard's Settings page"}, 403)
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 100_000:
+                return self._json({"error": "too large"}, 413)
+            body = json.loads(self.rfile.read(n) or b"{}")
+            changes = body.get("changes") or {}
+            if not isinstance(changes, dict):
+                return self._json({"error": "changes must be an object"}, 400)
+            path = SETTINGS_PATH or settings_file_path()
+            fv = settings_page.read_file(path)
+            current = {**{k: v for k, v in CONTAINER_ENV.items()}, **fv}
+            errors, clean = {}, {}
+            for key, value in changes.items():
+                key = str(key).strip()
+                spec = settings_page.BY_KEY.get(key)
+                if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key) or key in settings_page.HIDDEN:
+                    errors[key] = "Not a setting that can be changed here"
+                    continue
+                if spec and spec.get("readonly"):
+                    errors[key] = "Can only be changed in sigen.env or the container"
+                    continue
+                try:
+                    clean[key] = settings_page.validate(key, "" if value is None else str(value))
+                except ValueError as e:
+                    errors[key] = str(e)
+            before = settings_page.check_together(current)
+            for k, msg in settings_page.check_together({**current, **clean}).items():
+                if before.get(k) != msg:  # only problems this change would cause
+                    errors.setdefault(k, msg)
+            if errors:
+                return self._json({"error": "Some settings need fixing", "errors": errors}, 400)
+            clean = {k: v for k, v in clean.items() if current.get(k, "") != v}
+            if not clean:
+                return self._json({"ok": True, "changed": [], "restarting": False})
+            settings_page.write_file(path, clean)
+            log(f"Settings changed from the dashboard ({self.client_address[0]}): {', '.join(sorted(clean))}"
+                "; restarting to apply them")
+            self._json({"ok": True, "changed": sorted(clean), "restarting": True})
+            if Api.restart:
+                threading.Timer(0.5, Api.restart).start()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as e:
+            traceback.print_exc()
+            self._json({"error": str(e)}, 500)
 
     def do_OPTIONS(self):
         self._headers(204, "text/plain", {"Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -1255,6 +1334,8 @@ class Api(BaseHTTPRequestHandler):
                             raw[dev][k] = f"0x{int(v):04X}"
                 raw["version"] = VERSION
                 return self._json(raw)
+            if url.path == "/api/settings":
+                return self._settings_get(q)
             if url.path == "/api/health":
                 s = self.collector.snapshot()
                 return self._json({"ok": s.get("status") == "ok", "status": s.get("status"),
@@ -1402,6 +1483,14 @@ def main():
         f"{(retailer.state['provider'] + ' ' + retailer.state['mode']) if retailer else 'off'}; "
         f"AEMO: {AEMO_REGION if AEMO_ENABLED else 'off'}{' (simulated)' if AEMO_SIMULATE else ''})")
 
+    restarting = threading.Event()
+
+    def restart():
+        restarting.set()
+        threading.Thread(target=httpd.shutdown, daemon=True).start()
+
+    Api.restart = restart
+
     def stop(signum, _frame):
         # Inside a container this process is PID 1, which ignores SIGTERM unless it
         # installs a handler, so `docker stop` would otherwise wait 10 s and kill it.
@@ -1422,6 +1511,11 @@ def main():
         except Exception as e:  # never block shutdown
             log("Error while saving on shutdown:", e)
         log("Stopped cleanly")
+    if restarting.is_set():
+        httpd.server_close()
+        log("Restarting with the new settings")
+        args = getattr(sys, "orig_argv", None) or [sys.executable] + sys.argv
+        os.execv(sys.executable, [sys.executable] + list(args[1:]))
 
 
 if __name__ == "__main__":

@@ -78,7 +78,8 @@ SOLAR_KWP=10                 # optional: your array size in kW
 
 Every setting is listed under [Settings](#settings).
 
-Restart the container after changing `sigen.env`. To have it as an app on your computer or
+Change settings later from the dashboard's **Settings** page (the gear, top right), or edit
+`sigen.env` and restart the container. To have it as an app on your computer or
 phone, see [On your computer or phone](#5-on-your-computer-or-phone).
 On a QNAP, see [the ready-made setup](#ready-made-image-qnap-synology-unraid-portainer).
 
@@ -184,6 +185,14 @@ solar, battery health and temperatures.
 
 **Arrange panels**: hide what you don't use, and change the order and width of the rest.
 
+**Settings** (the gear): every setting below, grouped, with what each one does. Saving writes
+`sigen.env` in the data folder (the previous file is kept as `sigen.env.bak`, and your comments
+stay) and restarts the collector, which takes a few seconds. Settings can only be changed from
+a device on the collector's own network: from anywhere else the gear is greyed out, the page
+is read-only, and API keys, addresses and your location are never sent. Keys are shown masked
+at home too, with **Show** to reveal one. If the dashboard sits behind a reverse proxy, every
+visitor looks local, so set `SETTINGS_EDIT_FROM` to the addresses allowed to make changes.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/arrange-dark.png">
   <img alt="Arrange panels window listing each panel with a show checkbox, a width choice and up and down buttons" src="docs/screenshots/arrange-light.png" width="480">
@@ -247,8 +256,8 @@ a plain address with no port, or a name you set up on your router's DNS), use
 [`qnap/docker-compose.own-ip.yml`](qnap/docker-compose.own-ip.yml) instead; the comments at the
 top say which three values to change.
 
-History is kept in `/share/Container/sigen-dashboard`. To change a setting later, edit
-`sigen.env` and restart the container.
+History is kept in `/share/Container/sigen-dashboard`. To change a setting later, use the
+dashboard's **Settings** page, or edit `sigen.env` and restart the container.
 
 Any Docker host can do the same: every setting can go in a `sigen.env` file in the data
 folder (mounted at `/data`), which is read on each start and overrides the container's
@@ -592,8 +601,9 @@ stays low is worth having your installer check.
 
 ## Settings
 
-Set these as environment variables, or in `sigen.env` in the data folder (read on every
-start; restart the container after editing).
+Change these on the dashboard's **Settings** page, or set them as environment variables or in
+`sigen.env` in the data folder (read on every start; restart the container after editing it by
+hand). Values in `sigen.env` win over the container's environment.
 
 | Setting | What it does | Default |
 |---|---|---|
@@ -626,6 +636,7 @@ start; restart the container after editing).
 | `DATA_DIR` | Where the database and `sigen.env` live | `/data` in Docker |
 | `TZ` | Time zone for "today" | `Australia/Sydney` |
 | `RETENTION_DAYS` | Days of minute history to keep | `800` |
+| `SETTINGS_EDIT_FROM` | Who may change settings from the dashboard: blank = devices on the collector's own network; or addresses and ranges, comma separated (`192.168.1.0/24`); or `none` for read-only everywhere | the collector's network |
 
 Simulator only: `SIM_PV_KWP`, `SIM_BATTERY_KWH`, `SIM_INVERTER_KW`, `SIM_EXPORT_LIMIT_KW`,
 `SIM_PV_STRINGS`, `SIM_EV_CHARGER`, `SIM_CHARGER_MODBUS`, `SIM_INSULATION_MOHM`, `SIM_ALARMS`,
@@ -650,6 +661,8 @@ Simulator only: `SIM_PV_KWP`, `SIM_BATTERY_KWH`, `SIM_INVERTER_KW`, `SIM_EXPORT_
 | `GET /api/money` | Plan comparison by month and for the last 12 months, payback, battery trades with the grid |
 | `GET /api/outlook` | Battery outlook: projected charge to the end of tomorrow, milestones and advice |
 | `GET /api/weather` | Current weather, hourly and daily forecast, and the solar forecast in kWh |
+| `GET /api/settings` | Every setting, its value and where it came from (keys and private values hidden away from home) |
+| `POST /api/settings` | `{"changes": {"KEY": "value"}}` from the Settings page: checks, saves to `sigen.env` and restarts; home network only |
 | `GET /api/health` | `{ok, status, updated, version}` for monitoring |
 | `GET /api/debug` | Raw register values, unsupported registers and the charger search, for troubleshooting |
 

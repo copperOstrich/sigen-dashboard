@@ -1515,6 +1515,13 @@
   function openSettings() { $("api-input").value = S.apiBase() || location.origin; dlg.showModal(); }
   $("settings-btn").addEventListener("click", openSettings);
   if (!S.isDesktop && location.protocol.startsWith("http")) $("settings-btn").hidden = true;
+  // Settings can only be changed from the collector's own network: grey the gear elsewhere
+  // (the page still opens, read-only, with private values hidden).
+  S.fetchJSON("/api/settings").then((st) => {
+    const g = $("config-btn");
+    g.classList.toggle("locked", !st.editable);
+    g.title = st.editable ? "Settings" : "Settings (read-only: you're not on your home network)";
+  }).catch(() => {});
   dlg.addEventListener("close", () => {
     if (dlg.returnValue !== "save") return;
     S.setApiBase($("api-input").value.trim());
