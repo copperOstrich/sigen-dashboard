@@ -24,6 +24,7 @@ class Outlook:
         self.store, self.tz, self.log = store, tz, log
         self.result = None
         self.computed = 0.0
+        self.rows, self.limits = [], {}
 
     # ---------------------------------------------------------------- profiles
     def _profiles(self, now):
@@ -122,6 +123,7 @@ class Outlook:
                          "grid_in": grid_in, "grid_out": grid_out, "price": price_at.get(int(t) // STEP * STEP)})
             t = (t // STEP + 1) * STEP
 
+        self.rows, self.limits = rows, {"reserve": reserve, "top": top, "cap": cap}  # for appliance timing
         self.result = self._summarise(now, rows, soc, reserve, top, mid.timestamp(), solar_source, n_days, cap, live)
         self.computed = now
         return self.result

@@ -153,6 +153,14 @@
       </div>
     </section>
 
+    <section class="panel span-12" aria-labelledby="ap-h" data-panel="appliances" data-name="Best times to run appliances" id="ap-panel" hidden>
+      <div class="panel-head">
+        <h2 id="ap-h">Best times to run appliances</h2><span class="sub" id="ap-sub"></span>
+      </div>
+      <table class="strings ap-table" id="ap-table"></table>
+      <p class="chart-note" id="ap-note"></p>
+    </section>
+
     <section class="panel span-12" aria-labelledby="wx-h" data-panel="weather" data-name="Weather and solar forecast" id="wx-panel" hidden>
       <div class="panel-head">
         <h2 id="wx-h">Weather and solar forecast</h2><span class="sub" id="wx-sub"></span>
@@ -272,6 +280,16 @@
         come from when the strings start and stop producing, so they follow the seasons.</p>
     </section>
 
+    <section class="panel span-12" aria-labelledby="lim-h" data-panel="limits" data-name="Solar limits" id="lim-panel" hidden>
+      <div class="panel-head">
+        <h2 id="lim-h">Solar limits</h2><span class="sub">solar held back, last 30 days, kWh per day</span>
+        <div class="legend" id="lim-legend"></div>
+      </div>
+      <div class="lim-summary" id="lim-summary"></div>
+      <div class="chart" id="lim-chart"></div>
+      <p class="chart-note" id="lim-note"></p>
+    </section>
+
     <section class="panel span-12" aria-labelledby="mo-h" data-panel="monthly" data-name="Monthly summary" id="mo-panel" hidden>
       <div class="panel-head">
         <h2 id="mo-h">Monthly summary</h2>
@@ -322,6 +340,12 @@
       </div>
       <div class="chart" id="tr-chart"></div>
       <p class="chart-note" id="tr-note"></p>
+    </section>
+
+    <section class="panel span-12" aria-labelledby="wear-h" data-panel="wear" data-name="Battery wear" id="wear-panel" hidden>
+      <div class="panel-head"><h2 id="wear-h">Battery wear</h2><span class="sub" id="wear-sub"></span></div>
+      <div class="today wear-tiles" id="wear-tiles"></div>
+      <p class="chart-note" id="wear-note"></p>
     </section>
 
     <section class="panel span-8" aria-labelledby="daily-h" data-panel="daily" data-name="Daily energy">

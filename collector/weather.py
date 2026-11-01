@@ -111,11 +111,17 @@ class Weather:
         self.enabled = enabled and (lat is not None or bool(self.address) or self.simulate)
         self.lock = threading.Lock()
         self.factor, self.factor_n = BASE_FACTOR, 0
+        self.model = {}  # {hour start: kW before the factor}, past fortnight and forecast
         self.state = {"enabled": self.enabled, "status": "starting" if self.enabled else "off",
                       "mode": "simulator" if self.simulate else "live", "error": None, "updated": None,
                       "location": None, "planes": [], "factor": None, "current": None, "hourly": [], "daily": []}
 
     # ---------------------------------------------------------------- public
+    def expected(self, hour_start):
+        """What the model says the panels could make in the hour starting then (W), or None."""
+        raw, f = self.model.get(int(hour_start)), self.factor
+        return None if raw is None or f is None else raw * f * 1000
+
     def snapshot(self):
         with self.lock:
             return json.loads(json.dumps(self.state))
@@ -244,6 +250,7 @@ class Weather:
         # pv[i] is now kW per (factor), for the hour ENDING at times[i]
         starts = [t - 3600 for t in times]
         self._calibrate(starts, pv, have_kw)
+        self.model = {**{t: r for t, r in self.model.items() if t >= starts[0] - 86400}, **dict(zip(starts, pv))}
         self._publish(loc, planes, main, starts, pv, have_kw)
 
     def _calibrate(self, starts, raw, have_kw):
@@ -345,6 +352,14 @@ class Weather:
                           "rain_mm": 0, "uv": 9, "sunrise": ds + 5 * 3600 + 50 * 60, "sunset": ds + 19 * 3600 + 10 * 60,
                           "pv_kwh": round(sum(h["pv_w"] for h in hs) / 1000, 1)})
         cur_h = next((h for h in hourly if h["t"] <= now < h["t"] + 3600), hourly[0])
+        # the simulator's own sunshine (before any export limit): the model for Solar limits
+        past = mid - 14 * 86400
+        for t in range(int(past), int(mid - 86400), 3600):
+            if t not in self.model:
+                lt = datetime.fromtimestamp(t, self.tz).replace(tzinfo=None)
+                self.model[t] = sum(simulator.solar_w(lt + timedelta(minutes=m)) for m in range(0, 60, 10)) / 6000
+        self.model.update(dict(zip(starts, raw)))
+        self.factor = 1.0
         with self.lock:
             self.state.update(status="ok", error=None, updated=now,
                               location={"lat": -33.87, "lon": 151.21, "name": "Simulated location"},

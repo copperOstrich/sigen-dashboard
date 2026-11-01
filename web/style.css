@@ -484,3 +484,26 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 @media (max-width: 560px) {
   table.ev-sessions { display: block; overflow-x: auto; max-width: 100%; font-size: 13px; }
 }
+
+/* ---------------------------------------------------------------- appliances, limits, wear (1.11) */
+.ap-table td, .ap-table th { padding: 7px 0; }
+.ap-table th:nth-child(n+2), .ap-table td:nth-child(n+2) { padding-left: 14px; }
+.ap-table td:first-child { font-family: var(--font); }
+.ap-table .when { font-family: var(--font); font-weight: 600; }
+.ap-table .why { font-family: var(--font); color: var(--ink-3); font-size: 13px; }
+.ap-table .now-tag { font-family: var(--font); font-size: 11.5px; border: 1px solid var(--good); color: var(--good); border-radius: 999px; padding: 0 7px; margin-left: 6px; white-space: nowrap; }
+@media (max-width: 560px) { .ap-table .hide-sm { display: none; } }
+.lim-summary { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: 2px 0 10px; font-size: 14px; color: var(--ink-2); }
+.lim-summary b { font: 600 22px/1.2 var(--font-num); color: var(--ink); margin-right: 4px; }
+.wear-tiles { margin: 4px 0 6px; }
+.wear-tiles .d { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+.wear-tiles .d.warn { color: var(--warn); }
+.today.wear-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 1080px) { .today.wear-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .today.wear-tiles > div:nth-child(4) { border-left: 0; padding-left: 0; } .today.wear-tiles > div:nth-child(5) { border-left: 1px solid var(--rule); padding-left: 16px; } }
+@media (max-width: 560px) { .today.wear-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .today.wear-tiles > div:nth-child(odd) { border-left: 0; padding-left: 0; } .today.wear-tiles > div:nth-child(even) { border-left: 1px solid var(--rule); padding-left: 16px; } }
+.strings td.st-low { color: var(--warn); font-weight: 600; }
+.strings td.st-down { color: var(--bad); font-weight: 600; }
+.facts dd .small-link { font: 13px var(--font); color: var(--home); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; margin-left: 6px; }
+.facts dd .small-link:disabled { color: var(--ink-3); cursor: default; text-decoration: none; }

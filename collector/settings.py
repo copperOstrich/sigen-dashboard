@@ -24,6 +24,7 @@ def _s(key, group, label, help, kind="text", default="", **kw):
 
 INV, PRICES, SITE, MONEY, CAR, CHECKS, COLLECTOR = (
     "Inverter", "Prices", "Weather and solar forecast", "Money", "Car and fuel", "Checks", "Collector")
+BATTERY, APPL, BACKUP, MQTT = "Battery", "Appliances", "Backups", "Home Assistant (MQTT)"
 
 ON_OFF = [["1", "On"], ["0", "Off"]]
 
@@ -105,6 +106,38 @@ SCHEMA = [
        "0.5", min=0.01, max=100, unit="MΩ"),
     _s("INSULATION_MIN_MOHM", CHECKS, "Insulation alarm below", "About where the inverter shuts down.",
        "number", "0.37", min=0.01, max=100, unit="MΩ"),
+    _s("EXPORT_LIMIT_KW", CHECKS, "Export limit", "Your connection's export limit, for Solar limits. Blank = "
+       "learned from where exports keep levelling off.", "number", "", min=0, max=1000, unit="kW",
+       placeholder="learned"),
+    # ---------------------------------------------------------------- battery
+    _s("BATTERY_WARRANTY_YEARS", BATTERY, "Warranty length", "From your battery's warranty, counted from the "
+       "day the system was switched on (Money).", "number", "10", min=1, max=30, unit="years"),
+    _s("BATTERY_WARRANTY_MWH", BATTERY, "Warranty energy limit", "Some warranties also end after this much "
+       "energy has gone through the battery. Blank if yours doesn't say.", "number", "", min=0, max=10000, unit="MWh"),
+    _s("BATTERY_WARRANTY_SOH", BATTERY, "Warranted health", "The capacity the warranty promises at the end, "
+       "e.g. 70.", "number", "", min=1, max=100, unit="%"),
+    # ---------------------------------------------------------------- appliances
+    _s("APPLIANCES", APPL, "Appliances", "For Best times to run appliances: each as name:kW:hours, comma separated.",
+       "appliances", "Dishwasher:1.2:2,Washing machine:0.5:1.5,Dryer:2.5:1.5"),
+    # ---------------------------------------------------------------- backups
+    _s("BACKUPS_ENABLED", BACKUP, "Nightly backups", "A copy of the database each night, in the data folder's "
+       "backups folder.", "choice", "1", options=ON_OFF),
+    _s("BACKUP_TIME", BACKUP, "Back up at", "Local time, 24-hour.", "time", "02:30", placeholder="02:30"),
+    _s("BACKUP_KEEP_DAILY", BACKUP, "Keep daily copies", "The most recent days.", "int", "7", min=1, max=90, unit="days"),
+    _s("BACKUP_KEEP_WEEKLY", BACKUP, "Keep weekly copies", "One a week before that.", "int", "4", min=0, max=104,
+       unit="weeks"),
+    _s("BACKUP_DIR", BACKUP, "Backup folder", "Inside the container. Blank = backups in the data folder.", "text", "",
+       placeholder="/data/backups"),
+    # ---------------------------------------------------------------- MQTT
+    _s("MQTT_HOST", MQTT, "MQTT broker", "Your broker's address (e.g. Home Assistant's Mosquitto add-on). "
+       "Blank = off.", "host", "", sensitive=True, placeholder="192.168.1.20"),
+    _s("MQTT_PORT", MQTT, "Port", "", "int", "1883", min=1, max=65535),
+    _s("MQTT_USERNAME", MQTT, "User name", "", "text", "", sensitive=True),
+    _s("MQTT_PASSWORD", MQTT, "Password", "", "secret"),
+    _s("MQTT_TOPIC", MQTT, "Topic", "Figures go to <topic>/state as one JSON message.", "text", "sigen-dashboard"),
+    _s("MQTT_DISCOVERY_PREFIX", MQTT, "Home Assistant discovery", "Home Assistant's discovery prefix, so the "
+       "sensors appear by themselves. Blank to skip.", "text", "homeassistant"),
+    _s("MQTT_INTERVAL", MQTT, "Send every", "", "number", "10", min=2, max=3600, unit="seconds"),
     # ---------------------------------------------------------------- collector
     _s("TZ", COLLECTOR, "Time zone", "For when \"today\" starts.", "zone", "Australia/Sydney"),
     _s("RETENTION_DAYS", COLLECTOR, "Keep history for", "Days of minute-by-minute history.", "int", "800",
@@ -263,6 +296,20 @@ def validate(key, value, all_values=None):
                 raise ValueError(f"'{p.strip()}' isn't tilt:azimuth:kW")
             if not (0 <= t <= 90 and -360 <= a <= 360 and 0 < kw <= 1000):
                 raise ValueError(f"'{p.strip()}': tilt 0-90, azimuth 0-360, kW above 0")
+    elif k == "time":
+        m = re.fullmatch(r"(\d{1,2}):(\d{2})", value)
+        if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+            raise ValueError("A time like 02:30")
+        value = f"{int(m.group(1)):02d}:{m.group(2)}"
+    elif k == "appliances":
+        for part in value.split(","):
+            bits = [b.strip() for b in part.split(":")]
+            try:
+                ok = len(bits) == 3 and bits[0] and 0 < float(bits[1]) <= 50 and 0 < float(bits[2]) <= 24
+            except ValueError:
+                ok = False
+            if not ok:
+                raise ValueError(f"'{part.strip()}' isn't name:kW:hours")
     elif k == "zone":
         try:
             ZoneInfo(value)

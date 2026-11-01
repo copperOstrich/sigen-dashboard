@@ -88,13 +88,19 @@ from outlook import Outlook  # noqa: E402
 from money import Money  # noqa: E402
 from importer import import_folder  # noqa: E402
 from fuel import Fuel  # noqa: E402
+from backup import Backups  # noqa: E402
+from strings_health import StringsHealth  # noqa: E402
+from limits import Limits  # noqa: E402
+from wear import battery_wear  # noqa: E402
+from advice import appliance_advice, parse as parse_appliances  # noqa: E402
+from mqtt import Mqtt  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.10.0"
+VERSION = "1.11.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -150,6 +156,22 @@ FUEL_SETTINGS = {k: (_env_num(k, None) if k in ("EV_KWH_PER_100KM", "COMPARE_L_P
                  for k in ("EV_MODEL", "EV_KWH_PER_100KM", "COMPARE_VEHICLE", "COMPARE_L_PER_100KM", "FUEL_TYPE",
                            "FUEL_RADIUS_KM", "FUEL_EXCLUDE_BRANDS", "FUEL_PRICE_C_L", "FUELCHECK_API_KEY",
                            "FUELCHECK_API_SECRET", "FUELWATCH_SUBURB")}
+# backups, solar limits, battery wear, appliance timing, MQTT (see backup.py, limits.py, wear.py,
+# advice.py, mqtt.py)
+BACKUPS_ENABLED = ENV("BACKUPS_ENABLED", "1") != "0"
+BACKUP_KEEP_DAILY = int(_env_num("BACKUP_KEEP_DAILY", 7))
+BACKUP_KEEP_WEEKLY = int(_env_num("BACKUP_KEEP_WEEKLY", 4))
+BACKUP_TIME = (ENV("BACKUP_TIME", "") or "02:30").strip()
+BACKUP_DIR = Path(ENV("BACKUP_DIR", "") or DATA_DIR / "backups")
+EXPORT_LIMIT_KW = _env_num("EXPORT_LIMIT_KW", None)
+BATTERY_WARRANTY_YEARS = _env_num("BATTERY_WARRANTY_YEARS", 10)
+BATTERY_WARRANTY_MWH = _env_num("BATTERY_WARRANTY_MWH", None)
+BATTERY_WARRANTY_SOH = _env_num("BATTERY_WARRANTY_SOH", None)
+APPLIANCES = ENV("APPLIANCES", None)
+MQTT_HOST = (ENV("MQTT_HOST", "") or "").strip()
+MQTT_SETTINGS = {k: (ENV(k, "") or "").strip() for k in ("MQTT_PORT", "MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_TOPIC",
+                                                         "MQTT_INTERVAL")}
+MQTT_DISCOVERY = ENV("MQTT_DISCOVERY_PREFIX", None)
 INSULATION_CONFIRM = 3  # consecutive readings either side of the limit before it counts
 
 COUNTERS = ["total_pv_kwh", "total_load_kwh", "total_import_kwh", "total_export_kwh",
@@ -168,6 +190,7 @@ def local_day(ts):
 class Store:
     def __init__(self, path):
         path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = path
         self.db = sqlite3.connect(str(path), check_same_thread=False)
         self.lock = threading.Lock()
         with self.lock:
@@ -216,7 +239,7 @@ class Store:
             # own_kwh/own_value/own_priced: car energy not from the grid (solar or battery), measured
             # each poll, and what it would have earned exported at that moment's price ($, never < 0)
             ecols = {r[1] for r in self.db.execute("PRAGMA table_info(ev_sessions)")}
-            for c, t in (("own_kwh", "REAL"), ("own_value", "REAL"), ("own_priced", "INTEGER")):
+            for c, t in (("own_kwh", "REAL"), ("own_value", "REAL"), ("own_priced", "INTEGER"), ("last_rise", "INTEGER")):
                 if c not in ecols:
                     self.db.execute(f"ALTER TABLE ev_sessions ADD COLUMN {c} {t}")
             self.db.commit()
@@ -389,7 +412,7 @@ class Store:
 
     # ---- AC charger
     EV_COLS = ["start", "end", "start_kwh", "kwh", "grid_kwh", "cost", "peak_w", "charging_s", "states", "priced",
-               "own_kwh", "own_value", "own_priced"]
+               "own_kwh", "own_value", "own_priced", "last_rise"]
 
     def open_ev_session(self):
         with self.lock:
@@ -763,6 +786,9 @@ class Collector:
         self.rec_lock = threading.Lock()
         self.stopping = threading.Event()
         self.raw = {"plant": {}, "inverter": {}}
+        self.health = StringsHealth(store, TZ, event=store.event, log=log)
+        self.backups = self.mqtt = None  # set by main()
+        self._backup_status, self._backup_at = None, 0
 
     def snapshot(self):
         with self.cond:
@@ -823,6 +849,14 @@ class Collector:
             log("Connection restored")
         self.record(p, now, inv)
         self._track_day(p, inv, now)
+        try:
+            self.health.watch(now, (self.state.get("system") or {}).get("strings") or [])
+            if self.health.due(now):
+                self.health.compute(now)
+        except Exception as e:  # a health check must never stop the readings
+            self.health.computed = now
+            log("String health check failed:", f"{type(e).__name__}: {e}")
+            traceback.print_exc()
         if now - self.outlook.computed >= 300:
             try:
                 res = self.outlook.compute(self.state, self.weather.snapshot() if self.weather else None,
@@ -914,6 +948,9 @@ class Collector:
             alarms = alarms + [{"source": "Dashboard check", "severity": "warning",
                                 "message": f"Insulation resistance lower than usual: {val}",
                                 "register": "insulation_resistance", "bit": None}]
+        alarms = alarms + self.health.alarms()
+        if self.backups and now - self._backup_at >= 60:
+            self._backup_status, self._backup_at = self.backups.status(), now
 
         strings = []
         n = int(inv.get("pv_string_count") or 0) or 4
@@ -962,6 +999,8 @@ class Collector:
                 "insulation_warn_mohm": INSULATION_WARN, "insulation_level": self.ins_level,
                 "inverter_error": inv.get("_error"), "strings": strings,
                 "max_active_power": r(p.get("max_active_power")),
+                "backup": self._backup_status or {"enabled": False},
+                "mqtt": self.mqtt.summary() if self.mqtt else {"enabled": False},
             },
             "alarms": alarms + [a for a in (ev or {}).get("alarms", [])],
             "ev": ev or {"enabled": False, "status": "off"},
@@ -1119,6 +1158,8 @@ class Api(BaseHTTPRequestHandler):
     aemo = None
     weather = None
     restart = None
+    backups = None
+    limits = None
 
     def log_message(self, fmt, *args):
         pass
@@ -1153,20 +1194,33 @@ class Api(BaseHTTPRequestHandler):
         out.update(reason=why, version=VERSION, client=self.client_address[0] if editable else None)
         return self._json(out)
 
+    def _post_refused(self):
+        """Why this change request can't be accepted, or None. Home network only, and only from the
+        dashboard itself: a JSON body (other sites can't send one without the browser asking first,
+        which is refused) from the same origin."""
+        editable, why = self._settings_access()
+        if not editable:
+            return f"Settings can't be changed from here: {why}"
+        origin = self.headers.get("Origin")
+        if (self.headers.get("Content-Type") or "").split(";")[0].strip() != "application/json" or (
+                origin and urlparse(origin).netloc != self.headers.get("Host")):
+            return "Changes are only accepted from the dashboard itself"
+        return None
+
     def do_POST(self):
         url = urlparse(self.path)
         try:
-            if url.path != "/api/settings":
+            if url.path not in ("/api/settings", "/api/backups"):
                 return self._json({"error": "not found"}, 404)
-            editable, why = self._settings_access()
-            if not editable:
-                return self._json({"error": f"Settings can't be changed from here: {why}"}, 403)
-            # only the dashboard's own page: a JSON body (other sites can't send one without the
-            # browser asking first, which is refused) from the same origin
-            origin = self.headers.get("Origin")
-            if (self.headers.get("Content-Type") or "").split(";")[0].strip() != "application/json" or (
-                    origin and urlparse(origin).netloc != self.headers.get("Host")):
-                return self._json({"error": "Changes are only accepted from the dashboard's Settings page"}, 403)
+            refused = self._post_refused()
+            if refused:
+                return self._json({"error": refused}, 403)
+            if url.path == "/api/backups":
+                if not Api.backups or not Api.backups.enabled:
+                    return self._json({"error": "Backups are turned off"}, 400)
+                res = Api.backups.backup_now()
+                self.collector._backup_at = 0
+                return self._json(res, 200 if res.get("ok") else 500)
             n = int(self.headers.get("Content-Length") or 0)
             if n > 100_000:
                 return self._json({"error": "too large"}, 413)
@@ -1336,6 +1390,22 @@ class Api(BaseHTTPRequestHandler):
                 return self._json(raw)
             if url.path == "/api/settings":
                 return self._settings_get(q)
+            if url.path == "/api/backups":
+                if not Api.backups:
+                    return self._json({"enabled": False})
+                return self._json({**Api.backups.status(), "files": Api.backups.files()})
+            if url.path == "/api/strings-health":
+                return self._json(self.collector.health.result)
+            if url.path == "/api/limits":
+                return self._json(Api.limits.summary(min(400, max(1, int(q.get("days", ["30"])[0])))))
+            if url.path == "/api/battery-wear":
+                return self._json(battery_wear(self.store, self.collector.snapshot(), TZ, installed=SYSTEM_INSTALLED or None,
+                                               warranty_years=BATTERY_WARRANTY_YEARS, warranty_mwh=BATTERY_WARRANTY_MWH,
+                                               warranty_soh=BATTERY_WARRANTY_SOH))
+            if url.path == "/api/appliances":
+                o = self.collector.outlook
+                fc = (self.retailer.snapshot().get("forecast") if self.retailer else None) or []
+                return self._json(appliance_advice(o.rows, o.limits, fc, parse_appliances(APPLIANCES), time.time()))
             if url.path == "/api/health":
                 s = self.collector.snapshot()
                 return self._json({"ok": s.get("status") == "ok", "status": s.get("status"),
@@ -1473,6 +1543,21 @@ def main():
     Api.fuel = money.fuel = fuel
     if fuel.enabled:
         threading.Thread(target=fuel.run, daemon=True).start()
+    backups = Backups(store.path, BACKUP_DIR, TZ, keep_daily=BACKUP_KEEP_DAILY, keep_weekly=BACKUP_KEEP_WEEKLY,
+                      at=BACKUP_TIME, enabled=BACKUPS_ENABLED, event=store.event, log=log)
+    Api.backups = collector.backups = backups
+    threading.Thread(target=backups.run, daemon=True).start()
+    Api.limits = Limits(store, TZ, expected=weather.expected if weather.enabled else None,
+                        export_limit_kw=EXPORT_LIMIT_KW, log=log)
+    if MQTT_HOST:
+        m = MQTT_SETTINGS
+        mq = Mqtt(MQTT_HOST, port=m["MQTT_PORT"] or 1883, username=m["MQTT_USERNAME"], password=m["MQTT_PASSWORD"],
+                  topic=m["MQTT_TOPIC"] or "sigen-dashboard",
+                  discovery="homeassistant" if MQTT_DISCOVERY is None else MQTT_DISCOVERY,
+                  interval=m["MQTT_INTERVAL"] or 10, version=VERSION, log=log,
+                  get_state=lambda: (collector.snapshot(), collector.raw.get("plant")))
+        collector.mqtt = mq
+        threading.Thread(target=mq.run, daemon=True).start()
     httpd = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), Api)
     httpd.daemon_threads = True
     if SETTINGS_PATH:

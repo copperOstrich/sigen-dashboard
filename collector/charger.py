@@ -98,8 +98,10 @@ class SessionTracker:
                 s["kwh"] = max(0.0, total - s["start_kwh"])
             else:
                 s["kwh"] += inc
-            if s["kwh"] > before:
-                s["last_rise"] = int(now)  # when energy last went into the car
+            if s["kwh"] > before + 1e-6 and not first:
+                # when energy last went into the car (saved with the session, so a restart keeps it;
+                # the first reading after a restart only catches up with the counter, so it doesn't count)
+                s["last_rise"] = int(now)
             if grid_w is not None:
                 from_grid = min(power, max(0.0, grid_w)) * dt / 3.6e6
                 s["grid_kwh"] += from_grid

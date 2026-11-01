@@ -19,6 +19,8 @@ Settings (environment variables):
   SIM_CHARGER_UNIT      the charger's Modbus unit id                default 3
   SIM_EV_KW             charger rating, kW                          default 7
   SIM_CHARGER_MODBUS    0 = charger has no Modbus address (seen only via plant figures)
+  SIM_STRING_FAULT      n:fraction:days, e.g. "3:0.6:2" = PV3 makes 60% of its usual for the
+                        last 2 days (to try the string health check)
 """
 import argparse
 import hashlib
@@ -53,6 +55,11 @@ CHARGER_ON_MODBUS = os.environ.get("SIM_CHARGER_MODBUS", "1") != "0"
 MAX_BATT_W = min(INVERTER_W, BATTERY_KWH * 1000 * 0.5)  # ~0.5C, capped by the inverter
 MIN_SOC, MAX_SOC = 5.0, 100.0
 LOCAL_TZ = ZoneInfo(os.environ.get("TZ") or "Australia/Sydney")
+try:
+    _f = (os.environ.get("SIM_STRING_FAULT") or "").split(":")
+    STRING_FAULT = (int(_f[0]), float(_f[1]), float(_f[2])) if len(_f) == 3 else None
+except ValueError:
+    STRING_FAULT = None
 
 
 def local_now():
@@ -255,7 +262,11 @@ class SimPlant:
                 out.append((0.0, 0.0))
                 continue
             vmp = panels * 41.5 * (0.93 + 0.07 * min(1.0, share / (panels * 380)))
-            out.append((round(vmp, 1), share / vmp))
+            amps = share / vmp
+            if STRING_FAULT and len(out) + 1 == STRING_FAULT[0] and \
+                    (local_now() - self.t).total_seconds() < STRING_FAULT[2] * 86400:
+                amps *= STRING_FAULT[1]
+            out.append((round(vmp, 1), amps))
         return out
 
     def charger_values(self):

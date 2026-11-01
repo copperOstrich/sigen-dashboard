@@ -2,6 +2,31 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.11.0
+
+- **Backups**: the database is copied each night (2:30 am) while the collector keeps running,
+  checked and gzipped into `backups` in the data folder. The last 7 days and 4 weeks are kept.
+  The System panel shows the last one, with Back up now from your home network
+- **Solar string health**: each string's usual share of the solar is learned for every hour of
+  the day, so regular shade doesn't count. A Vs usual column in Solar strings, an amber notice
+  after two days under 85% of usual, and a red alarm under 40% or when a string stops while the
+  others produce
+- **Solar limits** panel: solar held back in the last 30 days and this month, and why (export
+  limit, negative feed-in price, inverter at maximum, battery full), estimated against the
+  weather model, with what those exports would have earned
+- **Battery wear** panel: cycles, energy through the battery, round trip, temperature and the
+  health trend, against your warranty
+- **Best times to run appliances** panel: when to start the dishwasher, washing machine and
+  dryer (or your own list) in the next 24 hours, from the battery outlook and price forecast,
+  and what that saves against starting now
+- **Home Assistant (MQTT)**: publishes the live figures to an MQTT broker, with discovery so a
+  Home Energy device and its sensors appear in Home Assistant, including lifetime energy totals
+  for its Energy dashboard
+- New settings for all of these on the Settings page (Battery, Appliances, Backups, Home
+  Assistant, and Export limit under Checks)
+- Car charging: the time energy last went into the car is saved with the session, so a restart
+  (such as after saving settings) no longer affects when a session ends
+
 ## 1.10.0
 
 - New **Settings** page (the gear, top right of the dashboard): every setting in `sigen.env`,

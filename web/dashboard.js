@@ -159,6 +159,23 @@
         : el("path", { d: "M10 5.5v5.5M10 14v.4", stroke: c, "stroke-width": 2, "stroke-linecap": "round" }));
   };
 
+  let canEdit = false;
+  const agoDay = (ts) => {
+    const d = new Date(ts * 1000), now = new Date(), tm = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    if (d.toDateString() === now.toDateString()) return `today ${tm}`;
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    return d.toDateString() === y.toDateString() ? `yesterday ${tm}` : d.toLocaleDateString([], { day: "numeric", month: "short" });
+  };
+  async function backupNow(e) {
+    const b = e.target; b.disabled = true; b.textContent = "backing up…";
+    try {
+      const res = await fetch(S.apiBase() + "/api/backups", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const out = await res.json().catch(() => ({}));
+      b.textContent = res.ok ? "done" : "failed";
+      if (!res.ok) b.title = out.error || "";
+    } catch (err) { b.textContent = "failed"; }
+  }
+
   function renderSystem(d) {
     const s = d.system || {}, al = $("alarms");
     al.innerHTML = "";
@@ -191,6 +208,20 @@
           class: lvl === 2 ? "bad" : lvl === 1 ? "warn" : null, style: "font-family:var(--font);font-size:14px" }));
     }
     if (s.inverter_error) f.append(el("dt", { text: "Inverter details" }), el("dd", { text: "unavailable – check SIGEN_INVERTER_UNIT", style: "font-size:13px" }));
+    const bk = s.backup || {};
+    if (bk.enabled) {
+      const last = bk.last;
+      const txt = bk.busy ? "backing up…" : bk.error ? "failed" : last ? `${agoDay(last.ts)}, ${(last.bytes / 1e6).toFixed(last.bytes < 1e7 ? 1 : 0)} MB` : "first one soon";
+      const dd = el("dd", { class: bk.error ? "warn" : null, style: "font-family:var(--font);font-size:14px",
+        title: bk.error ? `Last attempt failed: ${bk.error}` : `${bk.count} kept in the data folder's "${bk.folder}" folder (the last ${bk.keep_daily} days and ${bk.keep_weekly} weeks). Next: ${new Date(bk.next * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}.`,
+        text: txt });
+      if (canEdit && !bk.busy) dd.append(el("button", { class: "small-link", type: "button", text: "Back up now", onclick: backupNow }));
+      f.append(el("dt", { text: "Last backup" }), dd);
+    }
+    const mq = s.mqtt || {};
+    if (mq.enabled) f.append(el("dt", { text: "Home Assistant" }), el("dd", { class: mq.status === "error" ? "warn" : null,
+      style: "font-family:var(--font);font-size:14px", title: mq.error || `Publishing to ${mq.topic}${mq.discovery ? ", with discovery" : ""}`,
+      text: mq.status === "connected" ? "connected" : mq.status === "error" ? "can't connect" : "connecting…" }));
     $("sys-sub").textContent = d.mode === "simulator" ? "simulated" : (s.serial || "");
 
     const ev = $("events"); ev.innerHTML = "";
@@ -1135,6 +1166,7 @@
   const swatch = (st) => el("svg", { class: "swl", width: 22, height: 8, "aria-hidden": "true" },
     el("line", { x1: 1, x2: 21, y1: 4, y2: 4, stroke: st.color, "stroke-width": 2.5, "stroke-linecap": "round", "stroke-dasharray": st.dash }));
 
+  let pvHealth = null;
   function drawStrings() {
     const d = pvData;
     const ids = d ? Object.keys(d.strings || {}).map(Number).sort((a, b) => a - b) : [];
@@ -1175,21 +1207,38 @@
     const today = d.today || [], total = today.reduce((a, r) => a + r.kwh, 0);
     const tb = $("pv-today"); tb.innerHTML = "";
     tb.append(el("tr", {}, el("th", { text: "Today" }), el("th", { text: "Energy" }), el("th", { text: "Share" }),
-      el("th", { text: "Peak" }), el("th", { text: "Peak at" }), el("th", { text: "Max voltage" })));
+      el("th", { text: "Peak" }), el("th", { text: "Peak at" }), el("th", { text: "Max voltage" }),
+      el("th", { title: "The last few days against each string's usual share of the solar at each hour, sunny hours only", text: "Vs usual" })));
+    const hs = pvHealth && pvHealth.enabled ? Object.fromEntries(pvHealth.strings.map((x) => [x.n, x])) : {};
     ids.forEach((n, i) => {
       const r = today.find((x) => x.string === n) || {};
       tb.append(el("tr", {}, el("td", {}, swatch(pvStyle(i)), `PV${n}`), el("td", { text: S.kwh(r.kwh) }),
         el("td", { text: total > 0 ? `${Math.round((r.kwh || 0) / total * 100)}%` : "–" }),
         el("td", { text: r.peak_w ? S.kw(r.peak_w) : "–" }),
         el("td", { text: r.peak_at && r.peak_w ? clock(r.peak_at) : "–" }),
-        el("td", { text: r.max_v ? `${Math.round(r.max_v)} V` : "–" })));
+        el("td", { text: r.max_v ? `${Math.round(r.max_v)} V` : "–" }),
+        healthCell(hs[n])));
     });
+    if (pvHealth && !pvHealth.enabled && pvHealth.learning_days != null) {
+      tb.append(el("tr", {}, el("td", { colspan: 7, class: "muted", style: "font-family:var(--font);font-size:12.5px",
+        text: `String health check: ${pvHealth.reason}.` })));
+    }
+  }
+  function healthCell(h) {
+    if (!h || h.ratio == null) return el("td", { text: "–" });
+    const pct = Math.round(h.ratio * 100);
+    const label = h.status === "down" ? `${pct}%, almost nothing` : h.status === "low" ? `${pct}%, low` : `${pct}%`;
+    return el("td", { class: h.status === "ok" ? null : "st-" + h.status, text: label,
+      title: h.days.map((x) => `${new Date(x.day + "T12:00:00").toLocaleDateString([], { weekday: "short", day: "numeric" })}: ${x.kwh} of ${x.expected_kwh} kWh expected (${Math.round(x.ratio * 100)}%)`).join("\n") });
   }
   async function loadStrings() {
     // Daylight view: whole calendar days (plus yesterday, for today's expected sunset)
     const now = Date.now() / 1000, days = Math.round(pvHours / 24);
     const hrs = pvDaylight ? Math.ceil((now - midnight(now, days)) / 3600) : pvHours;
-    try { pvData = await S.fetchJSON(`/api/string-history?hours=${hrs}`); drawStrings(); } catch (e) { /* banner */ }
+    try {
+      [pvData, pvHealth] = await Promise.all([S.fetchJSON(`/api/string-history?hours=${hrs}`), S.fetchJSON("/api/strings-health").catch(() => null)]);
+      drawStrings();
+    } catch (e) { /* banner */ }
   }
   (function initDaylight() {
     $("pv-hours").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", (x.dataset.d === "1") === pvDaylight ? "true" : "false"));
@@ -1520,13 +1569,139 @@
   S.fetchJSON("/api/settings").then((st) => {
     const g = $("config-btn");
     g.classList.toggle("locked", !st.editable);
+    canEdit = !!st.editable;
     g.title = st.editable ? "Settings" : "Settings (read-only: you're not on your home network)";
   }).catch(() => {});
   dlg.addEventListener("close", () => {
     if (dlg.returnValue !== "save") return;
     S.setApiBase($("api-input").value.trim());
     sub.restart(); evData = null; loadWeather(); loadOutlook(); loadMonthly(); loadTrends(); loadMoney(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
+    loadAppliances(); loadLimits(); loadWear();
   });
+
+
+  // ------------------------------------------------------------ best times to run appliances
+  let apData = null;
+  const apWhen = (ts) => {
+    const d = new Date(ts * 1000), now = new Date(), tm = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    if (d.toDateString() === now.toDateString()) return tm;
+    const t = new Date(now); t.setDate(now.getDate() + 1);
+    return d.toDateString() === t.toDateString() ? `${tm} tomorrow` : `${tm} ${d.toLocaleDateString([], { weekday: "short" })}`;
+  };
+  const apCost = (v) => (v == null ? "–" : Math.abs(v) < 0.005 ? "$0.00" : v < 0 ? `$${(-v).toFixed(2)} back` : `$${v.toFixed(2)}`);
+  function renderAppliances() {
+    const a = apData, panel = $("ap-panel");
+    panel.hidden = !(a && a.enabled && a.appliances.length);
+    if (panel.hidden) return;
+    const tb = $("ap-table"); tb.innerHTML = "";
+    tb.append(el("tr", {}, el("th", { text: "Appliance" }), el("th", { text: "Best start" }), el("th", { text: a.priced ? "Cost then" : "From the grid" }),
+      el("th", { class: "hide-sm", text: a.priced ? "If started now" : "If started now" }), el("th", { class: "hide-sm", text: "Why" })));
+    for (const x of a.appliances) {
+      const val = (c) => (a.priced ? apCost(c.cost) : `${c.grid_kwh.toFixed(1)} kWh`);
+      tb.append(el("tr", {},
+        el("td", { title: `${x.kw} kW for ${x.hours} h, about ${x.kwh} kWh` }, x.name),
+        el("td", {}, el("span", { class: "when", text: x.run_now ? "Now" : apWhen(x.best.start) }),
+          x.run_now ? el("span", { class: "now-tag", text: "good time" }) : null),
+        el("td", { text: val(x.best), title: `${x.best.solar_kwh} kWh spare solar, ${x.best.battery_kwh} kWh battery, ${x.best.grid_kwh} kWh grid` }),
+        el("td", { class: "hide-sm", text: val(x.now) }),
+        el("td", { class: "hide-sm why", text: x.best.why })));
+    }
+    $("ap-sub").textContent = `next ${Math.round((a.until - Date.now() / 1000) / 3600)} hours`;
+    $("ap-note").textContent = (a.priced
+      ? `Spare solar is costed at what exporting it would have earned, battery energy at what you'll pay for grid power later (about ${a.battery_c}c/kWh), and the rest at the forecast buy price. `
+      : "No retailer prices, so this picks the time that needs the least energy from the grid. ") +
+      "Each appliance is worked out on its own, so two run together share the same spare solar. Change the list in Settings (Appliances).";
+  }
+  async function loadAppliances() {
+    try { apData = await S.fetchJSON("/api/appliances"); renderAppliances(); } catch (e) { /* banner */ }
+  }
+
+  // ------------------------------------------------------------ solar limits
+  let limData = null;
+  const LIM = [["export", "Export limit", "var(--grid)"], ["negative", "Negative feed-in price", "var(--home)"],
+    ["inverter", "Inverter at maximum", "var(--solar)"], ["full", "Battery full, not exporting", "var(--battery)"]];
+  function drawLimits() {
+    const d = limData ? { ...limData } : null, panel = $("lim-panel");
+    if (d && d.modelled && d.days) {  // days before the weather model's reach have no kWh: start the chart after them
+      const i = d.days.findIndex((x) => x.modelled);
+      if (i > 0) d.days = d.days.slice(i);
+    }
+    const any = d && d.days && d.days.some((x) => LIM.some(([k]) => (x[k] || {}).minutes));
+    panel.hidden = !(d && d.days && d.days.length >= 2);
+    if (panel.hidden) return;
+    const lg = $("lim-legend"); lg.innerHTML = "";
+    const used = LIM.filter(([k]) => d.days.some((x) => (x[k] || {}).minutes));
+    for (const [, l, c] of used) lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw", style: `background:${c};border-color:${c}` }), l));
+    const sm = $("lim-summary"); sm.innerHTML = "";
+    const m = d.this_month, p = d.period;
+    const tot = (o) => LIM.reduce((a, [k]) => a + (o[k].kwh || 0), 0);
+    const mins = (o) => LIM.reduce((a, [k]) => a + (o[k].minutes || 0), 0);
+    if (d.modelled) {
+      sm.append(el("span", {}, el("b", { text: `${tot(m).toFixed(1)} kWh` }), "held back this month"),
+        el("span", {}, el("b", { text: `${tot(p).toFixed(1)} kWh` }), "in the last 30 days"));
+      const lost = p.export.value + p.inverter.value + p.full.value, saved = -p.negative.value;
+      if (lost >= 0.01) sm.append(el("span", {}, el("b", { text: `$${lost.toFixed(2)}` }), "of exports missed"));
+      if (saved >= 0.01) sm.append(el("span", {}, el("b", { text: `$${saved.toFixed(2)}` }), "not paid to export at negative prices"));
+    } else {
+      sm.append(el("span", {}, el("b", { text: `${Math.round(mins(p) / 60)} h` }), "of limited solar in the last 30 days"));
+    }
+    const label = (day) => new Date(day + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" });
+    const title = (i) => new Date(d.days[i].day + "T12:00:00").toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+    if (!any) {
+      $("lim-chart").innerHTML = ""; $("lim-chart").append(el("div", { class: "empty", text: "Nothing held back in the last 30 days." }));
+    } else {
+      const series = (used.length ? used : LIM).map(([k, l, c]) => ({ key: k, label: l, color: c,
+        values: d.days.map((x) => (d.modelled ? (x[k] || {}).kwh || 0 : ((x[k] || {}).minutes || 0) / 60)) }));
+      C.stackedBarChart($("lim-chart"), { labels: d.days.map((x) => label(x.day)), series, height: 200, title,
+        yFmt: (v) => `${v}`, ariaLabel: d.modelled ? "Solar held back each day, kWh, by reason" : "Hours of limited solar each day, by reason",
+        tip: (i) => LIM.filter(([k]) => (d.days[i][k] || {}).minutes).map(([k, l, c]) => {
+          const x = d.days[i][k];
+          return [l, `${x.kwh != null ? `${x.kwh.toFixed(1)} kWh, ` : ""}${x.minutes} min${x.value ? `, ${x.value < 0 ? "saved" : "worth"} $${Math.abs(x.value).toFixed(2)}` : ""}`, c];
+        }) });
+    }
+    const caps = d.caps || {};
+    $("lim-note").textContent = "Solar the panels could have made but didn't, against the weather model's expected output for each hour: when exports sat at the limit" +
+      (caps.export_w ? ` (${(caps.export_w / 1000).toFixed(1)} kW, ${caps.export_source === "setting" ? "from Settings" : "learned"})` : "") +
+      ", the feed-in price was negative and nothing was exported (turned down on purpose), the inverter was at its maximum, or the battery was full with nowhere to send it. Estimates; passing cloud isn't counted." +
+      (d.modelled ? "" : " Turn on the weather forecast (Settings, latitude and longitude) to estimate kWh.");
+  }
+  async function loadLimits() {
+    try { limData = await S.fetchJSON("/api/limits?days=30"); drawLimits(); } catch (e) { /* banner */ }
+  }
+
+  // ------------------------------------------------------------ battery wear
+  let wearData = null;
+  function renderWear() {
+    const w = wearData, panel = $("wear-panel");
+    panel.hidden = !(w && w.enabled);
+    if (panel.hidden) return;
+    const tiles = $("wear-tiles"); tiles.innerHTML = "";
+    const tile = (k, v, unit, d, cls) => el("div", {}, el("div", { class: "k", text: k }),
+      el("div", { class: "v" }, v, unit ? el("small", { text: unit }) : null), d ? el("div", { class: "d" + (cls ? " " + cls : ""), text: d }) : null);
+    const h = w.health, wa = w.warranty || {};
+    tiles.append(
+      tile("Cycles", w.cycles.toLocaleString(undefined, { maximumFractionDigits: w.cycles < 100 ? 1 : 0 }), "",
+        w.recent.cycles_per_day != null ? `${w.recent.cycles_per_day} a day lately` : `${w.cycles_per_day} a day`),
+      tile("Energy through it", w.discharged_mwh.toFixed(w.discharged_mwh < 10 ? 2 : 1), "MWh",
+        wa.mwh ? `${wa.mwh_used_pct}% of ${wa.mwh} MWh warranty` : "discharged"),
+      tile("Health", h.now != null ? h.now.toFixed(1) : "–", "%",
+        h.per_year != null ? `${h.per_year > 0 ? "+" : ""}${h.per_year}% a year` : h.days >= 1 ? "no clear trend yet" : null),
+      tile("At warranty end", h.at_warranty_end != null ? h.at_warranty_end.toFixed(0) : "–", h.at_warranty_end != null ? "%" : "",
+        wa.ends ? `${new Date(wa.ends + "T12:00:00").getFullYear()}${wa.soh_floor ? `, warranty ${wa.soh_floor}%` : ""}` : null,
+        wa.soh_floor && h.at_warranty_end != null && h.at_warranty_end < wa.soh_floor ? "warn" : null),
+      tile("Round trip", w.round_trip != null ? w.round_trip.toFixed(0) : "–", w.round_trip != null ? "%" : "", "energy out vs in"),
+      tile("Battery temperature", w.temps.avg != null ? w.temps.avg.toFixed(0) : "–", w.temps.avg != null ? "°C" : "",
+        w.temps.max != null ? `hottest ${w.temps.max.toFixed(0)}°C, 30 days` : null));
+    $("wear-sub").textContent = `${w.rated_kwh} kWh, ${w.lifetime ? "since it was switched on" : "since recording began"} ${new Date(w.since + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}`;
+    $("wear-note").textContent = `One cycle is the battery's full ${w.rated_kwh} kWh out once. ` +
+      (w.recent.deep_days ? `${w.recent.deep_days} of the last ${w.recent.days} days used most of it. ` : "") +
+      (wa.years ? `At the recent rate it will reach about ${wa.cycles_at_end.toLocaleString()} cycles by the end of its ${wa.years}-year warranty` +
+        (wa.mwh_at_end ? ` and ${wa.mwh_at_end} MWh` + (wa.mwh_reached ? `, passing the ${wa.mwh} MWh limit around ${new Date(wa.mwh_reached + "T12:00:00").toLocaleDateString([], { month: "short", year: "numeric" })}` : "") : "") + ". " : "") +
+      "Health is the battery's own reading; a trend is shown once it has moved a point over four months. Warranty terms come from Settings (Battery).";
+  }
+  async function loadWear() {
+    try { wearData = await S.fetchJSON("/api/battery-wear"); renderWear(); } catch (e) { /* banner */ }
+  }
 
   // ------------------------------------------------------------ desktop: widget switch + updates
   if (S.isDesktop) {
@@ -1594,14 +1769,15 @@
   setInterval(loadWeather, 10 * 60000);
   loadOutlook();
   setInterval(loadOutlook, 5 * 60000);
-  loadMonthly(); loadTrends(); loadMoney();
-  setInterval(() => { loadMonthly(); loadTrends(); loadMoney(); }, 30 * 60000);
+  loadMonthly(); loadTrends(); loadMoney(); loadAppliances(); loadLimits(); loadWear();
+  setInterval(() => { loadMonthly(); loadTrends(); loadMoney(); loadLimits(); loadWear(); }, 30 * 60000);
+  setInterval(loadAppliances, 5 * 60000);
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);
   setInterval(loadDaily, 10 * 60000);
-  window.SigenRedraw = () => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); };
+  window.SigenRedraw = () => { drawLimits(); drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); };
   let rt;
-  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); }, 120); })
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawLimits(); drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); }, 120); })
     .observe(document.querySelector(".wrap"));
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawHistory(); drawDaily(); });
 })();

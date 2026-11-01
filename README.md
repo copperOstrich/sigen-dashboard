@@ -513,6 +513,36 @@ again and what's left over, and whether charging from the grid overnight is wort
 model of self-consumption, not of your retailer's control: with Amber SmartShift or another
 VPP managing the battery, it may export or charge differently, and the panel says so.
 
+### Best times to run appliances
+
+From the same projection and your retailer's price forecast, the dashboard suggests when to
+start each appliance in `APPLIANCES` (`name:kW:hours`, comma separated; by default a dishwasher,
+washing machine and dryer) in the next 24 hours, and what it costs then against starting now.
+Spare solar is costed at what exporting it would have earned (a negative feed-in price means
+running it then pays you), battery energy at what you'll pay for grid power later because of
+it, and the rest at the forecast buy price. Without a price feed it picks the time that needs
+the least grid energy. Each appliance is worked out on its own.
+
+### Solar limits
+
+Minutes when the panels could have made more but were held back, and why: exports sitting at
+the **export limit** (`EXPORT_LIMIT_KW`, or learned from where exports keep levelling off), a
+**negative feed-in price** with nothing exported (the system or Amber SmartShift turning solar
+down on purpose), the **inverter at its maximum**, or the **battery full** with nowhere to send
+it. The energy lost is the shortfall against the weather model's expected output for each hour
+(so it needs the weather forecast set up; without it only the minutes are counted), with what
+those exports would have earned. Passing cloud isn't counted. Shown for the last 30 days and the
+month so far.
+
+### Battery wear
+
+Cycles (the battery's lifetime discharge divided by its capacity), energy through it, round-trip
+efficiency, temperature, and the battery's own health reading, with a straight-line trend once it
+has moved a point over four months. Against your warranty (`BATTERY_WARRANTY_YEARS`, and
+`BATTERY_WARRANTY_MWH` / `BATTERY_WARRANTY_SOH` if your warranty states them) it shows where the
+cycles, energy and health are heading by the time it ends. With `SYSTEM_INSTALLED` set it counts
+from switch-on; otherwise from when recording began.
+
 ## 5. On your computer or phone
 
 There's nothing to install: open the dashboard's address in a browser. To give it its own
@@ -599,6 +629,35 @@ It takes three readings in a row to change level, so one damp-morning reading do
 off. Change the limits with `INSULATION_WARN_MOHM` and `INSULATION_MIN_MOHM`. A reading that
 stays low is worth having your installer check.
 
+**Solar strings** are checked too. Each string's normal share of the solar is learned for every
+hour of the day from three weeks of readings, so a string that's always shaded part of the day
+isn't flagged for it. The **Vs usual** column in the Solar strings panel compares the last few
+days, sunny hours only, with that. Two days in a row under 85% of usual raises an amber notice; a
+day under 40%, or a string making next to nothing for 20 minutes while the others produce, raises
+a red alarm. New shade, dirt, a failed panel or optimiser, or a tripped isolator show up this way.
+It starts after a week of string readings.
+
+### Backups
+
+Each night (`BACKUP_TIME`, default 2:30 am) the database is copied while the collector keeps
+running, checked, and gzipped into the data folder's `backups` folder as
+`sigen-YYYY-MM-DD.db.gz`. The last 7 days and one a week for 4 weeks before that are kept
+(`BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY`). The System panel shows the last backup, with **Back up
+now** from your home network (worth doing before an upgrade). Turn off with `BACKUPS_ENABLED=0`.
+
+To restore: stop the container, unzip a backup and put it in the data folder as `sigen.db`
+(delete `sigen.db-wal` and `sigen.db-shm` if they're there), and start the container.
+
+### Home Assistant (MQTT)
+
+Set `MQTT_HOST` to your MQTT broker (for example Home Assistant's Mosquitto add-on), with
+`MQTT_USERNAME` and `MQTT_PASSWORD` if it needs them. Every `MQTT_INTERVAL` seconds (default 10)
+the live figures go to `sigen-dashboard/state` as one JSON message, and with discovery on
+(`MQTT_DISCOVERY_PREFIX`, default `homeassistant`) Home Assistant creates a **Home Energy** device
+with a sensor for each: power flows, battery charge, health and temperature, today's energy,
+prices, and lifetime energy totals that suit Home Assistant's Energy dashboard. The sensors show as
+unavailable when the collector stops. The System panel shows whether it's connected.
+
 ## Settings
 
 Change these on the dashboard's **Settings** page, or set them as environment variables or in
@@ -631,6 +690,22 @@ hand). Values in `sigen.env` win over the container's environment.
 | `RETAILER_SINCE` | The day you started with your current retailer (`2026-05-10`); earlier days count towards payback (priced on the comparison plan, an estimate) but not the comparison | not set |
 | `SYSTEM_COST` / `SYSTEM_INSTALLED` | What the solar and battery cost ($) and the date it was switched on, for payback | off |
 | `INSULATION_WARN_MOHM` / `INSULATION_MIN_MOHM` | Insulation resistance warning and alarm levels, MΩ | `0.5` / `0.37` |
+| `EXPORT_LIMIT_KW` | Your export limit, for Solar limits | learned |
+| **Battery** | | |
+| `BATTERY_WARRANTY_YEARS` / `BATTERY_WARRANTY_MWH` / `BATTERY_WARRANTY_SOH` | Warranty length, energy limit and warranted health (%), from your warranty | `10` / none / none |
+| **Appliances** | | |
+| `APPLIANCES` | Appliances to time, as `name:kW:hours`, comma separated (blank for none) | dishwasher, washing machine, dryer |
+| **Backups** | | |
+| `BACKUPS_ENABLED` | `0` turns nightly backups off | on |
+| `BACKUP_TIME` | When to back up, 24-hour | `02:30` |
+| `BACKUP_KEEP_DAILY` / `BACKUP_KEEP_WEEKLY` | Daily copies to keep, then weekly ones | `7` / `4` |
+| `BACKUP_DIR` | Where backups go, inside the container | `backups` in the data folder |
+| **Home Assistant (MQTT)** | | |
+| `MQTT_HOST`, `MQTT_PORT` | Your MQTT broker; blank = off | off, `1883` |
+| `MQTT_USERNAME`, `MQTT_PASSWORD` | If the broker needs them | none |
+| `MQTT_TOPIC` | Where the figures go (`<topic>/state`) | `sigen-dashboard` |
+| `MQTT_DISCOVERY_PREFIX` | Home Assistant discovery prefix; blank to skip discovery | `homeassistant` |
+| `MQTT_INTERVAL` | Seconds between messages | `10` |
 | **Collector** | | |
 | `HTTP_PORT` | Dashboard and API port | `8080` |
 | `DATA_DIR` | Where the database and `sigen.env` live | `/data` in Docker |
@@ -640,7 +715,7 @@ hand). Values in `sigen.env` win over the container's environment.
 
 Simulator only: `SIM_PV_KWP`, `SIM_BATTERY_KWH`, `SIM_INVERTER_KW`, `SIM_EXPORT_LIMIT_KW`,
 `SIM_PV_STRINGS`, `SIM_EV_CHARGER`, `SIM_CHARGER_MODBUS`, `SIM_INSULATION_MOHM`, `SIM_ALARMS`,
-`DEMO_HISTORY_DAYS`.
+`SIM_STRING_FAULT` (`3:0.6:2` = PV3 at 60% for the last 2 days), `DEMO_HISTORY_DAYS`.
 
 ## API
 
@@ -663,6 +738,11 @@ Simulator only: `SIM_PV_KWP`, `SIM_BATTERY_KWH`, `SIM_INVERTER_KW`, `SIM_EXPORT_
 | `GET /api/weather` | Current weather, hourly and daily forecast, and the solar forecast in kWh |
 | `GET /api/settings` | Every setting, its value and where it came from (keys and private values hidden away from home) |
 | `POST /api/settings` | `{"changes": {"KEY": "value"}}` from the Settings page: checks, saves to `sigen.env` and restarts; home network only |
+| `GET /api/strings-health` | Each solar string against its usual output over the last three days |
+| `GET /api/limits?days=30` | Solar held back each day by reason (export limit, negative price, inverter, battery full), with the learned limits |
+| `GET /api/battery-wear` | Cycles, throughput, round trip, health trend and warranty projection |
+| `GET /api/appliances` | Best start time and cost for each appliance in `APPLIANCES` |
+| `GET /api/backups` | Backup status and the backups kept; `POST` (home network only) backs up now |
 | `GET /api/health` | `{ok, status, updated, version}` for monitoring |
 | `GET /api/debug` | Raw register values, unsupported registers and the charger search, for troubleshooting |
 
