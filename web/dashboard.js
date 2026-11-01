@@ -1671,6 +1671,20 @@
 
   // ------------------------------------------------------------ battery wear
   let wearData = null;
+  function wearEnergyTile(w, wa) {
+    const mon = (d) => new Date(d + "T12:00:00").toLocaleDateString([], { month: "short", year: "numeric" });
+    const div = el("div", {}, el("div", { class: "k", text: "Energy through it" }),
+      el("div", { class: "v" }, w.discharged_mwh.toFixed(w.discharged_mwh < 10 ? 2 : 1), el("small", { text: "MWh" })),
+      el("div", { class: "d", text: wa.mwh ? `${wa.mwh_used_pct}% of ${wa.mwh} MWh warranty` : "discharged" }));
+    if (wa.mwh && wa.mwh_projected) {
+      const early = wa.ends && wa.mwh_projected < wa.ends;
+      div.append(el("div", { class: "d" + (early ? " warn" : ""),
+        title: `At ${wa.mwh_per_year} MWh a year (${wa.mwh_basis === "since" ? "the average since " + new Date(w.since + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : "the last 30 days"}). ` +
+          (early ? `That's before the ${wa.years}-year warranty ends (${mon(wa.ends)}), so the energy limit would end it first.` : `The ${wa.years}-year limit (${mon(wa.ends)}) comes first.`),
+        text: `limit about ${mon(wa.mwh_projected)}` }));
+    }
+    return div;
+  }
   function renderWear() {
     const w = wearData, panel = $("wear-panel");
     panel.hidden = !(w && w.enabled);
@@ -1682,8 +1696,7 @@
     tiles.append(
       tile("Cycles", w.cycles.toLocaleString(undefined, { maximumFractionDigits: w.cycles < 100 ? 1 : 0 }), "",
         w.recent.cycles_per_day != null ? `${w.recent.cycles_per_day} a day lately` : `${w.cycles_per_day} a day`),
-      tile("Energy through it", w.discharged_mwh.toFixed(w.discharged_mwh < 10 ? 2 : 1), "MWh",
-        wa.mwh ? `${wa.mwh_used_pct}% of ${wa.mwh} MWh warranty` : "discharged"),
+      wearEnergyTile(w, wa),
       tile("Health", h.now != null ? h.now.toFixed(1) : "–", "%",
         h.per_year != null ? `${h.per_year > 0 ? "+" : ""}${h.per_year}% a year` : h.days >= 1 ? "no clear trend yet" : null),
       tile("At warranty end", h.at_warranty_end != null ? h.at_warranty_end.toFixed(0) : "–", h.at_warranty_end != null ? "%" : "",
@@ -1695,7 +1708,7 @@
     $("wear-sub").textContent = `${w.rated_kwh} kWh, ${w.lifetime ? "since it was switched on" : "since recording began"} ${new Date(w.since + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}`;
     $("wear-note").textContent = `One cycle is the battery's full ${w.rated_kwh} kWh out once. ` +
       (w.recent.deep_days ? `${w.recent.deep_days} of the last ${w.recent.days} days used most of it. ` : "") +
-      (wa.years ? `At the recent rate it will reach about ${wa.cycles_at_end.toLocaleString()} cycles by the end of its ${wa.years}-year warranty` +
+      (wa.years ? `At the rate so far it will reach about ${wa.cycles_at_end.toLocaleString()} cycles by the end of its ${wa.years}-year warranty` +
         (wa.mwh_at_end ? ` and ${wa.mwh_at_end} MWh` + (wa.mwh_reached ? `, passing the ${wa.mwh} MWh limit around ${new Date(wa.mwh_reached + "T12:00:00").toLocaleDateString([], { month: "short", year: "numeric" })}` : "") : "") + ". " : "") +
       "Health is the battery's own reading; a trend is shown once it has moved a point over four months. Warranty terms come from Settings (Battery).";
   }

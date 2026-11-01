@@ -2,6 +2,13 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.11.1
+
+- Battery wear: Energy through it shows when the warranty energy limit
+  (`BATTERY_WARRANTY_MWH`) is projected to be reached, from the average since the battery was
+  switched on (or the last 30 days while there's less than three months of history). It turns
+  amber if that comes before the warranty's years run out; hover for the rate used
+
 ## 1.11.0
 
 - **Backups**: the database is copied each night (2:30 am) while the collector keeps running,

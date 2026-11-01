@@ -101,12 +101,20 @@ def battery_wear(store, live, tz, installed=None, warranty_years=10, warranty_mw
         w = {"years": warranty_years, "ends": end.isoformat(), "days_left": left,
              "cycles_at_end": round(cycles + rate * left), "soh_floor": warranty_soh}
         if warranty_mwh:
-            mwh_rate = (discharged / 1000) / days if per_day is None else per_day * rated / 1000
+            # the average since the start once it spans a few months (it evens out the seasons),
+            # otherwise the last 30 days
+            if days >= 90 or per_day is None:
+                mwh_rate, basis = (discharged / 1000) / days, "since"
+            else:
+                mwh_rate, basis = per_day * rated / 1000, "recent"
             w["mwh"] = warranty_mwh
             w["mwh_used_pct"] = round(discharged / 1000 / warranty_mwh * 100, 1)
             w["mwh_at_end"] = round(discharged / 1000 + mwh_rate * left, 1)
+            w["mwh_per_year"] = round(mwh_rate * 365.25, 2)
+            w["mwh_basis"] = basis
             if mwh_rate > 0:
-                reach = (warranty_mwh - discharged / 1000) / mwh_rate
-                w["mwh_reached"] = (today + timedelta(days=int(reach))).isoformat() if reach < left else None
+                reach = max(0.0, (warranty_mwh - discharged / 1000) / mwh_rate)
+                w["mwh_projected"] = (today + timedelta(days=int(reach))).isoformat()
+                w["mwh_reached"] = w["mwh_projected"] if reach < left else None
         out["warranty"] = w
     return out
