@@ -48,7 +48,7 @@ def load_settings_file():
 
 SETTINGS_PATH = load_settings_file()
 
-VERSION = "1.21.0"
+VERSION = "1.22.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -118,6 +118,8 @@ BATTERY_WARRANTY_SOH = _env_num("BATTERY_WARRANTY_SOH", None)
 APPLIANCES = ENV("APPLIANCES", None)
 GRID_VIEW = (ENV("GRID_VIEW", "") or "tiles").strip().lower()
 TIME_FORMAT = (ENV("TIME_FORMAT", "") or "12h").strip().lower()
+TARGET_SELF_SUFFICIENCY = (ENV("TARGET_SELF_SUFFICIENCY", "") or "").strip()
+TARGET_NET_MONTHLY = (ENV("TARGET_NET_MONTHLY", "") or "").strip()
 NTFY_TOPIC = (ENV("NTFY_TOPIC", "") or "").strip()
 NTFY_SERVER = (ENV("NTFY_SERVER", "") or "https://ntfy.sh").strip().rstrip("/")
 NTFY_TOKEN = (ENV("NTFY_TOKEN", "") or "").strip()

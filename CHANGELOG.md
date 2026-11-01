@@ -2,6 +2,20 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.22.0
+
+- **Solar vs weather** (a new tab in Trends): each day's solar in clear, unrestricted hours
+  against what the weather model says the roof could have made, smoothed over 15 days. The whole
+  array line shows slow losses (dirt, panel ageing); each string's line shows it against the
+  others. Strings are flagged against the same weeks a year earlier (shares move with the
+  seasons), the whole array when it falls 8% under its first month. The weather model's hourly
+  figures are now kept, and the last 92 days are fetched once so the chart starts with history
+- **Targets** (Settings > Targets): a self-sufficiency percentage and a monthly net cost to aim
+  for, the same all year or by groups of months (`12-2:90,3-11:70`). The Monthly summary shows
+  this month so far, where it's heading and whether it's on track; past months show made or
+  missed, with a tally
+- Tests: target parsing and the month-end projection
+
 ## 1.21.0
 
 - **Ultrawide monitors**: when the window is about 3440 × 1440 or wider (more than twice as wide

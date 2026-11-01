@@ -30,11 +30,10 @@ bump and changelog entry; the order can change as real use shows what matters.
 
 - [ ] Big loads recognised from the minute readings (car, air conditioning, hot water, oven), with
       their share of use and cost
-- [ ] Solar health over the seasons: each string's yield against the weather model, so slow
-      degradation or creeping shade shows over months, not just sudden drops
+- [x] Solar health over the seasons: yield against the weather model, strings year on year (1.22)
 - [ ] Plan what-ifs priced on your own year: Amber against a flat or time-of-use plan *with the
       battery run for that plan*, and what more panels or more battery would add
-- [ ] Self-sufficiency and money targets ("90% self-sufficient this summer") with progress
+- [x] Self-sufficiency and money targets ("90% self-sufficient this summer") with progress (1.22)
 
 ## Phase I: for other households
 

@@ -33,6 +33,7 @@ from advice import appliance_advice, parse as parse_appliances  # noqa: E402
 from mqtt import Mqtt  # noqa: E402
 from baseload import baseload  # noqa: E402
 from trading import trading  # noqa: E402
+import targets as targets_mod  # noqa: E402
 from evplan import ev_plan, deadline  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
@@ -55,6 +56,7 @@ class Api(BaseHTTPRequestHandler):
     updates = None
     money = None
     notifier = None
+    pvseason = None
 
     def log_message(self, fmt, *args):
         pass
@@ -173,6 +175,15 @@ class Api(BaseHTTPRequestHandler):
         except Exception as e:
             traceback.print_exc()
             self._json({"error": str(e)}, 500)
+
+    def _pv_index(self, all_days, days):
+        """Solar vs weather, lined up with the Trends days."""
+        if not Api.pvseason:
+            return {"enabled": False, "reason": "needs the weather forecast (set your location)"}
+        ser, summary = Api.pvseason.series(days)
+        ids = sorted({n for v in ser.values() for n in v["strings"]})
+        return {**summary, "system_series": [(ser.get(d) or {}).get("system") for d in all_days],
+                "strings_series": {n: [((ser.get(d) or {}).get("strings") or {}).get(n) for d in all_days] for n in ids}}
 
     def _changed_costs(self):
         if Api.money:
@@ -336,6 +347,7 @@ class Api(BaseHTTPRequestHandler):
                                   for f in ("min", "avg", "max")}
                               for k in ("insulation", "soh", "battery_temp", "inverter_temp", "grid_voltage", "soc")},
                     "insulation_limits": {"warn": INSULATION_WARN, "min": INSULATION_MIN},
+                    "pv_index": self._pv_index(all_days, days),
                 })
             if url.path == "/api/monthly":
                 months = min(36, max(1, int(q.get("months", ["13"])[0])))
@@ -405,6 +417,14 @@ class Api(BaseHTTPRequestHandler):
                                    "update": {k: up.get(k) for k in ("latest", "url", "newer")} if up.get("newer") else None})
             if url.path == "/api/maintenance":
                 return self._json(self._maintenance())
+            if url.path == "/api/targets":
+                def tp(v, lo, hi):
+                    try:
+                        return targets_mod.parse(v, lo, hi)
+                    except ValueError:
+                        return {}
+                return self._json(targets_mod.progress(self.store, datetime.now(TZ).date(),
+                                                       tp(TARGET_SELF_SUFFICIENCY, 0, 100), tp(TARGET_NET_MONTHLY, -1e5, 1e5)))
             if url.path == "/api/notify":
                 n = Api.notifier.snapshot() if Api.notifier else {"enabled": False}
                 n.pop("server", None) if not self._settings_access()[0] else None

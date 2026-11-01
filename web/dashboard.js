@@ -440,7 +440,48 @@
   }
 
   // ------------------------------------------------------------ monthly summary
-  let moData = [], moIdx = -1;
+  let moData = [], moIdx = -1, tgData = null;
+
+  // targets: this month's progress and projection, or whether a past month made it
+  function renderTargets(m, cur) {
+    const box = $("mo-targets"); box.innerHTML = "";
+    const t = tgData;
+    box.hidden = !(t && t.enabled);
+    if (box.hidden) return;
+    const pct = (v) => `${Math.round(v)}%`;
+    const money = (v) => (v < 0 ? `${dollars(-v)} credit` : dollars(v));
+    const row = (label, target, value, projected, met, fmt, higherBetter, live) => {
+      if (target == null) return null;
+      const scale = higherBetter ? 100 : Math.max(Math.abs(target), Math.abs(value ?? 0), Math.abs(projected ?? 0)) * 1.25 || 1;
+      const pos = (v) => higherBetter ? Math.max(0, Math.min(100, v)) : Math.max(0, Math.min(100, 50 + (v / scale) * 50));
+      const bar = el("div", { class: "tg-bar" + (higherBetter ? "" : " centre") },
+        value != null ? el("span", { class: "tg-fill", style: higherBetter ? `width:${pos(value)}%` : `left:${Math.min(50, pos(value))}%;width:${Math.abs(pos(value) - 50)}%` }) : null,
+        projected != null && live ? el("span", { class: "tg-proj", style: `left:${pos(projected)}%`, title: `Heading for ${fmt(projected)}` }) : null,
+        el("span", { class: "tg-mark", style: `left:${pos(target)}%`, title: `Target ${fmt(target)}` }));
+      const status = met == null ? "" : live ? (met ? "on track" : "behind") : (met ? "made it" : "missed");
+      const text = live
+        ? `${value == null ? "–" : fmt(value)} so far${projected != null ? `, heading for ${fmt(projected)}` : ""}. Target ${fmt(target)}.`
+        : `${value == null ? "–" : fmt(value)} against a target of ${fmt(target)}.`;
+      return el("div", { class: "tg-row" }, el("div", { class: "tg-k" }, label, status ? el("span", { class: "tg-s " + (met ? "ok" : "bad"), text: status }) : null),
+        bar, el("div", { class: "tg-t", text: text }));
+    };
+    let rows = [];
+    if (m.month === cur) {
+      if (t.self) rows.push(row("Self-sufficiency", t.self.target, t.self.so_far, t.self.projected, t.self.on_track, pct, true, true));
+      if (t.cost) rows.push(row("Net cost", t.cost.target, t.cost.so_far, t.cost.projected, t.cost.on_track, money, false, true));
+    } else {
+      const h = (t.months || []).find((x) => x.month === m.month);
+      if (h && h.self) rows.push(row("Self-sufficiency", h.self.target, h.self.value, null, h.self.met, pct, true, false));
+      if (h && h.cost) rows.push(row("Net cost", h.cost.target, h.cost.value, null, h.cost.met, money, false, false));
+    }
+    rows = rows.filter(Boolean);
+    const made = (t.months || []).filter((x) => x.full);
+    const tally = (k) => { const a = made.filter((x) => x[k]); return a.length ? `${a.filter((x) => x[k].met).length} of ${a.length}` : null; };
+    const parts = [["self", "self-sufficiency"], ["cost", "cost"]].map(([k, n]) => tally(k) && `${n} target made in ${tally(k)} full months`).filter(Boolean);
+    if (!rows.length && !parts.length) { box.hidden = true; return; }
+    box.append(el("div", { class: "tg-head", text: "Targets" }), ...rows);
+    if (parts.length) box.append(el("div", { class: "tg-note", text: parts.join("; ").replace(/^./, (c) => c.toUpperCase()) + "." }));
+  }
   const monthName = (m, long = true) => new Date(m + "-15T12:00:00").toLocaleDateString([], { month: long ? "long" : "short", year: "numeric" });
   const dollars = (v) => (v == null ? "–" : `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`);
 
@@ -480,6 +521,7 @@
       tile("Self-sufficient", null, m.self_sufficiency == null ? "–" : Math.round(m.self_sufficiency), m.self_sufficiency == null ? "" : "%", "self_sufficiency", "up"),
       tile("Net cost", null, dollars(m.net != null && m.net < 0 ? -m.net : m.net), m.net != null && m.net < 0 ? "credit" : "", "net", "down"),
       tile("Solar and battery value", null, dollars(m.saved), "", "saved", "up"));
+    renderTargets(m, cur);
     drawMonthly();
     const tb = $("mo-table"); tb.innerHTML = "";
     tb.append(el("tr", {}, ...["Month", "Solar", "Home", "Bought", "Sold", "Self-suff.", "Net cost"].map((h) => el("th", { text: h }))));
@@ -516,7 +558,10 @@
     });
   }
   async function loadMonthly() {
-    try { moData = await S.fetchJSON("/api/monthly?months=13"); renderMonthly(); } catch (e) { /* banner */ }
+    try {
+      [moData, tgData] = await Promise.all([S.fetchJSON("/api/monthly?months=13"), S.fetchJSON("/api/targets").catch(() => null)]);
+      renderMonthly();
+    } catch (e) { /* banner */ }
   }
   $("mo-prev").addEventListener("click", () => { if (moIdx > 0) { moIdx--; renderMonthly(); } });
   $("mo-next").addEventListener("click", () => { if (moIdx < moData.length - 1) { moIdx++; renderMonthly(); } });
@@ -549,6 +594,28 @@
       });
       opts = { yFmt: (v) => `${Math.round(v)}%`, tipFmt: (v) => (v == null ? "–" : `${v.toFixed(1)}%`), yMin: 0 };
       note = "Each string's share of the solar, averaged over a week. Shares move a little with the seasons as the sun's path changes, but a string that drifts down against the others is losing output: new shade from a growing tree, dirt, or a failing panel.";
+    } else if (trMetric === "pvidx") {
+      const pi = d.pv_index || {};
+      if (!pi.enabled) {
+        lg.innerHTML = ""; $("tr-chart").innerHTML = "";
+        $("tr-chart").append(el("div", { class: "empty", text: `Solar vs weather ${pi.reason || "isn't available yet"}.` }));
+        $("tr-note").textContent = "Compares each day's solar with what the weather model says the panels could have made, so slow changes over the seasons show up.";
+        return;
+      }
+      const ids = Object.keys(pi.strings_series || {}).map(Number).sort((a, b) => a - b);
+      series = [{ key: "sys", label: "Whole array vs the weather", color: "var(--ink)", values: pi.system_series },
+        ...ids.map((n, k) => ({ key: n, label: `PV${n} vs the others`, ...pvStyle(k), values: pi.strings_series[n] }))];
+      const vals = series.flatMap((x) => x.values).filter((v) => v != null);
+      opts = { yMin: Math.min(85, Math.floor(Math.min(...vals, 100) / 5) * 5), yMax: Math.max(110, Math.ceil(Math.max(...vals, 100) / 5) * 5),
+        yFmt: (v) => `${Math.round(v)}%`, tipFmt: (v) => (v == null ? "–" : `${v.toFixed(1)}%`) };
+      const since = new Date(pi.since + "T00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+      note = `100% is each line's first month (from ${since}). The whole array line is the solar made in clear, unrestricted hours against what the weather model says the roof could make: ` +
+        "a slow, steady fall is dirt or panel ageing (around half a percent a year is normal), while a wobble of a few percent with the seasons is the model. " +
+        "Each string's line is its output against the other strings, so the weather cancels out; strings on different roof faces trade share with the seasons, " +
+        "so after a year each is also compared with the same weeks last year, where one that has dropped means new shade, dirt on that face, or a failing panel. " +
+        "Hours with a full battery, exports at the limit or a negative feed-in price are left out. Smoothed over 15 days." +
+        (pi.ready ? (pi.flags && pi.flags.length ? ` Worth a look: ${pi.flags.join("; ")}.` : " Nothing needs a look.") : ` Still learning: ${pi.days} of 45 days so far.`) +
+        (pi.span_days < 380 ? " String comparisons with last year start once there's a year of readings." : "");
     } else if (trMetric === "insulation") {
       const L = d.insulation_limits || { warn: 0.5, min: 0.37 };
       series = [
@@ -571,7 +638,7 @@
       note = "Hottest battery cell and inverter temperature each day. Summer peaks are expected; a steady rise against similar weather can mean poor airflow around the unit.";
     }
     for (const s of series) lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw" + (s.dash ? " dash" : ""), style: `border-color:${s.color}` }), s.label));
-    const hasData = series.some((s) => s.values.some((v) => v != null && s.key !== "warn" && s.key !== "alarm"));
+    const hasData = series.some((s) => (s.values || []).some((v) => v != null && s.key !== "warn" && s.key !== "alarm"));
     C.lineChart($("tr-chart"), { t, series, height: 240, gapSeconds: 86400 * 3, tipTitle: dayTitle,
       emptyText: "Not enough readings yet.", ariaLabel: `Trend over ${trDays} days`, ...opts });
     if (!hasData) { $("tr-chart").innerHTML = ""; $("tr-chart").append(el("div", { class: "empty", text: "This builds up from the first day of readings; check back in a few days." })); }

@@ -23,7 +23,7 @@ APIS = ["/api/live", "/api/health", "/api/history?hours=24", "/api/daily?days=30
         "/api/ev-sessions?days=30", "/api/monthly?months=13", "/api/trends?days=90", "/api/money", "/api/outlook",
         "/api/weather", "/api/debug", "/api/settings", "/api/backups", "/api/strings-health", "/api/limits?days=30",
         "/api/battery-wear", "/api/appliances", "/api/baseload?days=30", "/api/bills", "/api/ui", "/api/trading?days=30", "/api/ev-plan?kwh=20&by=07:00",
-        "/api/maintenance", "/api/notify"]
+        "/api/maintenance", "/api/notify", "/api/targets"]
 CSV = ["/api/ev-sessions?format=csv&days=30", "/api/monthly?format=csv", "/api/strings?format=csv&hours=24"]
 
 

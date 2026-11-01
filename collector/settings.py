@@ -141,6 +141,15 @@ SCHEMA = [
        unit="weeks"),
     _s("BACKUP_DIR", BACKUP, "Backup folder", "Inside the container. Blank = backups in the data folder.", "text", "",
        placeholder="/data/backups"),
+    # ---------------------------------------------------------------- targets
+    _s("TARGET_SELF_SUFFICIENCY", "Targets", "Self-sufficiency target", "The share of your home and car's "
+       "use that comes from your own solar and battery, each month. A percentage, or different ones for groups of "
+       "months, like 12-2:90,3-11:70 (90% from December to February). Blank = none.", "target_self", "",
+       placeholder="90", unit="% each month"),
+    _s("TARGET_NET_MONTHLY", "Targets", "Monthly cost target", "The most you'd like the Monthly summary's Net "
+       "cost to be (energy bought less sold, before supply charges). Negative to aim for a credit: -50 means $50 "
+       "ahead. Month ranges work too, like 12-2:-80,3-11:20. Blank = none.", "target_cost", "",
+       placeholder="-50", unit="$ a month"),
     # ---------------------------------------------------------------- phone alerts
     _s("NTFY_TOPIC", NOTIFY, "Alerts topic", "Alerts go to the free ntfy app (iPhone or Android) as normal "
        "notifications, not texts. Generate a topic, save, then in the ntfy app tap + and subscribe to the same "
@@ -354,6 +363,9 @@ def validate(key, value, all_values=None):
     elif k == "secret" and key == "NTFY_TOPIC":
         if not re.fullmatch(r"[A-Za-z0-9_-]{12,64}", value):
             raise ValueError("12 to 64 letters, digits, - or _ (Generate makes one)")
+    elif k in ("target_self", "target_cost"):
+        from targets import check
+        check(value, "self" if k == "target_self" else "cost")
     elif k == "kinds":
         from notify import KINDS
         bad = [x.strip() for x in value.lower().split(",") if x.strip() not in KINDS + ("all", "none")]

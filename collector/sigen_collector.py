@@ -67,6 +67,7 @@ from importer import import_folder, reload_bills  # noqa: E402
 from updates import UpdateCheck  # noqa: E402
 from notify import Notifier, parse_kinds, parse_weekly, parse_quiet, weekly_summary  # noqa: E402
 from trading import trading  # noqa: E402
+from pvseason import PvSeason  # noqa: E402
 from fuel import Fuel  # noqa: E402
 from backup import Backups  # noqa: E402
 from strings_health import StringsHealth  # noqa: E402
@@ -145,6 +146,7 @@ def main():
     threading.Thread(target=backups.run, daemon=True).start()
     Api.limits = Limits(store, TZ, expected=weather.expected if weather.enabled else None,
                         export_limit_kw=EXPORT_LIMIT_KW, log=log)
+    Api.pvseason = PvSeason(store, TZ, caps=lambda: Api.limits.caps, log=log) if weather.enabled else None
     if MQTT_HOST:
         m = MQTT_SETTINGS
         mq = Mqtt(MQTT_HOST, port=m["MQTT_PORT"] or 1883, username=m["MQTT_USERNAME"], password=m["MQTT_PASSWORD"],

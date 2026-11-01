@@ -114,6 +114,10 @@ class Weather:
         self.factor, self.factor_n = BASE_FACTOR, 0
         self.model = {}  # {hour start: kW before the factor}, past fortnight and forecast
         self.temps = {}  # {hour start: °C}, past fortnight and forecast (for the outlook's temperature link)
+        self._backfilled = False
+        with store.lock:  # the model's past hours, kept for Solar vs weather (Trends) over the seasons
+            store.db.execute("CREATE TABLE IF NOT EXISTS pv_model(ts INTEGER PRIMARY KEY, kw REAL)")
+            store.db.commit()
         self.state = {"enabled": self.enabled, "status": "starting" if self.enabled else "off",
                       "mode": "simulator" if self.simulate else "live", "error": None, "updated": None,
                       "location": None, "planes": [], "factor": None, "current": None, "hourly": [], "daily": []}
@@ -253,9 +257,48 @@ class Weather:
         starts = [t - 3600 for t in times]
         self._calibrate(starts, pv, have_kw)
         self.model = {**{t: r for t, r in self.model.items() if t >= starts[0] - 86400}, **dict(zip(starts, pv))}
+        self._keep_model()
+        if not self._backfilled:
+            self._backfill(base, planes)
         # temperature is a spot value at each time: it belongs to the hour starting then
         self.temps = {int(t): v for t, v in zip(times, main["hourly"]["temperature_2m"]) if v is not None}
         self._publish(loc, planes, main, starts, pv, have_kw)
+
+    def _keep_model(self):
+        """Save the model's finished hours (they hardly change once past)."""
+        cut = time.time() - 3600
+        rows = [(int(t), round(kw, 4)) for t, kw in self.model.items() if t < cut and kw is not None]
+        if rows:
+            with self.store.lock:
+                self.store.db.executemany("INSERT OR REPLACE INTO pv_model VALUES (?,?)", rows)
+                self.store.db.commit()
+
+    def _backfill(self, base, planes):
+        """Once: the model for the last 92 days (as far back as Open-Meteo's forecast service keeps), so
+        Solar vs weather starts with the solar history already recorded."""
+        self._backfilled = True
+        with self.store.lock:
+            first_model = self.store.db.execute("SELECT MIN(ts) FROM pv_model").fetchone()[0]
+            first_pv = self.store.db.execute("SELECT MIN(ts) FROM samples WHERE pv > 0").fetchone()[0]
+        if not first_pv or (first_model and first_model <= first_pv + 86400):
+            return
+        try:
+            pv = None
+            for p in planes:
+                r = _get(FORECAST, {**base, "past_days": 92, "forecast_days": 1, "hourly": "global_tilted_irradiance",
+                                    "tilt": f"{p['tilt']:g}", "azimuth": f"{om_azimuth(p['azimuth']):g}"})
+                times, gti = r["hourly"]["time"], r["hourly"]["global_tilted_irradiance"]
+                pv = pv or [0.0] * len(times)
+                for i, g in enumerate(gti):
+                    if g is not None:
+                        pv[i] += (g / 1000.0) * (p["kw"] or 1.0)
+            rows = [(int(t) - 3600, round(v, 4)) for t, v in zip(times, pv) if t - 3600 < (first_model or time.time())]
+            with self.store.lock:
+                self.store.db.executemany("INSERT OR IGNORE INTO pv_model VALUES (?,?)", rows)
+                self.store.db.commit()
+            self.log(f"Weather: kept the solar model for {len(rows) // 24} earlier days (for Solar vs weather)")
+        except Exception as e:  # nice to have; try again next start
+            self.log(f"Weather: couldn't fetch the earlier solar model: {e}")
 
     def _calibrate(self, starts, raw, have_kw):
         """Learn how the real system compares with the model: a high percentile of actual/model over
@@ -372,6 +415,16 @@ class Weather:
                 lt = datetime.fromtimestamp(t, self.tz).replace(tzinfo=None)
                 self.model[t] = sum(simulator.solar_w(lt + timedelta(minutes=m)) for m in range(0, 60, 10)) / 6000
         self.model.update(dict(zip(starts, raw)))
+        self._keep_model()
+        if not self._backfilled:  # the simulator's sunshine further back, like the backfill below
+            self._backfilled = True
+            rows = []
+            for t in range(int(mid - 92 * 86400), int(past), 3600):
+                lt = datetime.fromtimestamp(t, self.tz).replace(tzinfo=None)
+                rows.append((t, sum(simulator.solar_w(lt + timedelta(minutes=m)) for m in range(0, 60, 10)) / 6000))
+            with self.store.lock:
+                self.store.db.executemany("INSERT OR IGNORE INTO pv_model VALUES (?,?)", rows)
+                self.store.db.commit()
         self.factor = 1.0
         with self.lock:
             self.state.update(status="ok", error=None, updated=now,

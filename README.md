@@ -624,6 +624,28 @@ running it then pays you), battery energy at what you'll pay for grid power late
 it, and the rest at the forecast buy price. Without a price feed it picks the time that needs
 the least grid energy. Each appliance is worked out on its own.
 
+### Solar vs weather (Trends)
+
+The **Solar vs weather** tab in Trends tracks slow changes over the seasons. Each day, the solar
+made in clear, unrestricted hours (battery not full, exports not at the limit, feed-in price not
+negative) is compared with what the weather model says your roof could have made in those
+hours. The whole array line starts at 100% for its first month: a slow, steady fall is dirt or
+panel ageing (about half a percent a year is normal). Each string's line is its output against
+the other strings. Strings on different roof faces trade share with the seasons, so once there's
+a year of readings each string is also compared with the same weeks last year, and one that has
+dropped is flagged (new shade, dirt on that face, or a failing panel). The model's hourly figures
+are kept from now on, and on first start the last 92 days are fetched so earlier readings count.
+
+### Targets
+
+Set a **self-sufficiency target** and a **monthly cost target** on the Settings page (Targets).
+Each is one number for every month, or different numbers for groups of months, like
+`12-2:90,3-11:70` (90% from December to February, 70% otherwise). The cost target is the Monthly
+summary's Net cost (energy bought less sold, before supply charges); use a negative number to aim
+for a credit. The Monthly summary then shows this month so far, where it's heading (the rest of
+the month at the last fortnight's average) and whether it's on track, and for past months
+whether each target was made.
+
 ### Solar limits
 
 Minutes when the panels could have made more but were held back, and why: exports sitting at
@@ -863,6 +885,9 @@ hand). Values in `sigen.env` win over the container's environment.
 | `TIME_FORMAT` | `12h` (6:30 pm) or `24h` (18:30), for every time on the dashboard | `12h` |
 | `UPDATE_CHECK` | `off` stops the twice-daily check of GitHub releases for a newer collector | `on` |
 | **Home Assistant (MQTT)** | | |
+| **Targets** | | |
+| `TARGET_SELF_SUFFICIENCY` | Self-sufficiency to aim for each month, %, or `12-2:90,3-11:70` | none |
+| `TARGET_NET_MONTHLY` | Most Net cost each month, $ (negative = a credit), or month ranges | none |
 | **Phone alerts** | | |
 | `NTFY_TOPIC` | ntfy topic to send alerts to; blank = off | off |
 | `NOTIFY_ON` | `all`, or any of `alarms,strings,insulation,inverter,backups,feeds,storm` | `all` |
@@ -901,7 +926,7 @@ thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 | `GET /api/ev-sessions?days=30&format=csv` | Charging sessions (CSV download or JSON) |
 | `GET /api/ev-log?days=30&format=csv` | Every charger state change with power and offered current (CSV or JSON) |
 | `GET /api/monthly?months=13&format=csv` | Monthly totals, costs and value (JSON or CSV) |
-| `GET /api/trends?days=365` | Daily string energy, insulation, battery health and temperatures |
+| `GET /api/trends?days=365` | Daily string energy, insulation, battery health, temperatures and solar vs weather (`pv_index`) |
 | `GET /api/money` | Plan comparison by month and for the last 12 months, payback, battery trades with the grid |
 | `GET /api/outlook` | Battery outlook: projected charge to the end of tomorrow, milestones and advice |
 | `GET /api/weather` | Current weather, hourly and daily forecast, and the solar forecast in kWh |
@@ -918,6 +943,7 @@ thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 | `GET /api/bills` | Each bill beside what the data had for its period, and the difference |
 | `POST /api/bills` | `{"action": "save", "bill": {...}, "replace": {start, end}}` or `{"action": "delete", "start", "end"}`; home network only |
 | `POST /api/import` | `{"name": "file.csv", "data": "<base64>"}`: imports an Amber usage report, mySigen export or bills CSV; home network only |
+| `GET /api/targets` | This month against the targets (so far, projected, on track) and past months made or missed |
 | `GET /api/notify` | Phone alerts: on or off, what's watched, the last one sent and any problems still open |
 | `POST /api/notify` | `{"action": "test"}` sends a test alert; home network only |
 | `GET /api/maintenance` | Database size, history span, free disk, recent imports and the version check |

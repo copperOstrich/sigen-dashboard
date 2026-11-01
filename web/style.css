@@ -640,3 +640,21 @@ body.wall-mode { overflow-x: hidden; }
 .wall-pref select { font: inherit; font-size: 14px; padding: 5px 8px; border-radius: var(--r-ctl); border: 1px solid var(--rule-strong); background: var(--surface-2); color: var(--ink); }
 .wall-pref p { grid-column: 1 / -1; margin: 0; font-size: 12.5px; }
 @media (max-width: 560px) { .wall-pref { grid-template-columns: 1fr; } }
+
+/* ---- targets (Monthly summary) */
+.mo-targets { margin: 14px 0 6px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--r-ctl); background: var(--surface-2); }
+.tg-head { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.tg-row { display: grid; grid-template-columns: 170px minmax(120px, 280px) minmax(0, 1fr); gap: 4px 16px; align-items: center; padding: 5px 0; font-size: 14px; }
+.tg-k { display: flex; gap: 8px; align-items: center; }
+.tg-s { font-size: 12px; border-radius: 999px; padding: 0 8px; border: 1px solid; }
+.tg-s.ok { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.tg-s.bad { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.tg-bar { position: relative; height: 10px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 10%, transparent); }
+.tg-bar.centre::before { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--rule-strong); }
+.tg-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 999px; background: var(--solar); }
+.tg-bar.centre .tg-fill { background: var(--grid); }
+.tg-proj { position: absolute; top: 1px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; border: 2px solid var(--ink-2); background: var(--surface); }
+.tg-mark { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--ink); }
+.tg-t { color: var(--ink-2); }
+.tg-note { margin-top: 6px; font-size: 12.5px; color: var(--ink-3); }
+@media (max-width: 760px) { .tg-row { grid-template-columns: 1fr; gap: 4px; padding: 8px 0; } }

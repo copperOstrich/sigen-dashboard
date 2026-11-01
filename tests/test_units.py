@@ -20,6 +20,7 @@ import mqtt  # noqa: E402
 import settings  # noqa: E402
 import updates  # noqa: E402
 import notify  # noqa: E402
+import targets  # noqa: E402
 from backup import Backups  # noqa: E402
 
 
@@ -388,6 +389,36 @@ class PhoneAlerts(unittest.TestCase):
         sun = datetime(2026, 11, 8, 18, 5, tzinfo=ZoneInfo("Australia/Sydney")).timestamp()
         n.tick(sun - 600); n.tick(sun); n.tick(sun + 60)
         self.assertEqual([m["title"] for m in self.sent], ["Home energy: Week to Saturday"])
+
+
+
+class Targets(unittest.TestCase):
+    def test_parse(self):
+        self.assertEqual(targets.parse("90", 0, 100)[7], 90.0)
+        t = targets.parse("12-2:95,3-11:70", 0, 100)
+        self.assertEqual((t[12], t[1], t[2], t[3], t[11]), (95.0, 95.0, 95.0, 70.0, 70.0))
+        self.assertEqual(targets.parse("$-50", -1e5, 1e5)[1], -50.0)
+        for bad in ("120", "13-2:90", "abc"):
+            with self.assertRaises(ValueError):
+                targets.check(bad, "self")
+
+    def test_progress_projects_the_month(self):
+        from datetime import date
+
+        class FakeStore:
+            def monthly(self, n):
+                return [{"month": "2026-11", "days": 10, "load": 200.0, "ev": 0.0, "import": 40.0,
+                         "self_sufficiency": 80.0, "net": 10.0},
+                        {"month": "2026-10", "days": 31, "load": 600.0, "ev": 0.0, "import": 60.0,
+                         "self_sufficiency": 90.0, "net": -30.0}]
+
+            def daily(self, n):
+                return [{"day": f"2026-11-{d:02d}", "load": 20.0, "ev": 0.0, "import": 2.0, "cost": -1.0} for d in range(1, 11)]
+        p = targets.progress(FakeStore(), date(2026, 11, 11), {m: 85.0 for m in range(1, 13)}, {m: 0.0 for m in range(1, 13)})
+        self.assertGreater(p["self"]["projected"], 85)      # the rest of the month at 90% pulls it up
+        self.assertTrue(p["self"]["on_track"])
+        self.assertLess(p["cost"]["projected"], 0)          # $10 so far, $1 a day credit for 19.5 days
+        self.assertEqual(p["months"][0]["self"]["met"], True)
 
 
 if __name__ == "__main__":
