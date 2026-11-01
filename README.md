@@ -140,7 +140,7 @@ read any moment.
   <img alt="Power history chart with tooltip, and battery charge over 24 hours" src="docs/screenshots/history-light.png">
 </picture>
 
-**Solar strings**: power, voltage and current for each PV string your inverter reports,
+**Solar** (Strings tab): power, voltage and current for each PV string your inverter reports,
 sunrise to sunset with the nights folded away, plus each string's energy, share and peak
 for the day. Handy for spotting shading or a faulty panel, and for telling which roof face is
 on which string.
@@ -174,16 +174,17 @@ value of your solar and battery, against the same month last year, plus a printa
   <img alt="Monthly summary for September: tiles for solar made, home used, car, bought, sold, self-sufficiency, net cost and solar and battery value, each compared with August, a monthly bar chart and a table of recent months" src="docs/screenshots/monthly-light.png">
 </picture>
 
-**Trends**: slow changes over months that a daily view hides. Here, insulation resistance
-each day against the warning and alarm levels; it can also show each string's share of the
-solar, battery health and temperatures.
+**Over time**: slow changes over months that a daily view hides, in each subject's own tab.
+Here, System > Health: insulation resistance each day against the warning and alarm levels (and
+battery and inverter temperatures). Battery > Health has the battery's health, and Solar > Long
+term has the solar against the weather.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/trends-dark.png">
   <img alt="Trends chart of daily lowest and average insulation resistance over four months, staying between 0.5 and 0.8 megohms, above the warning and alarm lines" src="docs/screenshots/trends-light.png">
 </picture>
 
-**Solar limits**: solar the panels could have made but were held back from, and why: the
+**Solar > Limits**: solar the panels could have made but were held back from, and why: the
 export limit, a negative feed-in price, the inverter at its maximum or a full battery, with what
 those exports would have earned.
 
@@ -192,7 +193,7 @@ those exports would have earned.
   <img alt="Solar limits panel: 18.8 kWh held back in the last 30 days, mostly at the export limit, with daily bars by reason" src="docs/screenshots/limits-light.png">
 </picture>
 
-**Battery wear**: cycles, energy through the battery, health, round trip and temperature,
+**Battery > Health**: cycles, energy through the battery, health, round trip and temperature,
 against your warranty, including when the warranty's energy limit is likely to be reached.
 
 <picture>
@@ -638,9 +639,9 @@ running it then pays you), battery energy at what you'll pay for grid power late
 it, and the rest at the forecast buy price. Without a price feed it picks the time that needs
 the least grid energy. Each appliance is worked out on its own.
 
-### Solar vs weather (Trends)
+### Solar vs weather (Solar > Long term)
 
-The **Solar vs weather** tab in Trends tracks slow changes over the seasons. Each day, the solar
+The **Long term** tab in the Solar panel tracks slow changes over the seasons. Each day, the solar
 made in clear, unrestricted hours (battery not full, exports not at the limit, feed-in price not
 negative) is compared with what the weather model says your roof could have made in those
 hours. The whole array line starts at 100% for its first month: a slow, steady fall is dirt or
@@ -707,6 +708,16 @@ and the car, and opens the full dashboard from its button.
 Earlier versions had a Windows desktop app. It's been withdrawn: without a paid code-signing
 certificate, Windows Smart App Control (and macOS) block it, and the browser does the same job.
 If you installed it, uninstall it from **Settings → Apps**.
+
+### Panels and tabs
+
+Related things share a panel, with tabs; each panel remembers the tab you last chose (per
+browser), and a tab with nothing to show yet is left out:
+
+* **Battery**: Now · Health (wear, warranty and health over time)
+* **Prices and the grid**: Your price · The grid (AEMO wholesale, every region)
+* **Solar**: Strings · Limits · Long term (solar vs weather)
+* **System**: Status (alarms, data feeds, events) · Health (insulation and temperatures over time)
 
 ### Ultrawide monitors
 
@@ -785,7 +796,7 @@ stays low is worth having your installer check.
 
 **Solar strings** are checked too. Each string's normal share of the solar is learned for every
 hour of the day from three weeks of readings, so a string that's always shaded part of the day
-isn't flagged for it. The **Vs usual** column in the Solar strings panel compares the last few
+isn't flagged for it. The **Vs usual** column in Solar > Strings compares the last few
 days, sunny hours only, with that. Two days in a row under 85% of usual raises an amber notice; a
 day under 40%, or a string making next to nothing for 20 minutes while the others produce, raises
 a red alarm. New shade, dirt, a failed panel or optimiser, or a tripped isolator show up this way.

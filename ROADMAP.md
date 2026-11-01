@@ -26,10 +26,17 @@ bump and changelog entry; the order can change as real use shows what matters.
   insulation, the inverter, backups, data feeds and storms with a low battery; quiet hours; a
   weekly summary.
 
-## Phase H: deeper insight (next)
+## Consolidation (2.0, next)
 
-- [ ] Big loads recognised from the minute readings (car, air conditioning, hot water, oven), with
-      their share of use and cost
+The dashboard grew a panel per feature; related things now share a panel with tabs.
+
+- [x] Step 1 (1.24): Battery (Now, Health), Solar (Strings, Limits, Long term), System (Status,
+      Health), Prices and the grid; Trends shared out among them
+- [ ] Step 2 (2.0): Money (Payback and bills, Plans from What if, Trading), Forecast (weather and
+      battery outlook in one, Best times), History (Power, Days, Months, Always-on)
+
+## Phase H: deeper insight
+
 - [x] Solar health over the seasons: yield against the weather model, strings year on year (1.22)
 - [x] Plan what-ifs priced on your own year, with the battery run for each plan, and more panels
       or more battery (1.23)
@@ -49,5 +56,7 @@ The repo is public; making it easier for other SigenStor owners helps it stay he
 - **Control** (writing to the inverter, for example raising the backup reserve before a storm):
   the dashboard is read-only by design. Worth revisiting only with an explicit opt-in setting,
   Sigenergy's documented writable registers, and a way to undo.
+- Recognising big loads (air conditioning, hot water, oven) from the whole-house readings: with
+  loads that vary this much, guesses wouldn't be reliable enough to be useful
 - Reading the AC charger directly (needs it wired to the inverter over RS-485 with a Modbus address)
 - Signed desktop apps, an iPhone app, automatic releases (the maintainer publishes each release)

@@ -2,6 +2,22 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.24.0
+
+Consolidation, step 1 of 2: fewer panels, related things together in tabs. Each panel remembers
+the tab you last chose in that browser, and a tab with nothing to show yet is left out.
+
+- **Battery**: Now · Health. Health brings together Battery wear and the battery's health over time
+- **Solar**: Strings · Limits · Long term (Solar vs weather). Replaces Solar strings and Solar limits
+- **System**: Status · Health (insulation and temperatures over time)
+- **Prices and the grid**: Your price · The grid. Replaces Electricity price and The grid. With
+  retailer prices, the wholesale line and figure are no longer repeated in Your price (they're on
+  The grid)
+- **Trends** is gone: each chart is in its subject's panel. The string-share chart is dropped, as
+  Solar vs weather's "vs the others" lines show the same thing
+- Your Arrange panels layout carries over: a merged panel takes the place of the one it replaced
+- Panels in a third of the width (Battery, System) lay their tiles out in two columns
+
 ## 1.23.0
 
 - **What if** panel: your own recorded hours played back through a battery model and priced for a

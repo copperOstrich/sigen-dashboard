@@ -614,41 +614,24 @@
   $("mo-next").addEventListener("click", () => { if (moIdx < moData.length - 1) { moIdx++; renderMonthly(); } });
 
   // ------------------------------------------------------------ trends over months
-  let trData = null, trMetric = "strings", trDays = 365;
   const dayT = (d) => new Date(d + "T12:00:00").getTime() / 1000;
   const rolling = (vals, n = 7) => vals.map((_, i) => {
     const w = vals.slice(Math.max(0, i - n + 1), i + 1).filter((v) => v != null);
     return w.length >= Math.min(3, n) ? w.reduce((a, b) => a + b, 0) / w.length : null;
   });
-  function drawTrends() {
-    const d = trData, panel = $("tr-panel");
-    panel.hidden = !(d && d.days && d.days.length >= 2);
-    if (panel.hidden) return;
-    const t = d.days.map(dayT), lg = $("tr-legend"); lg.innerHTML = "";
-    let series = [], opts = {}, note = "";
-    const dayTitle = (x) => new Date(x * 1000).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-    if (trMetric === "strings") {
-      const ids = Object.keys(d.strings).map(Number).sort((a, b) => a - b);
-      const total = d.days.map((_, i) => ids.reduce((a, n) => a + (d.strings[n][i] || 0), 0));
-      series = ids.map((n, k) => {
-        // 7-day share of the total, from summed energy so dull days count less
-        const share = d.days.map((_, i) => {
-          let a = 0, b = 0;
-          for (let j = Math.max(0, i - 6); j <= i; j++) { a += d.strings[n][j] || 0; b += total[j] || 0; }
-          return b > 3 ? a / b * 100 : null;
-        });
-        return { key: n, label: `PV${n}`, ...pvStyle(k), values: share };
-      });
-      opts = { yFmt: (v) => `${Math.round(v)}%`, tipFmt: (v) => (v == null ? "–" : `${v.toFixed(1)}%`), yMin: 0 };
-      note = "Each string's share of the solar, averaged over a week. Shares move a little with the seasons as the sun's path changes, but a string that drifts down against the others is losing output: new shade from a growing tree, dirt, or a failing panel.";
-    } else if (trMetric === "pvidx") {
+  // each trend lives in its subject's panel: Battery > Health, Solar > Long term, System > Health
+  const TRENDS = [
+    { id: "tb", metric: "battery", days: 365 },
+    { id: "ts", metric: "pvidx", days: 365 },
+    { id: "ty", metric: "insulation", days: 365 },
+  ];
+  const trCache = {};
+  function trendSeries(m, d, t) {
+    let series = [], opts = {}, note = "", empty = null;
+    if (m === "pvidx") {
       const pi = d.pv_index || {};
-      if (!pi.enabled) {
-        lg.innerHTML = ""; $("tr-chart").innerHTML = "";
-        $("tr-chart").append(el("div", { class: "empty", text: `Solar vs weather ${pi.reason || "isn't available yet"}.` }));
-        $("tr-note").textContent = "Compares each day's solar with what the weather model says the panels could have made, so slow changes over the seasons show up.";
-        return;
-      }
+      if (!pi.enabled) return { empty: `Solar vs weather ${pi.reason || "isn't available yet"}.`,
+        note: "Compares each day's solar with what the weather model says the panels could have made, so slow changes over the seasons show up." };
       const ids = Object.keys(pi.strings_series || {}).map(Number).sort((a, b) => a - b);
       series = [{ key: "sys", label: "Whole array vs the weather", color: "var(--ink)", values: pi.system_series },
         ...ids.map((n, k) => ({ key: n, label: `PV${n} vs the others`, ...pvStyle(k), values: pi.strings_series[n] }))];
@@ -663,7 +646,7 @@
         "Hours with a full battery, exports at the limit or a negative feed-in price are left out. Smoothed over 15 days." +
         (pi.ready ? (pi.flags && pi.flags.length ? ` Worth a look: ${pi.flags.join("; ")}.` : " Nothing needs a look.") : ` Still learning: ${pi.days} of 45 days so far.`) +
         (pi.span_days < 380 ? " String comparisons with last year start once there's a year of readings." : "");
-    } else if (trMetric === "insulation") {
+    } else if (m === "insulation") {
       const L = d.insulation_limits || { warn: 0.5, min: 0.37 };
       series = [
         { key: "min", label: "Lowest each day", color: "var(--home)", values: d.stats.insulation.min },
@@ -672,40 +655,59 @@
         { key: "alarm", label: `Alarm (${L.min} MΩ)`, color: "var(--bad)", dash: "6 4", values: t.map(() => L.min) }];
       opts = { yMin: 0, yFmt: (v) => `${v} MΩ`, tipFmt: (v) => (v == null ? "–" : `${v.toFixed(3)} MΩ`) };
       note = "Insulation resistance between the solar wiring and earth. Dips on wet mornings are normal; a lowest-each-day line creeping down over weeks is worth an installer's look before it reaches the alarm level.";
-    } else if (trMetric === "battery") {
+    } else if (m === "battery") {
       const v = d.stats.soh.avg.filter((x) => x != null);
       const lo = v.length ? Math.floor(Math.min(...v) - 1) : 90;
-      series = [{ key: "soh", label: "Battery health", color: "var(--battery)", values: d.stats.soh.avg }];
+      series = [{ key: "soh", label: "Health", color: "var(--battery)", values: d.stats.soh.avg }];
       opts = { yMin: Math.max(0, lo), yMax: 100, yFmt: (x) => `${x}%`, tipFmt: (x) => (x == null ? "–" : `${x.toFixed(1)}%`) };
-      note = "Battery state of health as the battery reports it: how much of its original capacity is left. Expect a slow decline of around a percent or two a year.";
+      note = "State of health as the battery reports it: how much of its original capacity is left. Expect a slow decline of around a percent or two a year. Temperatures are under System > Health.";
     } else {
       series = [{ key: "bt", label: "Battery, hottest each day", color: "var(--battery)", values: d.stats.battery_temp.max },
         { key: "it", label: "Inverter, hottest each day", color: "var(--grid)", dash: "5 4", values: d.stats.inverter_temp.max }];
       opts = { yFmt: (x) => `${x}°`, tipFmt: (x) => (x == null ? "–" : `${x.toFixed(1)} °C`) };
-      note = "Hottest battery cell and inverter temperature each day. Summer peaks are expected; a steady rise against similar weather can mean poor airflow around the unit.";
+      note = "Hottest battery cell and inverter temperature each day. Summer peaks are expected; a steady rise against similar weather can mean poor airflow around the units.";
     }
-    for (const s of series) lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw" + (s.dash ? " dash" : ""), style: `border-color:${s.color}` }), s.label));
-    const hasData = series.some((s) => (s.values || []).some((v) => v != null && s.key !== "warn" && s.key !== "alarm"));
-    C.lineChart($("tr-chart"), { t, series, height: 240, gapSeconds: 86400 * 3, tipTitle: dayTitle,
-      emptyText: "Not enough readings yet.", ariaLabel: `Trend over ${trDays} days`, ...opts });
-    if (!hasData) { $("tr-chart").innerHTML = ""; $("tr-chart").append(el("div", { class: "empty", text: "This builds up from the first day of readings; check back in a few days." })); }
-    $("tr-note").textContent = note;
+    return { series, opts, note, empty };
   }
+  function drawTrend(tr) {
+    const d = trCache[tr.days], box = $(tr.id);
+    if (!box) return;
+    const has = !!(d && d.days && d.days.length >= 2);
+    if (box.hidden === has) box.hidden = !has;
+    if (!has || box.closest(".tabpage.inactive")) return;
+    const t = d.days.map(dayT), lg = $(tr.id + "-legend"), chart = $(tr.id + "-chart");
+    const dayTitle = (x) => new Date(x * 1000).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    const r = trendSeries(tr.metric, d, t);
+    lg.innerHTML = ""; chart.innerHTML = "";
+    $(tr.id + "-note").textContent = r.note;
+    if (r.empty) { chart.append(el("div", { class: "empty", text: r.empty })); return; }
+    for (const s of r.series) lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw" + (s.dash ? " dash" : ""), style: `border-color:${s.color}` }), s.label));
+    const hasData = r.series.some((s) => (s.values || []).some((v) => v != null && s.key !== "warn" && s.key !== "alarm"));
+    C.lineChart(chart, { t, series: r.series, height: 240, gapSeconds: 86400 * 3, tipTitle: dayTitle,
+      emptyText: "Not enough readings yet.", ariaLabel: `Trend over ${tr.days} days`, ...r.opts });
+    if (!hasData) { chart.innerHTML = ""; chart.append(el("div", { class: "empty", text: "This builds up from the first day of readings; check back in a few days." })); }
+  }
+  function drawTrends() { TRENDS.forEach(drawTrend); }
   async function loadTrends() {
-    try { trData = await S.fetchJSON(`/api/trends?days=${trDays}`); drawTrends(); } catch (e) { /* banner */ }
-  }
-  $("tr-metric").addEventListener("click", (e) => {
-    const b = e.target.closest("button"); if (!b) return;
-    trMetric = b.dataset.m;
-    $("tr-metric").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    const need = [...new Set(TRENDS.map((x) => x.days))];
+    await Promise.all(need.map(async (days) => {
+      try { trCache[days] = await S.fetchJSON(`/api/trends?days=${days}`); } catch (e) { /* banner */ }
+    }));
     drawTrends();
-  });
-  $("tr-range").addEventListener("click", (e) => {
-    const b = e.target.closest("button"); if (!b) return;
-    trDays = +b.dataset.d;
-    $("tr-range").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
-    loadTrends();
-  });
+  }
+  for (const tr of TRENDS) {
+    const seg = (id, f) => { const n = $(id); if (n) n.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      n.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+      f(b);
+    }); };
+    seg(tr.id + "-metric", (b) => { tr.metric = b.dataset.m; drawTrend(tr); });
+    seg(tr.id + "-range", async (b) => {
+      tr.days = +b.dataset.d;
+      if (!trCache[tr.days]) { try { trCache[tr.days] = await S.fetchJSON(`/api/trends?days=${tr.days}`); } catch (e) { return; } }
+      drawTrend(tr);
+    });
+  }
 
   // ------------------------------------------------------------ battery outlook
   let olData = null, olPast = null;
@@ -1517,8 +1519,6 @@
         p.spike === "potential" ? el("span", { class: "tag potential", text: "Spike possible" }) : null,
         p.estimate ? el("span", { class: "tag", text: "Estimate", title: ESTIMATE_NOTE[name] || "" }) : null),
       el("dl", { class: "facts" },
-        hasAemo && aemoSummary.price_c != null ? el("dt", { text: "Wholesale (AEMO)" }) : null,
-        hasAemo && aemoSummary.price_c != null ? el("dd", { text: `${cents(aemoSummary.price_c)}c/kWh` }) : null,
         el("dt", { text: p.renewables != null ? `Renewables (${name})` : "Renewables (AEMO)" }), el("dd", { text: ren == null ? "–" : `${Math.round(ren)}%` }),
         el("dt", { text: "This price until" }), el("dd", { text: p.ends ? clock(p.ends) : "–" }),
         p.period ? el("dt", { text: "Network period" }) : null, p.period ? el("dd", { text: p.period }) : null));
@@ -1560,7 +1560,7 @@
       series.push({ key: "buy", label: "Buying", color: "var(--grid)", values: list.map((r) => r.buy) });
       series.push({ key: "sell", label: "Selling", color: "var(--solar)", values: list.map((r) => r.sell) });
     }
-    if (a && list.some((r) => r.ws != null)) series.push({ key: "ws", label: `Wholesale (${regionName(a.region)})`, color: "var(--ink-2)", dash: true, values: list.map((r) => r.ws) });
+    if (a && !d && list.some((r) => r.ws != null)) series.push({ key: "ws", label: `Wholesale (${regionName(a.region)})`, color: "var(--ink-2)", dash: true, values: list.map((r) => r.ws) });
     const lg = $("price-legend"); lg.innerHTML = "";
     for (const s of series) {
       lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw" + (s.dash ? " dash" : ""), style: `border-color:${s.color}` }), s.label));
