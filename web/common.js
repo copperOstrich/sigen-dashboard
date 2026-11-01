@@ -8,6 +8,24 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage unavailable */ } },
   };
 
+  // Time format (Settings, Dashboard, Time format): 12-hour or 24-hour everywhere, whatever the
+  // browser's language would choose. Applied to every toLocaleTimeString / toLocaleString call.
+  const timeOpts = (opts) => {
+    const fmt = store.get("sigen.timefmt") || "12h";
+    if (fmt !== "12h" && fmt !== "24h") return opts;
+    const o = { ...(opts || {}) };
+    delete o.hourCycle;
+    o.hour12 = fmt === "12h";
+    if (fmt === "24h" && o.hour && !o.minute) o.minute = "2-digit";  // "18" alone reads oddly: "18:00"
+    return o;
+  };
+  const origTime = Date.prototype.toLocaleTimeString, origStr = Date.prototype.toLocaleString;
+  Date.prototype.toLocaleTimeString = function (loc, opts) { return origTime.call(this, loc, timeOpts(opts)); };
+  Date.prototype.toLocaleString = function (loc, opts) {
+    const dateOnly = opts && !opts.hour && !opts.minute && !opts.timeStyle && (opts.day || opts.month || opts.year || opts.weekday);
+    return origStr.call(this, loc, dateOnly ? opts : timeOpts(opts));
+  };
+
   S.isDesktop = !!window.__TAURI__;
   const qp = new URLSearchParams(location.search).get("api");
   if (qp) store.set("sigen.api", qp.replace(/\/+$/, ""));
@@ -17,6 +35,16 @@
   };
   S.setApiBase = function (url) { store.set("sigen.api", url.replace(/\/+$/, "")); };
   S.store = store;
+
+  // pick up the time format from the collector (remembered for next time; redraw if it changed)
+  setTimeout(() => {
+    fetch(S.apiBase() + "/api/ui", { cache: "no-store" }).then((r) => r.json()).then((u) => {
+      if (u && u.time_format && u.time_format !== store.get("sigen.timefmt")) {
+        store.set("sigen.timefmt", u.time_format);
+        if (window.SigenRedraw) window.SigenRedraw();
+      }
+    }).catch(() => {});
+  }, 0);
 
   S.fetchJSON = async function (path) {
     const res = await fetch(S.apiBase() + path, { cache: "no-store" });

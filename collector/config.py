@@ -48,7 +48,7 @@ def load_settings_file():
 
 SETTINGS_PATH = load_settings_file()
 
-VERSION = "1.16.0"
+VERSION = "1.16.1"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -117,6 +117,7 @@ BATTERY_WARRANTY_MWH = _env_num("BATTERY_WARRANTY_MWH", None)
 BATTERY_WARRANTY_SOH = _env_num("BATTERY_WARRANTY_SOH", None)
 APPLIANCES = ENV("APPLIANCES", None)
 GRID_VIEW = (ENV("GRID_VIEW", "") or "tiles").strip().lower()
+TIME_FORMAT = (ENV("TIME_FORMAT", "") or "12h").strip().lower()
 MQTT_HOST = (ENV("MQTT_HOST", "") or "").strip()
 MQTT_SETTINGS = {k: (ENV(k, "") or "").strip() for k in ("MQTT_PORT", "MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_TOPIC",
                                                          "MQTT_INTERVAL")}

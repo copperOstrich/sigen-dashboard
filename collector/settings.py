@@ -116,6 +116,8 @@ SCHEMA = [
        "how full each interconnector is. Nodes and wires: a map like Right now, coloured by price. Chain: the regions "
        "in a line as the grid connects them. On phones, nodes and wires and the chain become a table.",
        "choice", "tiles", options=[["tiles", "Region tiles"], ["map", "Nodes and wires"], ["chain", "Chain"]]),
+    _s("TIME_FORMAT", DASH, "Time format", "How times show everywhere on the dashboard, whatever your browser's "
+       "language would choose.", "choice", "12h", options=[["12h", "12-hour (6:30 pm)"], ["24h", "24-hour (18:30)"]]),
     # ---------------------------------------------------------------- battery
     _s("BATTERY_WARRANTY_YEARS", BATTERY, "Warranty length", "From your battery's warranty, counted from the "
        "day the system was switched on (Money).", "number", "10", min=1, max=30, unit="years"),

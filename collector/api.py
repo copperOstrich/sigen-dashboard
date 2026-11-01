@@ -291,6 +291,8 @@ class Api(BaseHTTPRequestHandler):
                 return self._json(battery_wear(self.store, self.collector.snapshot(), TZ, installed=SYSTEM_INSTALLED or None,
                                                warranty_years=BATTERY_WARRANTY_YEARS, warranty_mwh=BATTERY_WARRANTY_MWH,
                                                warranty_soh=BATTERY_WARRANTY_SOH))
+            if url.path == "/api/ui":
+                return self._json({"time_format": TIME_FORMAT if TIME_FORMAT in ("12h", "24h") else "12h", "version": VERSION})
             if url.path == "/api/bills":
                 return self._json({"bills": self.store.bill_check()})
             if url.path == "/api/baseload":

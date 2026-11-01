@@ -796,6 +796,7 @@ hand). Values in `sigen.env` win over the container's environment.
 | `BACKUP_DIR` | Where backups go, inside the container | `backups` in the data folder |
 | **Dashboard** | | |
 | `GRID_VIEW` | How The grid shows all regions: `tiles`, `map` (nodes and wires) or `chain` | `tiles` |
+| `TIME_FORMAT` | `12h` (6:30 pm) or `24h` (18:30), for every time on the dashboard | `12h` |
 | **Home Assistant (MQTT)** | | |
 | `MQTT_HOST`, `MQTT_PORT` | Your MQTT broker; blank = off | off, `1883` |
 | `MQTT_USERNAME`, `MQTT_PASSWORD` | If the broker needs them | none |
@@ -840,6 +841,7 @@ thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 | `GET /api/battery-wear` | Cycles, throughput, round trip, health trend and warranty projection |
 | `GET /api/baseload?days=90` | Always-on use: each night's baseline, now and four weeks ago, and a year's kWh and cost |
 | `GET /api/appliances` | Best start time and cost for each appliance in `APPLIANCES` |
+| `GET /api/ui` | Display settings for the pages (time format) |
 | `GET /api/bills` | Each imported bill beside what the data had for its period, and the difference |
 | `GET /api/backups` | Backup status and the backups kept; `POST` (home network only) backs up now |
 | `GET /api/health` | `{ok, status, updated, version}` for monitoring |

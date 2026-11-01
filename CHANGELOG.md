@@ -2,6 +2,13 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.16.1
+
+- **Time format** setting (Settings, Dashboard): 12-hour (6:30 pm, the default) or 24-hour (18:30)
+  for every time on the dashboard, charts, report, year in review and widget, whatever the
+  browser's language would choose. In 24-hour mode a time on the hour shows as "18:00" rather
+  than a bare "18" (as the storm warning did)
+
 ## 1.16.0
 
 - **Your bills against the data** (Money panel): each bill beside what the dashboard had for its
