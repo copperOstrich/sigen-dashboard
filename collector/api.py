@@ -31,6 +31,7 @@ from wear import battery_wear  # noqa: E402
 from advice import appliance_advice, parse as parse_appliances  # noqa: E402
 from mqtt import Mqtt  # noqa: E402
 from baseload import baseload  # noqa: E402
+from trading import trading  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
@@ -291,6 +292,11 @@ class Api(BaseHTTPRequestHandler):
                 return self._json(battery_wear(self.store, self.collector.snapshot(), TZ, installed=SYSTEM_INSTALLED or None,
                                                warranty_years=BATTERY_WARRANTY_YEARS, warranty_mwh=BATTERY_WARRANTY_MWH,
                                                warranty_soh=BATTERY_WARRANTY_SOH))
+            if url.path == "/api/trading":
+                days = min(400, max(3, int(q.get("days", ["30"])[0])))
+                bl = baseload(self.store, TZ, 30)
+                return self._json(trading(self.store, self.collector.snapshot(), TZ, days,
+                                          baseload_w=bl.get("now_w") if bl.get("enabled") else None))
             if url.path == "/api/ui":
                 return self._json({"time_format": TIME_FORMAT if TIME_FORMAT in ("12h", "24h") else "12h", "version": VERSION})
             if url.path == "/api/bills":

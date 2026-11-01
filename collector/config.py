@@ -48,7 +48,7 @@ def load_settings_file():
 
 SETTINGS_PATH = load_settings_file()
 
-VERSION = "1.16.1"
+VERSION = "1.17.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")

@@ -1680,7 +1680,7 @@
     if (dlg.returnValue !== "save") return;
     S.setApiBase($("api-input").value.trim());
     sub.restart(); evData = null; loadWeather(); loadOutlook(); loadMonthly(); loadTrends(); loadMoney(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
-    loadAppliances(); loadLimits(); loadWear(); loadBaseload();
+    loadAppliances(); loadLimits(); loadWear(); loadBaseload(); loadTrading();
   });
 
 
@@ -1872,6 +1872,56 @@
     try { blData = await S.fetchJSON("/api/baseload?days=90"); drawBaseload(); } catch (e) { /* banner */ }
   }
 
+
+  // ------------------------------------------------------------ battery trading
+  let btData = null;
+  function renderTrading() {
+    const t = btData, panel = $("bt-panel");
+    panel.hidden = !(t && t.enabled);
+    if (panel.hidden) return;
+    const money2 = (v) => (v == null ? "–" : `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`);
+    const tiles = $("bt-tiles"); tiles.innerHTML = "";
+    const tile = (k, v, u, d) => el("div", {}, el("div", { class: "k", text: k }), el("div", { class: "v" }, v, u ? el("small", { text: u }) : null),
+      d ? el("div", { class: "d", text: d }) : null);
+    const pr = t.prices;
+    tiles.append(
+      tile("Battery sold to the grid", pr.battery_kwh.toFixed(0), "kWh", `earning ${money2(pr.battery_value)}`),
+      tile("Battery export price", pr.battery_avg_c != null ? pr.battery_avg_c.toFixed(0) : "–", pr.battery_avg_c != null ? "c/kWh" : "",
+        pr.best_hour_avg_c != null ? `best hour each day averaged ${pr.best_hour_avg_c.toFixed(0)}c` : null),
+      tile("Spikes caught", `${t.caught} of ${t.spike_count}`, "", t.spike_count ? `earned ${money2(t.spike_earned)}` : `none at $${(t.spike_c / 100).toFixed(0)}/kWh or more`),
+      tile("Missed in spikes", money2(t.spike_missed_value), "", t.spike_count ? "what full exports could have added" : null));
+    const st = $("bt-spikes"); st.innerHTML = "";
+    if (!t.spikes.length) st.append(el("tr", {}, el("td", { class: "muted", text: `No price spikes in the last ${t.days} days.` })));
+    else {
+      st.append(el("tr", {}, ...["When", "Peak", "Sold", "Earned", "Battery", ""].map((h) => el("th", { text: h }))));
+      for (const s of t.spikes.slice().reverse()) {
+        const d = new Date(s.start * 1000);
+        st.append(el("tr", { title: `${s.minutes} min at an average of $${(s.avg_c / 100).toFixed(2)}/kWh. ${s.battery_kwh} kWh from the battery. ` +
+            `It could have sold about ${s.could_kwh} kWh (${money2(s.could_earn)}).` },
+          el("td", { text: `${d.toLocaleDateString([], { day: "numeric", month: "short" })}, ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` }),
+          el("td", { text: `$${(s.peak_c / 100).toFixed(2)}` }), el("td", { text: `${s.kwh.toFixed(1)} kWh` }), el("td", { text: money2(s.earned) }),
+          el("td", { text: s.soc_start != null ? `${Math.round(s.soc_start)}%` : "–" }),
+          s.caught ? el("td", { class: "ok", text: "caught" }) : el("td", { class: "miss", title: s.why, text: s.why === "battery near its reserve" ? "missed: battery low" : "missed: not sold" })));
+      }
+    }
+    const rt = $("bt-reserve"); rt.innerHTML = "";
+    rt.append(el("tr", {}, ...["Reserve", "Extra grid", "Spike gain", "Net", "Outage cover"].map((h) => el("th", { text: h }))));
+    rt.append(el("tr", {}, el("td", { text: `${Math.round(t.reserve)}% (now)` }), el("td", { text: "–" }), el("td", { text: "–" }), el("td", { text: "–" }),
+      el("td", { text: "–" })));
+    for (const w of t.what_if) {
+      rt.append(el("tr", { title: `Holds back ${w.held_kwh} kWh; about ${w.extra_grid_kwh} kWh more bought from the grid over ${t.days} days` },
+        el("td", { text: `${w.reserve}%` }), el("td", { text: money2(w.extra_cost) }), el("td", { text: money2(w.spike_gain) }),
+        el("td", { class: w.net >= 0 ? "ok" : null, text: money2(w.net) }),
+        el("td", { text: w.outage_hours != null ? `+${w.outage_hours} h` : `+${w.held_kwh} kWh` })));
+    }
+    $("bt-reserve-note").textContent = `Over the last ${t.days} days: what the house would have bought instead while the battery stopped at the higher level, against what that held-back energy could have earned in spikes missed for lack of charge. Outage cover is at your always-on use. Change the reserve in the mySigen app.`;
+    $("bt-sub").textContent = `last ${t.days} days, from the collector's readings`;
+    $("bt-note").textContent = `A spike is when the feed-in price reaches $${(t.spike_c / 100).toFixed(0)}/kWh. Caught means at least half of what the battery could have sold (at the fastest export seen, ${(t.max_export_w / 1000).toFixed(1)} kW, from its charge above the ${Math.round(t.reserve)}% reserve). Estimates from minute readings: your retailer's own control isn't visible, only what it did.`;
+  }
+  async function loadTrading() {
+    try { btData = await S.fetchJSON("/api/trading?days=30"); renderTrading(); } catch (e) { /* banner */ }
+  }
+
   // ------------------------------------------------------------ desktop: widget switch + updates
   if (S.isDesktop) {
     const wb = $("widget-btn");
@@ -1938,8 +1988,8 @@
   setInterval(loadWeather, 10 * 60000);
   loadOutlook();
   setInterval(loadOutlook, 5 * 60000);
-  loadMonthly(); loadTrends(); loadMoney(); loadAppliances(); loadLimits(); loadWear(); loadBaseload();
-  setInterval(() => { loadMonthly(); loadTrends(); loadMoney(); loadLimits(); loadWear(); loadBaseload(); }, 30 * 60000);
+  loadMonthly(); loadTrends(); loadMoney(); loadAppliances(); loadLimits(); loadWear(); loadBaseload(); loadTrading();
+  setInterval(() => { loadMonthly(); loadTrends(); loadMoney(); loadLimits(); loadWear(); loadBaseload(); loadTrading(); }, 30 * 60000);
   setInterval(loadAppliances, 5 * 60000);
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);

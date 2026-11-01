@@ -182,6 +182,33 @@ class HourlyPricing(unittest.TestCase):
         self.assertGreater(cost, 10 * 15.0 / 100)  # more than the flat daily average gives
 
 
+class Trading(unittest.TestCase):
+    def test_spike_caught(self):
+        import time as _t
+        import sigen_collector as sc
+        import trading
+        st = sc.Store(Path(tempfile.mkdtemp()) / "t.db")
+        t0 = int(_t.time()) // 60 * 60 - 3 * 86400
+        rows = []
+        for m in range(3 * 1440):
+            ts = t0 + m * 60
+            spike = 2000 <= m < 2012
+            # normal: home on the battery at 500 W; spike: battery sells 6 kW at $10/kWh feed-in
+            batt, grid, sell = (-6500.0, -6000.0, -1000.0) if spike else (-500.0, 0.0, -5.0)
+            rows.append((ts, "d", 0, 500, batt, grid, 80.0, 0, 0, 0, 0, 0, 0, 30.0, sell, None))
+        st.insert(rows)
+        live = {"battery": {"rated_kwh": 40.0, "cutoff_low": 10.0}}
+        res = trading.trading(st, live, sc.TZ, days=5, baseload_w=400, now=t0 + 3 * 86400)
+        self.assertTrue(res["enabled"])
+        self.assertEqual(res["spike_count"], 1)
+        s = res["spikes"][0]
+        self.assertEqual(s["minutes"], 12)
+        self.assertAlmostEqual(s["earned"], 12, delta=0.1)  # 1.2 kWh at $10
+        self.assertTrue(s["caught"])
+        self.assertEqual(res["what_if"][0]["reserve"], 20)
+        self.assertAlmostEqual(res["what_if"][0]["outage_hours"], 10.0)  # 4 kWh at 400 W
+
+
 class Limits(unittest.TestCase):
     def test_ceiling(self):
         flat = [5000.0] * 60 + [3000.0 + i for i in range(500)]

@@ -620,6 +620,15 @@ it. The energy lost is the shortfall against the weather model's expected output
 those exports would have earned. Passing cloud isn't counted. Shown for the last 30 days and the
 month so far.
 
+### Battery trading
+
+How well the battery is traded with the grid (Amber SmartShift or a VPP), from the collector's
+minute readings over the last 30 days: what it sold and at what average price against each day's
+best hour; every price spike (feed-in at $1/kWh or more) with what was sold and earned and whether
+the battery **caught** it or **missed** it (and why: already low, or charge left but not sold); and
+what a higher backup reserve would have done: the extra grid cost, the spike earnings it could have
+added, and the extra hours of outage cover at your always-on use.
+
 ### Battery wear
 
 Cycles (the battery's lifetime discharge divided by its capacity), energy through it, round-trip
@@ -841,6 +850,7 @@ thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 | `GET /api/battery-wear` | Cycles, throughput, round trip, health trend and warranty projection |
 | `GET /api/baseload?days=90` | Always-on use: each night's baseline, now and four weeks ago, and a year's kWh and cost |
 | `GET /api/appliances` | Best start time and cost for each appliance in `APPLIANCES` |
+| `GET /api/trading?days=30` | Battery trading: spikes caught and missed, export prices, reserve what-if |
 | `GET /api/ui` | Display settings for the pages (time format) |
 | `GET /api/bills` | Each imported bill beside what the data had for its period, and the difference |
 | `GET /api/backups` | Backup status and the backups kept; `POST` (home network only) backs up now |

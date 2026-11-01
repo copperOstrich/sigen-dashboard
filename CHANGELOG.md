@@ -2,6 +2,19 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.17.0
+
+- **Battery trading** panel (from the collector's minute readings, last 30 days):
+  - how much the battery sold to the grid, at what average price, against each day's best hour
+  - every price spike (feed-in at $1/kWh or more): when, the peak, what was sold and earned, the
+    battery's charge going in, and whether it was **caught** (at least half of what the battery
+    could have sold from its charge above the reserve, at the fastest export seen) or **missed**,
+    and why (battery low, or charge left but not sold); and what full exports could have added
+  - **a higher backup reserve** (10, 20 and 30 points up): the extra grid energy it would have
+    cost, what the held-back energy could have earned in spikes missed for lack of charge, and
+    the extra hours of outage cover at your always-on use
+- Tests: trading
+
 ## 1.16.1
 
 - **Time format** setting (Settings, Dashboard): 12-hour (6:30 pm, the default) or 24-hour (18:30)

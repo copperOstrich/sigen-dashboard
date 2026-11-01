@@ -46,9 +46,9 @@ Catch regressions before they reach the NAS, and keep the code easy to change.
 
 How well the battery is being traded (Amber SmartShift or a VPP), not just what it earned.
 
-- [ ] Spikes captured against spikes missed (battery already low, or not exported)
-- [ ] Average export price achieved against the day's best prices
-- [ ] What a higher or lower backup reserve would have done to earnings and outage cover
+- [x] Spikes caught against spikes missed, and why (1.17)
+- [x] Battery export price achieved against each day's best hour (1.17)
+- [x] What a higher backup reserve would have cost, earned and added in outage cover (1.17)
 
 ## Phase E: smarter forecasts (1.18)
 
