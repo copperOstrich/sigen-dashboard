@@ -23,7 +23,7 @@ APIS = ["/api/live", "/api/health", "/api/history?hours=24", "/api/daily?days=30
         "/api/ev-sessions?days=30", "/api/monthly?months=13", "/api/trends?days=90", "/api/money", "/api/outlook",
         "/api/weather", "/api/debug", "/api/settings", "/api/backups", "/api/strings-health", "/api/limits?days=30",
         "/api/battery-wear", "/api/appliances", "/api/baseload?days=30", "/api/bills", "/api/ui", "/api/trading?days=30", "/api/ev-plan?kwh=20&by=07:00",
-        "/api/maintenance"]
+        "/api/maintenance", "/api/notify"]
 CSV = ["/api/ev-sessions?format=csv&days=30", "/api/monthly?format=csv", "/api/strings?format=csv&hours=24"]
 
 
@@ -67,6 +67,24 @@ AMBER_CSV = ("NMI,Meter Serial Number,Channel,Channel Type,Day,Start Time,NEM Ti
                        for h in range(24))
              + "".join(f"X,Y,B1,feedIn,2026-01-05,2026-01-05 {h:02d}:00:00,2026-01-05 {h:02d}:05:00,-0.5,-5,2.5,ACTUAL\n"
                        for h in range(9, 15)))
+
+
+def fake_ntfy():
+    """A stand-in for ntfy.sh that keeps what it's sent."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    got = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            got.append(json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0))))
+            self.send_response(200); self.end_headers(); self.wfile.write(b"{}")
+
+        def log_message(self, *a):
+            pass
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{srv.server_port}", got
 
 
 def data_admin(base):
@@ -122,9 +140,10 @@ def main():
     (data / "sigen.env").write_text("# smoke test\nSIGEN_SIMULATE=1\nCOMPARE_PLANS=nsw-ausgrid\n"
                                     "EV_KWH_PER_100KM=16\nCOMPARE_L_PER_100KM=9\nRETAILER_SUPPLY_C_DAY=2026-01-01:100,2026-07-01:110\n")
     port = free_port()
+    ntfy_url, ntfy_got = fake_ntfy()
     env = {**os.environ, "DATA_DIR": str(data), "HTTP_PORT": str(port), "AEMO_SIMULATE": "1",
            "DEMO_HISTORY_DAYS": os.environ.get("DEMO_HISTORY_DAYS", "10"), "PYTHONUNBUFFERED": "1",
-           "SIM_UPDATE": "9.9.9"}
+           "SIM_UPDATE": "9.9.9", "NTFY_TOPIC": "home-energy-smoketest1234", "NTFY_SERVER": ntfy_url}
     log = open(data / "collector.log", "w")
     proc = subprocess.Popen([sys.executable, str(ROOT / "collector" / "sigen_collector.py")], env=env,
                             stdout=log, stderr=subprocess.STDOUT)
@@ -146,16 +165,20 @@ def main():
                 failures.append(f"{path}: {e}")
                 print(f"  FAIL {path}: {e}")
         failures += data_admin(base)
+        code, r = post(base, "/api/notify", {"action": "test"})
+        if code != 200 or not ntfy_got or ntfy_got[-1].get("topic") != "home-energy-smoketest1234":
+            failures.append(f"test alert: {code} {r} {ntfy_got}")
+        print("  ok   test alert sent to the (fake) ntfy server")
         # save a setting from "home" (loopback) and wait for the restart
         before = time.time()
         req = urllib.request.Request(base + "/api/settings", method="POST", headers={"Content-Type": "application/json"},
-                                     data=json.dumps({"changes": {"SOLAR_KWP": "6.6"}}).encode())
+                                     data=json.dumps({"changes": {"SOLAR_KWP": "6.6", "NOTIFY_WEEKLY": "Sun 18:00"}}).encode())
         with urllib.request.urlopen(req, timeout=10) as r:
             res = json.loads(r.read())
         if not res.get("restarting"):
             failures.append(f"saving a setting didn't restart: {res}")
         wait_healthy(base, after=before)
-        if "SOLAR_KWP=6.6" not in (data / "sigen.env").read_text():
+        if "SOLAR_KWP=6.6" not in (data / "sigen.env").read_text() or "NOTIFY_WEEKLY=sun 18:00" not in (data / "sigen.env").read_text():
             failures.append("the setting wasn't written to sigen.env")
         print("  ok   saved a setting and the collector restarted")
         # a change from another site is refused

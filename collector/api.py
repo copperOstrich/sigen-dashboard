@@ -54,6 +54,7 @@ class Api(BaseHTTPRequestHandler):
     limits = None
     updates = None
     money = None
+    notifier = None
 
     def log_message(self, fmt, *args):
         pass
@@ -104,7 +105,7 @@ class Api(BaseHTTPRequestHandler):
     def do_POST(self):
         url = urlparse(self.path)
         try:
-            if url.path not in ("/api/settings", "/api/backups", "/api/bills", "/api/import", "/api/maintenance"):
+            if url.path not in ("/api/settings", "/api/backups", "/api/bills", "/api/import", "/api/maintenance", "/api/notify"):
                 return self._json({"error": "not found"}, 404)
             refused = self._post_refused()
             if refused:
@@ -127,6 +128,11 @@ class Api(BaseHTTPRequestHandler):
                 return self._post_import(body)
             if url.path == "/api/maintenance":
                 return self._post_maintenance(body)
+            if url.path == "/api/notify":
+                if not Api.notifier or not Api.notifier.enabled:
+                    return self._json({"error": "Set an alerts topic and save first"}, 400)
+                ok, err = Api.notifier.test()
+                return self._json({"ok": True} if ok else {"error": f"Couldn't send: {err}"}, 200 if ok else 502)
             changes = body.get("changes") or {}
             if not isinstance(changes, dict):
                 return self._json({"error": "changes must be an object"}, 400)
@@ -399,6 +405,10 @@ class Api(BaseHTTPRequestHandler):
                                    "update": {k: up.get(k) for k in ("latest", "url", "newer")} if up.get("newer") else None})
             if url.path == "/api/maintenance":
                 return self._json(self._maintenance())
+            if url.path == "/api/notify":
+                n = Api.notifier.snapshot() if Api.notifier else {"enabled": False}
+                n.pop("server", None) if not self._settings_access()[0] else None
+                return self._json(n)
             if url.path == "/api/bills":
                 return self._json({"bills": self.store.bill_check()})
             if url.path == "/api/baseload":

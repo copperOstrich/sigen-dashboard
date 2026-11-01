@@ -26,6 +26,7 @@ INV, PRICES, SITE, MONEY, CAR, CHECKS, COLLECTOR = (
     "Inverter", "Prices", "Weather and solar forecast", "Money", "Car and fuel", "Checks", "Collector")
 BATTERY, APPL, BACKUP, MQTT = "Battery", "Appliances", "Backups", "Home Assistant (MQTT)"
 DASH = "Dashboard"
+NOTIFY = "Phone alerts"
 
 ON_OFF = [["1", "On"], ["0", "Off"]]
 
@@ -140,6 +141,23 @@ SCHEMA = [
        unit="weeks"),
     _s("BACKUP_DIR", BACKUP, "Backup folder", "Inside the container. Blank = backups in the data folder.", "text", "",
        placeholder="/data/backups"),
+    # ---------------------------------------------------------------- phone alerts
+    _s("NTFY_TOPIC", NOTIFY, "Alerts topic", "Alerts go to the free ntfy app (iPhone or Android) as normal "
+       "notifications, not texts. Generate a topic, save, then in the ntfy app tap + and subscribe to the same "
+       "topic name (Show reveals it). Anyone who knows the name can read the alerts, so keep it private. "
+       "Blank = no alerts.", "secret", "", generate=True),
+    _s("NOTIFY_ON", NOTIFY, "Alert me about", "Comma separated, or all: alarms, strings, insulation, inverter "
+       "(not answering for 10 minutes), backups (failing, or the disk filling up), feeds (prices, AEMO or "
+       "weather failing for an hour), storm (a storm coming with the battery under half full).", "kinds", "all",
+       placeholder="all"),
+    _s("NOTIFY_WEEKLY", NOTIFY, "Weekly summary", "The week's solar, use, cost and spikes, plus anything "
+       "still needing a look. A day and time like sun 18:00, or off.", "weekly", "off", placeholder="sun 18:00"),
+    _s("NOTIFY_QUIET", NOTIFY, "Quiet hours", "Warnings arrive without a sound between these times; faults "
+       "still make a sound. Like 22:00-07:00, or blank.", "quiet", "", placeholder="22:00-07:00"),
+    _s("NTFY_SERVER", NOTIFY, "ntfy server", "Leave as https://ntfy.sh unless you run your own ntfy server.",
+       "url", "https://ntfy.sh", sensitive=True),
+    _s("NTFY_TOKEN", NOTIFY, "Access token", "Only for your own server, or an ntfy.sh account with a reserved "
+       "topic.", "secret"),
     # ---------------------------------------------------------------- MQTT
     _s("MQTT_HOST", MQTT, "MQTT broker", "Your broker's address (e.g. Home Assistant's Mosquitto add-on). "
        "Blank = off.", "host", "", sensitive=True, placeholder="192.168.1.20"),
@@ -333,6 +351,25 @@ def validate(key, value, all_values=None):
                 ok = False
             if not ok:
                 raise ValueError(f"'{part.strip()}' isn't name:kW:hours")
+    elif k == "secret" and key == "NTFY_TOPIC":
+        if not re.fullmatch(r"[A-Za-z0-9_-]{12,64}", value):
+            raise ValueError("12 to 64 letters, digits, - or _ (Generate makes one)")
+    elif k == "kinds":
+        from notify import KINDS
+        bad = [x.strip() for x in value.lower().split(",") if x.strip() not in KINDS + ("all", "none")]
+        if bad:
+            raise ValueError(f"Not one of the choices: {', '.join(bad)}")
+    elif k == "weekly":
+        from notify import parse_weekly
+        parse_weekly(value)
+        value = value.lower()
+    elif k == "quiet":
+        from notify import parse_quiet
+        parse_quiet(value)
+    elif k == "url":
+        if not re.fullmatch(r"https?://[A-Za-z0-9.\-:]+(/[A-Za-z0-9._~/-]*)?", value):
+            raise ValueError("A web address like https://ntfy.sh")
+        value = value.rstrip("/")
     elif k == "zone":
         try:
             ZoneInfo(value)

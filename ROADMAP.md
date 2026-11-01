@@ -22,20 +22,11 @@ bump and changelog entry; the order can change as real use shows what matters.
   and tomorrow; car charging plan.
 - **F. Less upkeep (1.19):** bills added, edited and removed on the Settings page; files imported
   from the browser; database size, free disk and compacting; a new-version notice.
+- **G. Problems that reach you (1.20):** phone alerts through ntfy for alarms, strings,
+  insulation, the inverter, backups, data feeds and storms with a low battery; quiet hours; a
+  weekly summary.
 
-## Phase G: problems that reach you (next)
-
-Alarms, a stopped string, a failed backup or the collector going quiet are only seen when the
-dashboard is open. (Amber already sends price notifications, so this is about the system's
-health, not prices.)
-
-- [ ] Choose a channel: email (SMTP), a push service (ntfy or Pushover), or Home Assistant (already
-      connected over MQTT, so HA automations could notify)
-- [ ] Notify on: new alarms, a string down or low for two days, insulation faults, backups failing,
-      a data feed failing for an hour, the inverter not answering, a storm warning with a low battery
-- [ ] A weekly summary message (the week's solar, money, any spikes and anything that needs a look)
-
-## Phase H: deeper insight
+## Phase H: deeper insight (next)
 
 - [ ] Big loads recognised from the minute readings (car, air conditioning, hot water, oven), with
       their share of use and cost

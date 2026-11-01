@@ -65,6 +65,8 @@ from outlook import Outlook  # noqa: E402
 from money import Money  # noqa: E402
 from importer import import_folder, reload_bills  # noqa: E402
 from updates import UpdateCheck  # noqa: E402
+from notify import Notifier, parse_kinds, parse_weekly, parse_quiet, weekly_summary  # noqa: E402
+from trading import trading  # noqa: E402
 from fuel import Fuel  # noqa: E402
 from backup import Backups  # noqa: E402
 from strings_health import StringsHealth  # noqa: E402
@@ -152,6 +154,23 @@ def main():
                   get_state=lambda: (collector.snapshot(), collector.raw.get("plant")))
         collector.mqtt = mq
         threading.Thread(target=mq.run, daemon=True).start()
+    def opt(parse, value, name):
+        try:
+            return parse(value)
+        except ValueError as e:
+            log(f"{name} '{value}': {e}; ignored")
+            return None
+    notifier = Notifier(NTFY_TOPIC, server=NTFY_SERVER, token=NTFY_TOKEN, kinds=parse_kinds(NOTIFY_ON),
+                        weekly=opt(parse_weekly, NOTIFY_WEEKLY, "NOTIFY_WEEKLY"),
+                        quiet=opt(parse_quiet, NOTIFY_QUIET, "NOTIFY_QUIET"), get_state=collector.snapshot,
+                        summary=lambda: weekly_summary(store, TZ, trading_fn=lambda: trading(store, collector.snapshot(), TZ, days=7)),
+                        state_file=DATA_DIR / ("notify-state-sim.json" if SIMULATE else "notify-state.json"), tz=TZ,
+                        time_format=TIME_FORMAT, log=log)
+    Api.notifier = collector.notifier = notifier
+    if notifier.enabled:
+        log(f"Phone alerts on through {NTFY_SERVER} ({', '.join(sorted(notifier.kinds)) or 'nothing selected'}"
+            f"{'; weekly summary ' + NOTIFY_WEEKLY if notifier.weekly else ''})")
+        threading.Thread(target=notifier.run, daemon=True).start()
     httpd = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), Api)
     httpd.daemon_threads = True
     if SETTINGS_PATH:

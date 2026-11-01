@@ -19,6 +19,7 @@ import money  # noqa: E402
 import mqtt  # noqa: E402
 import settings  # noqa: E402
 import updates  # noqa: E402
+import notify  # noqa: E402
 from backup import Backups  # noqa: E402
 
 
@@ -322,6 +323,71 @@ class BillsAndUploads(unittest.TestCase):
         self.assertTrue(updates.newer("v1.19.10", "1.19.9"))
         self.assertFalse(updates.newer("1.19.0", "1.19.0"))
         self.assertFalse(updates.newer("", "1.19.0"))
+
+
+
+class PhoneAlerts(unittest.TestCase):
+    def setUp(self):
+        self.sent, self.state = [], {"status": "ok", "alarms": [], "system": {"feeds": []}}
+        self.file = Path(tempfile.mkdtemp()) / "notify-state.json"
+
+    def make(self, **kw):
+        from zoneinfo import ZoneInfo
+        return notify.Notifier("home-energy-abcdefghijkmnpqrstu", get_state=lambda: self.state, state_file=self.file,
+                               tz=ZoneInfo("Australia/Sydney"), log=lambda *a: None, post=self.sent.append, **kw)
+
+    def test_alarm_sent_once_then_cleared_and_kept_over_restart(self):
+        n, t = self.make(), 1_800_000_000
+        self.state["alarms"] = [{"source": "Battery", "severity": "fault", "message": "Cell over-temperature",
+                                 "register": 30605, "bit": 3}]
+        n.tick(t)
+        self.assertEqual(self.sent, [])           # waits two minutes in case it's a blip
+        n.tick(t + 130)
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.sent[0]["priority"], 4)
+        self.assertIn("Cell over-temperature", self.sent[0]["message"])
+        n.tick(t + 200)
+        n2 = self.make()                          # a restart: nothing sent again
+        n2.tick(t + 400); n2.tick(t + 600)
+        self.assertEqual(len(self.sent), 1)
+        self.state["alarms"] = []
+        n2.tick(t + 700)
+        self.assertEqual(len(self.sent), 2)
+        self.assertTrue(self.sent[1]["title"].startswith("Home energy: Cleared"))
+        self.assertEqual(self.sent[1]["priority"], 2)
+
+    def test_kinds_feeds_wait_an_hour_and_storm(self):
+        n, t = self.make(kinds={"feeds", "storm"}), 1_800_000_000
+        self.state["alarms"] = [{"source": "Inverter", "severity": "fault", "message": "x", "register": 1, "bit": 0}]
+        self.state["system"]["feeds"] = [{"name": "AEMO", "status": "error", "what": "wholesale market", "error": "timeout"}]
+        self.state["storm"] = {"at": t + 20000, "until": t + 24000, "desc": "Thunderstorms", "soc": 35, "now": False}
+        n.tick(t)
+        self.assertEqual([m["title"] for m in self.sent], ["Home energy: Storm coming, battery low"])  # alarms are off
+        n.tick(t + 3700)
+        self.assertEqual(self.sent[-1]["title"], "Home energy: AEMO isn't updating")
+
+    def test_quiet_hours_and_parsing(self):
+        from zoneinfo import ZoneInfo
+        from datetime import datetime
+        n = self.make(quiet=notify.parse_quiet("22:00-07:00"))
+        night = datetime(2026, 11, 3, 23, 30, tzinfo=ZoneInfo("Australia/Sydney")).timestamp()
+        n.send("x", "y", 3, now=night); n.send("x", "y", 4, now=night)
+        self.assertEqual([m["priority"] for m in self.sent], [2, 4])
+        self.assertEqual(notify.parse_weekly("Sun 18:00"), (6, 18, 0))
+        self.assertIsNone(notify.parse_weekly("off"))
+        self.assertEqual(notify.parse_kinds("alarms, storm, nonsense"), {"alarms", "storm"})
+        for bad in ("someday 18:00", "sun 25:00"):
+            with self.assertRaises(ValueError):
+                notify.parse_weekly(bad)
+        self.assertRegex(notify.new_topic(), r"^home-energy-[a-z2-9]{20}$")
+
+    def test_weekly_once(self):
+        from zoneinfo import ZoneInfo
+        from datetime import datetime
+        n = self.make(weekly=(6, 18, 0), summary=lambda: ("Week to Saturday", "Solar 200 kWh."))
+        sun = datetime(2026, 11, 8, 18, 5, tzinfo=ZoneInfo("Australia/Sydney")).timestamp()
+        n.tick(sun - 600); n.tick(sun); n.tick(sun + 60)
+        self.assertEqual([m["title"] for m in self.sent], ["Home energy: Week to Saturday"])
 
 
 if __name__ == "__main__":

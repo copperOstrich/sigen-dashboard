@@ -73,7 +73,7 @@ class Collector:
         self.stopping = threading.Event()
         self.raw = {"plant": {}, "inverter": {}}
         self.health = StringsHealth(store, TZ, event=store.event, log=log)
-        self.backups = self.mqtt = None  # set by main()
+        self.backups = self.mqtt = self.notifier = None  # set by main()
         self._backup_status, self._backup_at = None, 0
         self.storm, self._storm_logged = None, None
         self.fuel = None  # set by main()
@@ -182,6 +182,10 @@ class Collector:
             m = self.mqtt.summary()
             out.append({"name": "Home Assistant", "status": "ok" if m["status"] == "connected" else m["status"],
                         "error": m.get("error"), "what": "MQTT"})
+        if self.notifier is not None and self.notifier.enabled:
+            n = self.notifier.snapshot()
+            out.append({"name": "Phone alerts", "status": n["status"], "updated": (n.get("last") or {}).get("at"),
+                        "error": n.get("error"), "what": "ntfy" + (f", {len(n['open'])} open" if n.get("open") else "")})
         b = self._backup_status or {}
         if b.get("enabled"):
             last = (b.get("last") or {}).get("ts")

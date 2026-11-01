@@ -766,6 +766,38 @@ now** from your home network (worth doing before an upgrade). Turn off with `BAC
 To restore: stop the container, unzip a backup and put it in the data folder as `sigen.db`
 (delete `sigen.db-wal` and `sigen.db-shm` if they're there), and start the container.
 
+### Phone alerts
+
+Alarms, a stopped string or a failed backup are only seen when the dashboard is open, so the
+collector can send them to your phone through [ntfy](https://ntfy.sh): free, no account, with an
+app for iPhone and Android. They arrive as ordinary app notifications, not text messages, so the
+SMS sender rules don't apply.
+
+1. Install the ntfy app on your phone.
+2. On the Settings page, under **Phone alerts**, press **Generate** next to Alerts topic, then
+   **Save and restart**.
+3. Press **Show** to see the topic name. In the ntfy app tap **+**, enter that name (server
+   `ntfy.sh`) and subscribe.
+4. Press **Send a test**.
+
+The topic name works like a password: anyone who knows it can read the alerts, so the generated
+one is long and random, and messages only say what's wrong with the system (no address,
+location or links to your dashboard).
+
+What's sent (choose with **Alert me about**, `NOTIFY_ON`): new alarms; a solar string down or
+low; insulation faults; the inverter not answering for 10 minutes; a backup failing or the disk
+filling up; prices, AEMO or weather failing for an hour; and a storm forecast while the battery
+is expected to be under half full. Each problem is sent once when it starts and once, quietly,
+when it clears, and a restart doesn't send them again. **Quiet hours** (`NOTIFY_QUIET`, like
+`22:00-07:00`) make warnings arrive without a sound; faults still make one. **Weekly summary**
+(`NOTIFY_WEEKLY`, like `sun 18:00`) sends the week's solar, use, cost and price spikes. Data
+feeds in the System panel shows whether the last alert got through.
+
+Running your own ntfy server? Set `NTFY_SERVER`, and `NTFY_TOKEN` if it needs one.
+
+If the collector itself stops it can't send anything; Container Station's restart policy (or
+an uptime monitor pointed at `/api/health`) covers that.
+
 ### Home Assistant (MQTT)
 
 Set `MQTT_HOST` to your MQTT broker (for example Home Assistant's Mosquitto add-on), with
@@ -823,6 +855,12 @@ hand). Values in `sigen.env` win over the container's environment.
 | `TIME_FORMAT` | `12h` (6:30 pm) or `24h` (18:30), for every time on the dashboard | `12h` |
 | `UPDATE_CHECK` | `off` stops the twice-daily check of GitHub releases for a newer collector | `on` |
 | **Home Assistant (MQTT)** | | |
+| **Phone alerts** | | |
+| `NTFY_TOPIC` | ntfy topic to send alerts to; blank = off | off |
+| `NOTIFY_ON` | `all`, or any of `alarms,strings,insulation,inverter,backups,feeds,storm` | `all` |
+| `NOTIFY_WEEKLY` | Weekly summary, like `sun 18:00`, or `off` | `off` |
+| `NOTIFY_QUIET` | Warnings without a sound between these times, like `22:00-07:00` | none |
+| `NTFY_SERVER`, `NTFY_TOKEN` | Your own ntfy server and its access token | `https://ntfy.sh`, none |
 | `MQTT_HOST`, `MQTT_PORT` | Your MQTT broker; blank = off | off, `1883` |
 | `MQTT_USERNAME`, `MQTT_PASSWORD` | If the broker needs them | none |
 | `MQTT_TOPIC` | Where the figures go (`<topic>/state`) | `sigen-dashboard` |
@@ -872,6 +910,8 @@ thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 | `GET /api/bills` | Each bill beside what the data had for its period, and the difference |
 | `POST /api/bills` | `{"action": "save", "bill": {...}, "replace": {start, end}}` or `{"action": "delete", "start", "end"}`; home network only |
 | `POST /api/import` | `{"name": "file.csv", "data": "<base64>"}`: imports an Amber usage report, mySigen export or bills CSV; home network only |
+| `GET /api/notify` | Phone alerts: on or off, what's watched, the last one sent and any problems still open |
+| `POST /api/notify` | `{"action": "test"}` sends a test alert; home network only |
 | `GET /api/maintenance` | Database size, history span, free disk, recent imports and the version check |
 | `POST /api/maintenance` | `{"action": "vacuum"}` compacts the database; `{"action": "check-update"}` checks now; home network only |
 | `GET /api/backups` | Backup status and the backups kept; `POST` (home network only) backs up now |

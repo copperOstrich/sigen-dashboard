@@ -14,6 +14,13 @@
     ok: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   };
 
+  // an alerts topic nobody will guess (same shape as the collector's)
+  function newTopic() {
+    const a = "abcdefghijkmnpqrstuvwxyz23456789", r = new Uint32Array(20);
+    crypto.getRandomValues(r);
+    return "home-energy-" + Array.from(r, (x) => a[x % a.length]).join("");
+  }
+
   const original = (e) => (e.kind === "choice" ? (e.value ?? e.default ?? "") : e.source === "default" ? "" : (e.value ?? ""));
   const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
@@ -47,7 +54,10 @@
       if (replacing.has(e.key)) {
         const inp = el("input", { id, type: "text", autocomplete: "off", spellcheck: "false", placeholder: "Paste the new value", value: edits.get(e.key) ?? "" });
         inp.addEventListener("input", () => setEdit(e, inp.value.trim()));
-        ctl.append(inp, el("button", { class: "small-btn", type: "button", text: "Cancel",
+        ctl.append(inp);
+        if (e.generate) ctl.append(el("button", { class: "small-btn", type: "button", text: "Generate",
+          onclick: () => { inp.value = newTopic(); setEdit(e, inp.value); } }));
+        ctl.append(el("button", { class: "small-btn", type: "button", text: "Cancel",
           onclick: () => { replacing.delete(e.key); edits.delete(e.key); render(); } }));
         return ctl;
       }
@@ -63,6 +73,19 @@
         ctl.append(el("button", { class: "small-btn", type: "button", text: e.set ? "Replace" : "Add", onclick: () => { replacing.add(e.key); render(); $(id)?.focus(); } }));
         if (e.set) ctl.append(el("button", { class: "small-btn", type: "button", text: cleared ? "Keep" : "Clear",
           onclick: () => { cleared ? edits.delete(e.key) : edits.set(e.key, ""); render(); } }));
+        if (e.generate && !e.set) ctl.append(el("button", { class: "small-btn", type: "button", text: "Generate", onclick: () => {
+          replacing.add(e.key); edits.set(e.key, newTopic()); render(); } }));
+        if (e.key === "NTFY_TOPIC" && e.set && !edits.has(e.key)) ctl.append(el("button", { class: "small-btn", type: "button", text: "Send a test",
+          onclick: async (ev) => {
+            const b = ev.target; b.disabled = true; b.textContent = "Sending…";
+            try {
+              const res = await fetch(S.apiBase() + "/api/notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "test" }) });
+              const out = await res.json().catch(() => ({}));
+              banner(res.ok ? "ok" : "bad", res.ok ? "Test sent. It should appear on your phone within a few seconds; if not, check the topic in the ntfy app matches."
+                : (out.error || `Couldn't send (${res.status})`));
+            } catch (err) { banner("bad", `Couldn't reach the collector: ${err.message}`); }
+            b.disabled = false; b.textContent = "Send a test";
+          } }));
       }
       return ctl;
     }

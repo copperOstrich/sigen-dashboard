@@ -2,6 +2,28 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.20.0
+
+Problems that reach you: **phone alerts** through ntfy (free, no account; iPhone and Android app
+notifications, not SMS).
+
+- Settings > **Phone alerts**: **Generate** a private random topic, save, subscribe to it in the
+  ntfy app, and **Send a test**
+- Alerts for new alarms, a solar string down or low, insulation faults, the inverter not
+  answering for 10 minutes, a backup failing or the disk filling up, a data feed failing for an
+  hour, and a storm forecast while the battery is expected to be under half full. Choose which
+  with **Alert me about**
+- Each problem is sent once when it starts and quietly when it clears; what was sent is kept, so
+  saving a setting (which restarts the collector) doesn't send everything again
+- **Quiet hours**: warnings arrive without a sound; faults still make one
+- **Weekly summary** on the day and time you pick: solar, use, self-sufficiency, cost, best day,
+  price spikes, and anything still needing a look
+- Messages carry the system's status only: no address, location or links to the dashboard
+- Data feeds shows whether the last alert got through
+- Own ntfy server: `NTFY_SERVER` and `NTFY_TOKEN`
+- Tests: when alerts are sent, held back, cleared and kept over a restart; quiet hours; the
+  weekly summary; the smoke test sends a test alert to a stand-in ntfy server
+
 ## 1.19.0
 
 Less upkeep: the monthly chores, from the Settings page (home network only; no restart needed).
