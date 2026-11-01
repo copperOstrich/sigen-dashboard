@@ -253,6 +253,53 @@
   // ------------------------------------------------------------ money
   const money$ = (v, d = 0) => (v == null ? "–" : `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`);
   const mName = (m) => new Date(m + "-15T12:00:00").toLocaleDateString([], { month: "short", year: "2-digit" });
+  // ------------------------------------------------------------ what if
+  async function loadWhatIf(params) {
+    const panel = $("wi-panel");
+    const qs = params ? `?add_kwh=${encodeURIComponent(params.kwh)}&add_kw=${encodeURIComponent(params.kw)}` : "";
+    let d;
+    try { d = await S.fetchJSON("/api/whatif" + qs); } catch (e) { return; }
+    panel.hidden = !(d && d.enabled && d.plans && d.plans.length);
+    if (panel.hidden) return;
+    const a = d.assumptions;
+    if (!params) { $("wi-kwh").value = a.add_kwh; $("wi-kw").value = a.add_kw; }
+    const fmtDay = (x) => new Date(x + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+    $("wi-sub").textContent = `a year's cost, from ${d.days} days of your readings (${fmtDay(d.from)} to ${fmtDay(d.to)})`;
+    const money0 = (v) => (v < 0 ? `−$${Math.abs(v).toLocaleString()}` : `$${v.toLocaleString()}`);
+    const t = $("wi-table"); t.innerHTML = "";
+    t.append(el("tr", {}, el("th", { text: "Plan" }), ...d.scenarios.map((x) => el("th", { text: x.label }))));
+    for (const r of d.plans) {
+      t.append(el("tr", {}, el("td", { style: "font-family:var(--font)" }, r.name,
+        el("div", { class: "muted", style: "font-size:12px", text: r.kind === "amber" ? "battery as it ran; changes simulated" : r.kind === "tou" ? "battery charged for the peak" : "battery soaks up solar" })),
+        ...d.scenarios.map((x) => el("td", { class: d.best[x.key] === r.name ? "wi-best" : null, text: money0(r.costs[x.key]) }))));
+    }
+    // the lead: best plan now, and what each change is worth on the best plan for it
+    const best = (k) => d.plans.find((r) => r.name === d.best[k]);
+    const now = best("now"), parts = [];
+    const cur = d.plans[0] && d.plans[0].kind === "amber" ? d.plans[0] : null;
+    if (cur && now !== cur) parts.push(`${now.name} would have cost ${money0(cur.costs.now - now.costs.now)} a year less than ${cur.name.replace(/ \(.*/, "")}.`);
+    else if (cur) parts.push(`${cur.name.replace(/ \(.*/, "")} is the cheapest of these for you, by ${money0(Math.min(...d.plans.filter((r) => r !== cur).map((r) => r.costs.now)) - cur.costs.now)} a year.`);
+    const gain = (k) => now.costs.now - best(k).costs[k];
+    parts.push(`On ${now.name.replace(/ \(.*/, "")}, the battery is worth about ${money0(now.costs.no_battery - now.costs.now)} a year.`);
+    if (a.add_kwh > 0) parts.push(`Another ${a.add_kwh} kWh of battery would save about ${money0(gain("more_battery"))} a year more.`);
+    if (a.add_kw > 0) parts.push(`Another ${a.kwp ? a.add_kw + " kW of panels" : "quarter more panels"} would save about ${money0(gain("more_panels"))} a year.`);
+    $("wi-lead").textContent = parts.join(" ");
+    const c = d.check;
+    $("wi-note").textContent = `Each cost includes the plan's supply charge and is scaled to a year` +
+      (d.full_year ? "." : `; with ${d.days} days of readings the seasons you haven't recorded yet aren't in it, so treat it as a guide.`) +
+      ` Your recorded hours are played back through a battery of ${a.usable_kwh} kWh usable (${a.charge_kw} kW in, ${a.discharge_kw} kW out, ${a.round_trip}% round trip),` +
+      ` run the way each plan rewards: on time of use it also charges from the grid in the cheap hours for the dear ones; on wholesale prices it charges when power is about free and sells when feed-in pays $1/kWh or more.` +
+      ` It knows the next day's use and solar, so it does a little better than a real battery would.` +
+      (a.export_limit_kw ? ` Exports are capped at ${a.export_limit_kw} kW.` : "") + (a.inverter_kw ? ` More panels are capped at the inverter's ${a.inverter_kw} kW.` : "") +
+      (c ? ` Check: simulated this way, your system as it is would have cost ${money0(c.simulated)} a year on wholesale prices; as it actually ran, ${money0(c.actual)}` +
+        ` (the gap is partly your battery's real control, partly the model knowing the day ahead).` : "") +
+      ` The other plans are your comparison plans (Settings > Money); add a real quote to plans.json in the data folder to compare it too.`;
+  }
+  $("wi-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    loadWhatIf({ kwh: $("wi-kwh").value || 0, kw: $("wi-kw").value || 0 });
+  });
+
   async function loadMoney() {
     let d;
     try { d = await S.fetchJSON("/api/money"); } catch (e) { return; }
@@ -2092,8 +2139,8 @@
   setInterval(loadWeather, 10 * 60000);
   loadOutlook();
   setInterval(loadOutlook, 5 * 60000);
-  loadMonthly(); loadTrends(); loadMoney(); loadAppliances(); loadLimits(); loadWear(); loadBaseload(); loadTrading();
-  setInterval(() => { loadMonthly(); loadTrends(); loadMoney(); loadLimits(); loadWear(); loadBaseload(); loadTrading(); }, 30 * 60000);
+  loadMonthly(); loadTrends(); loadMoney(); loadAppliances(); loadLimits(); loadWear(); loadBaseload(); loadTrading(); loadWhatIf();
+  setInterval(() => { loadMonthly(); loadTrends(); loadMoney(); loadLimits(); loadWear(); loadBaseload(); loadTrading(); loadWhatIf(); }, 60 * 60000);
   setInterval(loadAppliances, 5 * 60000);
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);

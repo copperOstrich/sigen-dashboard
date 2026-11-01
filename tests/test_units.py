@@ -21,6 +21,7 @@ import settings  # noqa: E402
 import updates  # noqa: E402
 import notify  # noqa: E402
 import targets  # noqa: E402
+import whatif  # noqa: E402
 from backup import Backups  # noqa: E402
 
 
@@ -419,6 +420,37 @@ class Targets(unittest.TestCase):
         self.assertTrue(p["self"]["on_track"])
         self.assertLess(p["cost"]["projected"], 0)          # $10 so far, $1 a day credit for 19.5 days
         self.assertEqual(p["months"][0]["self"]["met"], True)
+
+
+
+class WhatIf(unittest.TestCase):
+    def hours(self, pattern):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Australia/Sydney")
+        t0 = int(datetime(2026, 11, 2, 0, tzinfo=tz).timestamp())  # a Monday
+        return [(t0 + i * 3600, datetime.fromtimestamp(t0 + i * 3600, tz), pv, load, None, None, 0, 0)
+                for i, (pv, load) in enumerate(pattern)]
+
+    def test_battery_moves_solar_to_the_evening(self):
+        h = self.hours([(0, 1)] * 10 + [(5, 1)] * 4 + [(0, 1)] * 10)   # 16 kWh spare at midday
+        none = whatif.simulate(h, 0, 5, 5, 1.0, None, 1, None, "solar")
+        batt = whatif.simulate(h, 10, 5, 5, 1.0, None, 1, None, "solar")
+        self.assertAlmostEqual(sum(i for i, _ in none), 20)
+        self.assertLess(sum(i for i, _ in batt), sum(i for i, _ in none) - 9)   # covers ~10 more hours
+        self.assertAlmostEqual(sum(x for _, x in none) - sum(x for _, x in batt), 10, delta=0.01)  # emptied overnight, refilled
+
+    def test_time_of_use_charges_in_the_cheap_hours(self):
+        h = self.hours([(0, 1)] * 24)   # no solar at all
+        rates = [10 if hr < 6 else 50 if 16 <= hr < 20 else 30 for hr in range(24)]
+        fl = whatif.simulate(h, 10, 5, 5, 1.0, None, 1, None, "tou", rates)
+        night = sum(fl[i][0] for i in range(6))
+        self.assertGreater(night, 6)          # bought extra while it was cheap
+        self.assertAlmostEqual(sum(fl[i][0] for i in range(16, 20)), 0)   # nothing bought in the peak
+        plan = {"name": "t", "supply_c_day": 100, "usage": [{"hours": [0, 6], "c_kwh": 10}, {"hours": [16, 20], "c_kwh": 50},
+                                                            {"c_kwh": 30}], "feed_in_c_kwh": 0}
+        flat = whatif.simulate(h, 10, 5, 5, 1.0, None, 1, None, "solar")
+        self.assertLess(whatif.price_plan(h, fl, plan, None), whatif.price_plan(h, flat, plan, None))
 
 
 if __name__ == "__main__":

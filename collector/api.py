@@ -34,6 +34,7 @@ from mqtt import Mqtt  # noqa: E402
 from baseload import baseload  # noqa: E402
 from trading import trading  # noqa: E402
 import targets as targets_mod  # noqa: E402
+from whatif import what_if  # noqa: E402
 from evplan import ev_plan, deadline  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
@@ -185,7 +186,37 @@ class Api(BaseHTTPRequestHandler):
         return {**summary, "system_series": [(ser.get(d) or {}).get("system") for d in all_days],
                 "strings_series": {n: [((ser.get(d) or {}).get("strings") or {}).get(n) for d in all_days] for n in ids}}
 
+    _whatif_cache = {}
+
+    def _whatif(self, q):
+        def num(k):
+            try:
+                return float(q.get(k, [""])[0])
+            except ValueError:
+                return None
+        add_kwh, add_kw = num("add_kwh"), num("add_kw")
+        key = (add_kwh, add_kw)
+        hit = Api._whatif_cache.get(key)
+        if hit and time.time() - hit[0] < 3600:
+            return hit[1]
+        live = self.collector.snapshot()
+        try:
+            rt = battery_wear(self.store, live, TZ, installed=SYSTEM_INSTALLED or None).get("round_trip")
+        except Exception:
+            rt = None
+        m = self.money
+        caps = (Api.limits.caps if Api.limits else {}) or {}
+        res = what_if(self.store, TZ, live, m.plans() if m else None, retailer_name=m.retailer_name if m else None,
+                      supply_rates=m.supply_rates if m else [], fee_monthly=m.fee_monthly if m else None,
+                      kwp=SOLAR_KWP, export_w=caps.get("export_w"), pv_w=caps.get("pv_w"), round_trip=rt,
+                      add_kwh=add_kwh, add_kw=add_kw)
+        if len(Api._whatif_cache) > 20:
+            Api._whatif_cache.clear()
+        Api._whatif_cache[key] = (time.time(), res)
+        return res
+
     def _changed_costs(self):
+        Api._whatif_cache.clear()
         if Api.money:
             Api.money.forget()
 
@@ -417,6 +448,8 @@ class Api(BaseHTTPRequestHandler):
                                    "update": {k: up.get(k) for k in ("latest", "url", "newer")} if up.get("newer") else None})
             if url.path == "/api/maintenance":
                 return self._json(self._maintenance())
+            if url.path == "/api/whatif":
+                return self._json(self._whatif(q))
             if url.path == "/api/targets":
                 def tp(v, lo, hi):
                     try:

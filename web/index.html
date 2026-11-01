@@ -333,6 +333,19 @@
       <p class="chart-note" id="money-note"></p>
     </section>
 
+    <section class="panel span-12" aria-labelledby="wi-h" data-panel="whatif" data-name="What if" id="wi-panel" hidden>
+      <div class="panel-head"><h2 id="wi-h">What if</h2><span class="sub" id="wi-sub"></span><span class="spacer"></span>
+        <form class="wi-form" id="wi-form">
+          <label>Battery <input id="wi-kwh" type="number" min="0" max="200" step="0.5" inputmode="decimal"> kWh more</label>
+          <label>Panels <input id="wi-kw" type="number" min="0" max="100" step="0.5" inputmode="decimal"> kW more</label>
+          <button class="ghost-btn" type="submit">Work it out</button>
+        </form>
+      </div>
+      <div style="overflow-x:auto"><table class="strings wi-table" id="wi-table"></table></div>
+      <p class="wi-lead" id="wi-lead"></p>
+      <p class="chart-note" id="wi-note"></p>
+    </section>
+
     <section class="panel span-12" aria-labelledby="bt-h" data-panel="trading" data-name="Battery trading" id="bt-panel" hidden>
       <div class="panel-head"><h2 id="bt-h">Battery trading</h2><span class="sub" id="bt-sub"></span></div>
       <div class="today bt-tiles" id="bt-tiles"></div>

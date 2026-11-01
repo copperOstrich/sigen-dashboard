@@ -1,19 +1,79 @@
 {
-  "title": "NSW, Endeavour Energy network",
-  "note": "The Default Market Offer: the price cap the Australian Energy Regulator sets each year for retailers' standing offers (the default plans you're on if you never chose one). Standing offers sit at or just under it (AGL's and EnergyAustralia's for 2026-27 are within a hundredth of a cent). Residential single rate, incl. GST. Feed-in 3c/kWh, about what standard plans pay (the DMO doesn't set a feed-in rate; IPART's 2026-27 benchmark is 3.4 to 6.5c). Each 1 July, add the new year to \"rates\"; earlier months keep the prices in force then. Most market offers are cheaper than the DMO: to compare with a real quote, copy this file to plans.json in your data folder and add it.",
-  "plans": [
+ "title": "NSW, Endeavour Energy network",
+ "note": "The Default Market Offer: the price cap the Australian Energy Regulator sets each year for retailers' standing offers (the default plans you're on if you never chose one). Standing offers sit at or just under it (AGL's and EnergyAustralia's for 2026-27 are within a hundredth of a cent). Residential single rate, incl. GST. Feed-in 3c/kWh, about what standard plans pay (the DMO doesn't set a feed-in rate; IPART's 2026-27 benchmark is 3.4 to 6.5c). Each 1 July, add the new year to \"rates\"; earlier months keep the prices in force then. Most market offers are cheaper than the DMO: to compare with a real quote, copy this file to plans.json in your data folder and add it. The time of use plan: peak 4-8 pm on weekdays (public holidays are counted as weekdays here), solar soak 10 am-2 pm every day, off-peak otherwise.",
+ "plans": [
+  {
+   "name": "Default Market Offer",
+   "plan": "Standing offer cap, single rate",
+   "rates": [
     {
-      "name": "Default Market Offer",
-      "plan": "Standing offer cap, single rate",
-      "rates": [
-        {
-          "from": "2026-07-01",
-          "supply_c_day": 185.135,
-          "usage_c_kwh": 33.7273,
-          "feed_in_c_kwh": 3.0,
-          "source": "AER Default Market Offer 2026-27 final determination (DMO 8)"
-        }
-      ]
+     "from": "2026-07-01",
+     "supply_c_day": 185.135,
+     "usage_c_kwh": 33.7273,
+     "feed_in_c_kwh": 3.0,
+     "source": "AER Default Market Offer 2026-27 final determination (DMO 8)"
     }
-  ]
+   ]
+  },
+  {
+   "name": "Default Market Offer, time of use",
+   "plan": "Standing offer cap, time of use",
+   "rates": [
+    {
+     "from": "2026-07-01",
+     "supply_c_day": 185.13,
+     "feed_in_c_kwh": 3.0,
+     "source": "AER Default Market Offer 2026-27 final determination (DMO 8), time of use",
+     "usage": [
+      {
+       "hours": [
+        16,
+        20
+       ],
+       "days": "weekdays",
+       "months": [
+        11,
+        12,
+        1,
+        2,
+        3
+       ],
+       "c_kwh": 46.57,
+       "name": "peak"
+      },
+      {
+       "hours": [
+        16,
+        20
+       ],
+       "days": "weekdays",
+       "months": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+       ],
+       "c_kwh": 47.14,
+       "name": "peak"
+      },
+      {
+       "hours": [
+        10,
+        14
+       ],
+       "c_kwh": 12.35,
+       "name": "solar soak"
+      },
+      {
+       "c_kwh": 35.69,
+       "name": "off-peak"
+      }
+     ]
+    }
+   ]
+  }
+ ]
 }

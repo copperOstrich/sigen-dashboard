@@ -658,3 +658,9 @@ body.wall-mode { overflow-x: hidden; }
 .tg-t { color: var(--ink-2); }
 .tg-note { margin-top: 6px; font-size: 12.5px; color: var(--ink-3); }
 @media (max-width: 760px) { .tg-row { grid-template-columns: 1fr; gap: 4px; padding: 8px 0; } }
+
+/* ---- what if */
+.wi-form { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); }
+.wi-form input { width: 5em; font: inherit; padding: 4px 6px; border-radius: var(--r-ctl); border: 1px solid var(--rule-strong); background: var(--surface-2); color: var(--ink); }
+.wi-table td.wi-best { font-weight: 700; color: var(--good); }
+.wi-lead { font-size: 15px; margin: 12px 0 4px; }

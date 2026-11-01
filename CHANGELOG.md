@@ -2,6 +2,19 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.23.0
+
+- **What if** panel: your own recorded hours played back through a battery model and priced for a
+  year on each plan, with the battery run the way that plan rewards (soaking up solar; on time
+  of use also charging in the cheap hours for the peak; on wholesale prices also charging when
+  power is about free and selling into $1/kWh spikes). Columns for your system as it is, without
+  the battery, with more battery and with more panels (amounts adjustable). Respects the export
+  limit and the inverter's ceiling. The wholesale row is anchored on what the recorded hours
+  actually cost, with a check line showing how far the idealised model differs
+- NSW presets (Ausgrid, Endeavour) now include the 2026-27 Default Market Offer **time of use**
+  plan alongside the flat rate, so the Money panel compares both
+- Tests: the battery model moving solar to the evening and charging for a time-of-use peak
+
 ## 1.22.0
 
 - **Solar vs weather** (a new tab in Trends): each day's solar in clear, unrestricted hours

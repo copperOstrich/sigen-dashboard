@@ -447,6 +447,20 @@ The **Money** panel needs retailer prices (above) and a little setup in `sigen.e
   retailer's battery control (Amber SmartShift) or VPP events. Each is shown with its energy,
   average price and value, with totals for this month and last. Needs no setup.
 
+### What if
+
+The **What if** panel takes your own recorded hours (solar made, and what the home and car used)
+and plays them back through a battery model, to price a year on each plan with the battery run the
+way that plan rewards: on a flat plan it soaks up solar; on time of use it also charges from the
+grid in the cheap hours for the dear ones; on wholesale prices it charges when power is about free
+and sells when feed-in pays $1/kWh or more. It shows each plan with your system as it is, without
+the battery, with more battery and with more panels (change the amounts in the panel). The
+wholesale row starts from what your recorded hours actually cost and adds the simulated
+difference, so it isn't flattered by the model, and a check line compares the two. The NSW
+presets now include the Default Market Offer's time of use plan as well as its flat rate; add a
+real quote to `plans.json` to see it too. With less than a year of readings, the seasons not yet
+recorded aren't in it.
+
 ### History from before the collector (mySigen import)
 
 The collector only knows what it has recorded itself. To bring in everything since your system
@@ -943,6 +957,7 @@ thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 | `GET /api/bills` | Each bill beside what the data had for its period, and the difference |
 | `POST /api/bills` | `{"action": "save", "bill": {...}, "replace": {start, end}}` or `{"action": "delete", "start", "end"}`; home network only |
 | `POST /api/import` | `{"name": "file.csv", "data": "<base64>"}`: imports an Amber usage report, mySigen export or bills CSV; home network only |
+| `GET /api/whatif?add_kwh=8&add_kw=3` | A year on each plan with your system, without the battery, with more battery and with more panels |
 | `GET /api/targets` | This month against the targets (so far, projected, on track) and past months made or missed |
 | `GET /api/notify` | Phone alerts: on or off, what's watched, the last one sent and any problems still open |
 | `POST /api/notify` | `{"action": "test"}` sends a test alert; home network only |
