@@ -100,7 +100,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.11.1"
+VERSION = "1.12.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -168,6 +168,7 @@ BATTERY_WARRANTY_YEARS = _env_num("BATTERY_WARRANTY_YEARS", 10)
 BATTERY_WARRANTY_MWH = _env_num("BATTERY_WARRANTY_MWH", None)
 BATTERY_WARRANTY_SOH = _env_num("BATTERY_WARRANTY_SOH", None)
 APPLIANCES = ENV("APPLIANCES", None)
+GRID_VIEW = (ENV("GRID_VIEW", "") or "tiles").strip().lower()
 MQTT_HOST = (ENV("MQTT_HOST", "") or "").strip()
 MQTT_SETTINGS = {k: (ENV(k, "") or "").strip() for k in ("MQTT_PORT", "MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_TOPIC",
                                                          "MQTT_INTERVAL")}
@@ -1285,7 +1286,7 @@ class Api(BaseHTTPRequestHandler):
             if url.path == "/api/aemo":
                 if not self.aemo:
                     return self._json({"enabled": False, "status": "off"})
-                return self._json(self.aemo.snapshot(min(48, max(1, float(q.get("hours", ["24"])[0])))))
+                return self._json({**self.aemo.snapshot(min(48, max(1, float(q.get("hours", ["24"])[0])))), "view": GRID_VIEW})
             if url.path == "/api/prices":
                 a = self.retailer.snapshot() if self.retailer else {"enabled": False, "status": "off"}
                 a["history"] = self.store.price_history(min(48, max(1, float(q.get("hours", ["12"])[0]))))

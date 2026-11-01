@@ -411,27 +411,81 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .mo-table tr { cursor: pointer; }
 
 /* the grid: all NEM regions */
-.nem-map svg { width: 100%; height: auto; display: block; max-width: 900px; margin: 0 auto; }
-.nem-map .rg { fill: var(--surface); stroke: var(--rule-strong); stroke-width: 1.5; }
-.nem-map .rg.home { stroke: var(--ink); stroke-width: 2.5; }
-.nem-map .rn { fill: var(--ink); font: 600 15px var(--font); }
-.nem-map .rp { fill: var(--ink); font: 600 30px var(--font-num); }
-.nem-map .rp.low { fill: var(--good); } .nem-map .rp.high { fill: var(--bad); }
-.nem-map .ru { fill: var(--ink-2); font: 500 13px var(--font); }
-.nem-map .rs { fill: var(--ink-2); font: 500 13px var(--font); }
-.nem-map .yours { fill: var(--ink-3); font: 500 12px var(--font); text-anchor: end; }
-.nem-map .ic { stroke: var(--ink-3); stroke-width: 2.5; }
-.nem-map .arrow { fill: var(--ink-2); }
-.nem-map .icl { fill: var(--ink-2); font: 500 13px var(--font-num); paint-order: stroke; stroke: var(--surface); stroke-width: 5px; }
-.nem-map .tot-k { fill: var(--ink-2); font: 500 14px var(--font); }
-.nem-map .tot-v { fill: var(--ink); font: 600 26px var(--font-num); }
+/* The grid, all regions: three styles (GRID_VIEW) */
+.nem-tiles { margin: 0 0 14px; grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+.nem-tiles .k { font-size: 13px; color: var(--ink-2); }
+.nem-tiles .d { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+@media (max-width: 1080px) { .nem-tiles > div:nth-child(5) { border-left: 1px solid var(--rule); padding-left: 16px; } }
+@media (max-width: 760px) { .nem-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; row-gap: 14px; }
+  .nem-tiles > div:nth-child(3) { border-left: 0; padding-left: 0; } }
+/* nodes and wires */
+.nem-flowmap svg { width: 100%; height: auto; display: block; max-width: 940px; margin: 0 auto; }
+.nem-flowmap .ring { fill: var(--surface); stroke-width: 2.5; }
+.nem-flowmap .ring.home { stroke-width: 4.5; }
+.nem-flowmap .pr { font: 600 22px var(--font-num); fill: var(--ink); text-anchor: middle; }
+.nem-flowmap .pu { font: 500 11px var(--font); fill: var(--ink-3); text-anchor: middle; }
+.nem-flowmap .nm { font: 600 14px var(--font); fill: var(--ink); }
+.nem-flowmap .st { font: 400 12.5px var(--font); fill: var(--ink-3); }
+.nem-flowmap .bed { stroke: var(--rule); stroke-linecap: round; fill: none; }
+.nem-flowmap .wire { stroke: var(--ink-2); stroke-linecap: round; fill: none; stroke-dasharray: 0.1 14; animation: nem-flow 1.2s linear infinite; }
+.nem-flowmap .mw { font: 600 13px var(--font-num); fill: var(--ink-2); }
+@keyframes nem-flow { to { stroke-dashoffset: -14; } }
+@media (prefers-reduced-motion: reduce) { .nem-flowmap .wire { animation: none; } }
+.nem-scale { display: flex; gap: 6px 16px; font-size: 12.5px; color: var(--ink-3); align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.nem-scale i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2.5px solid; margin-right: 6px; vertical-align: -1px; }
+/* region tiles */
+.nem-rtiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 0 0 18px; }
+.nem-rtiles > div { padding: 2px 16px; border-left: 1px solid var(--rule); }
+.nem-rtiles > div:first-child { border-left: 0; padding-left: 0; }
+.nem-rtiles .k { font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 7px; }
+.nem-rtiles .pill-y { font-size: 11px; border: 1px solid var(--ink-2); border-radius: 999px; padding: 0 6px; color: var(--ink-2); }
+.nem-rtiles .v { font: 600 26px/1.25 var(--font-num); font-variant-numeric: tabular-nums; }
+.nem-rtiles .v small { font-size: 14px; color: var(--ink-2); font-weight: 500; margin-left: 3px; }
+.nem-rtiles .d { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+.nem-rtiles .ren-bar { height: 4px; border-radius: 2px; background: var(--surface-2); margin: 8px 0 4px; overflow: hidden; }
+.nem-rtiles .ren-bar span { display: block; height: 100%; background: var(--battery); border-radius: 2px; }
+.nem-rtiles .flow { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+.nem-rtiles .home .v { color: var(--home); }
+@media (max-width: 760px) { .nem-rtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 16px; }
+  .nem-rtiles > div:nth-child(odd) { border-left: 0; padding-left: 0; } }
+.nem-ichead { font-size: 13px; color: var(--ink-3); margin: 0 0 8px; display: flex; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; }
+.nem-icgrid { display: grid; grid-template-columns: minmax(150px, 200px) minmax(0, 1fr) 120px; grid-auto-flow: row dense; gap: 9px 16px; align-items: center; font-size: 14px; }
+.nem-icgrid .lbl { grid-column: 1; } .nem-icgrid .track { grid-column: 2; } .nem-icgrid .val { grid-column: 3; }
+.nem-icgrid .lbl { color: var(--ink-2); }
+.nem-icgrid .lbl b { color: var(--ink); font-weight: 500; }
+.nem-icgrid .track { position: relative; height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.nem-icgrid .track span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ink-2); border-radius: 4px; opacity: .7; }
+.nem-icgrid .val { text-align: right; font: 15px var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nem-icgrid .pct { font-size: 12.5px; color: var(--ink-3); margin-left: 6px; }
+@media (max-width: 560px) { .nem-icgrid { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+  .nem-icgrid .lbl { grid-column: 1; } .nem-icgrid .val { grid-column: 2; } .nem-icgrid .track { grid-column: 1 / -1; margin-bottom: 8px; } }
+/* chain */
+.nem-chain, .nem-chain-tas { display: grid; grid-template-columns: 1fr 96px 1fr 96px 1fr 96px 1fr; align-items: center; }
+.nem-chain-tas .col { grid-column: 5; }
+.nem-chain .reg, .nem-chain-tas .reg { padding: 10px 0; }
+.nem-chain .reg .k, .nem-chain-tas .reg .k { font-size: 13px; color: var(--ink-2); }
+.nem-chain .reg .v, .nem-chain-tas .reg .v { font: 600 26px/1.25 var(--font-num); font-variant-numeric: tabular-nums; }
+.nem-chain .reg .v small, .nem-chain-tas .reg .v small { font-size: 14px; color: var(--ink-2); font-weight: 500; margin-left: 3px; }
+.nem-chain .reg .d, .nem-chain-tas .reg .d { font-size: 12.5px; color: var(--ink-3); }
+.nem-chain .reg.home { border-left: 3px solid var(--home); padding-left: 12px; }
+.nem-chain .reg.home .k { color: var(--home); font-weight: 600; }
+.nem-chain .link { text-align: center; font: 600 13px var(--font-num); color: var(--ink-2); }
+.nem-chain .link svg { display: block; margin: 2px auto 0; max-width: 100%; }
+.nem-chain .link .ln, .nem-chain .link .hd { stroke: var(--ink-3); stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.nem-chain-tas .vlink { font: 600 13px var(--font-num); color: var(--ink-2); padding: 2px 0; }
+@media (max-width: 960px) { .nem-chain, .nem-chain-tas { grid-template-columns: 1fr 70px 1fr 70px 1fr 70px 1fr; } }
+/* tiles style: the interconnector list at the top is repeated below, so it goes */
+.nem-view-tiles .grid3 { grid-template-columns: 250px minmax(0, 1fr); }
+.nem-view-tiles .grid3 > :nth-child(3) { display: none; }
+@media (max-width: 960px) { .nem-view-tiles .grid3 { grid-template-columns: 1fr; } }
 .nem-table { display: none; width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .nem-table th, .nem-table td { padding: 6px 5px; white-space: nowrap; text-align: right; border-top: 1px solid var(--rule); font-variant-numeric: tabular-nums; }
 .nem-table th { color: var(--ink-3); font-weight: 500; border-top: 0; }
 .nem-table th:first-child, .nem-table td:first-child { text-align: left; }
 .nem-table tr.home td { font-weight: 600; }
 .nem-table tr.total td { color: var(--ink-2); }
-@media (max-width: 640px) { .nem-map { display: none; } .nem-table { display: table; } }
+@media (max-width: 640px) { #grid-nem[data-view="map"] .nem-map, #grid-nem[data-view="chain"] .nem-map { display: none; }
+  #grid-nem[data-view="map"] .nem-table, #grid-nem[data-view="chain"] .nem-table { display: table; } }
 
 /* money */
 .money { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 1fr); gap: 28px; align-items: start; }

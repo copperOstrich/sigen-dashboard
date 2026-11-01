@@ -1482,74 +1482,137 @@
   // all NEM regions: a rough map with prices, demand, renewables and the flows between them
   const REGION_FULL = { NSW1: "New South Wales", QLD1: "Queensland", VIC1: "Victoria", SA1: "South Australia", TAS1: "Tasmania" };
   function renderNem(a, IC) {
-    const regions = a.regions || [], nem = a.nem || {};
-    $("grid-nem").hidden = regions.length < 2;
-    if (regions.length < 2) return;
-    const mw = (v) => (v == null ? "–" : `${Math.round(v).toLocaleString()} MW`);
+    const regions = a.regions || [], nem = a.nem || {}, box = $("grid-nem");
+    box.hidden = regions.length < 2;
+    const view = ["tiles", "map", "chain"].includes(a.view) ? a.view : "tiles";
+    $("grid-panel").classList.toggle("nem-view-tiles", view === "tiles" && !box.hidden);
+    if (box.hidden) return;
+    box.dataset.view = view;
+    const R = Object.fromEntries(regions.map((r) => [r.region, r])), home = a.region;
+    const mw = (v) => (v == null ? "–" : `${Math.round(Math.abs(v)).toLocaleString()} MW`);
     const pct = (v) => (v == null ? "–" : `${Math.round(v)}%`);
+    const full = (k) => REGION_FULL[k] || k;
     const flowText = (r) => (r.net_interchange_mw == null || Math.abs(r.net_interchange_mw) < 5 ? "about balanced"
-      : `${r.net_interchange_mw > 0 ? "exporting" : "importing"} ${mw(Math.abs(r.net_interchange_mw))}`);
-    const priceCls = (r) => (r.rrp == null ? "" : r.rrp < 0 ? "low" : r.rrp >= 300 ? "high" : "");
-    // net flow between each pair of regions (QLD-NSW and VIC-SA each have two links)
+      : `${r.net_interchange_mw > 0 ? "exporting" : "importing"} ${mw(r.net_interchange_mw)}`);
+    const tipFor = (r) => `${full(r.region)}: ${cents(r.price_c)}c/kWh ($${r.rrp == null ? "–" : Math.round(r.rrp).toLocaleString()}/MWh)` +
+      `${r.price_status && r.price_status !== "FIRM" ? ", not final" : ""}; demand ${mw(r.demand_mw)}; ${flowText(r)}` +
+      `${r.renewables_pct != null ? `; ${pct(r.renewables_pct)} renewable` : ""}${r.top_fuel ? `; most from ${r.top_fuel.toLowerCase()}` : ""}`;
+    // net flow between each pair of regions (QLD-NSW and VIC-SA each have two links); + = from the first to the second
     const pairs = {};
     for (const x of a.all_interconnectors || []) {
       const m = IC[x.name];
       if (!m || x.mw == null) continue;
-      const key = [m[0], m[1]].sort().join("|");
-      const sign = m[0] < m[1] ? 1 : -1;  // positive = from the alphabetically first region
-      const pr = pairs[key] || (pairs[key] = { mw: 0, parts: [] });
-      pr.mw += sign * x.mw;
-      pr.parts.push(`${m[2] || x.name}: ${Math.abs(Math.round(x.mw)).toLocaleString()} MW from ${regionName(x.mw >= 0 ? m[0] : m[1])} to ${regionName(x.mw >= 0 ? m[1] : m[0])}`);
+      const k = m[0] + "|" + m[1], pr = pairs[k] || (pairs[k] = { mw: 0, parts: [] });
+      pr.mw += x.mw;
+      pr.parts.push(`${m[2] || x.name}: ${mw(x.mw)} from ${regionName(x.mw >= 0 ? m[0] : m[1])} to ${regionName(x.mw >= 0 ? m[1] : m[0])}`);
+    }
+    const pairOf = (x, y) => pairs[x + "|" + y] ? { mw: pairs[x + "|" + y].mw, parts: pairs[x + "|" + y].parts }
+      : pairs[y + "|" + x] ? { mw: -pairs[y + "|" + x].mw, parts: pairs[y + "|" + x].parts } : null;
+    // price against the whole market: cheaper, about average, dearer (negative and $300+ always count)
+    const level = (r) => (r.rrp == null || nem.price_c == null ? "avg" : r.rrp < 0 ? "cheap" : r.rrp >= 300 ? "dear"
+      : r.price_c < nem.price_c - Math.max(0.1 * Math.abs(nem.price_c), 0.3) ? "cheap"
+      : r.price_c > nem.price_c + Math.max(0.1 * Math.abs(nem.price_c), 0.3) ? "dear" : "avg");
+    const LEVEL = { cheap: ["var(--battery)", "cheaper than the market average"], avg: ["var(--solar)", "about average"], dear: ["var(--grid)", "dearer"] };
+
+    // whole-market tiles (nodes and wires, chain)
+    const marketTiles = () => {
+      const hr = R[home] || {}, rank = [...regions].sort((x, y) => (x.price_c ?? 0) - (y.price_c ?? 0)).findIndex((r) => r.region === home) + 1;
+      const ord = ["", "cheapest", "2nd cheapest", "3rd cheapest", "4th cheapest", "dearest"][rank] || "";
+      const ni = hr.net_interchange_mw, from = Object.keys(R).filter((k) => k !== home && (pairOf(k, home) || {}).mw > 5).map(regionName);
+      const tile = (k, v, u, d) => el("div", {}, el("div", { class: "k", text: k }), el("div", { class: "v" }, v, u ? el("small", { text: u }) : null),
+        d ? el("div", { class: "d", text: d }) : null);
+      return el("div", { class: "today nem-tiles" },
+        tile("Average price", cents(nem.price_c), "c/kWh", hr.price_c != null ? `${regionName(home)} ${cents(hr.price_c)}c, ${ord}` : null),
+        tile("Market demand", nem.demand_mw == null ? "–" : Math.round(nem.demand_mw).toLocaleString(), "MW", "all five regions"),
+        tile("Renewable share", nem.renewables_pct == null ? "–" : Math.round(nem.renewables_pct), "%", hr.renewables_pct != null ? `${regionName(home)} ${pct(hr.renewables_pct)}` : null),
+        tile(ni != null && ni > 5 ? `Out of ${regionName(home)}` : `Into ${regionName(home)}`, ni == null ? "–" : Math.round(Math.abs(ni)).toLocaleString(), "MW",
+          ni != null && ni < -5 && from.length ? `from ${from.join(" and ")}` : ni != null && Math.abs(ni) <= 5 ? "about balanced" : null));
+    };
+
+    const out = $("grid-nem-map"); out.innerHTML = "";
+    $("grid-nem-intro").textContent = view === "tiles" ? "All regions right now"
+      : "All regions right now: wholesale price, demand, renewable share and the flows between them";
+
+    if (view === "tiles") {
+      const t = el("div", { class: "nem-rtiles" });
+      for (const k of ["QLD1", "NSW1", "VIC1", "SA1", "TAS1"]) {
+        const r = R[k]; if (!r) continue;
+        const ni = r.net_interchange_mw, mine = k === home;
+        t.append(el("div", { class: mine ? "home" : null, title: tipFor(r) },
+          el("div", { class: "k" }, full(k), mine ? el("span", { class: "pill-y", text: "yours" }) : null),
+          el("div", { class: "v" }, cents(r.price_c), el("small", { text: "c/kWh" })),
+          el("div", { class: "d", text: `${mw(r.demand_mw)} demand` }),
+          el("div", { class: "ren-bar" }, el("span", { style: `width:${Math.max(0, Math.min(100, r.renewables_pct || 0))}%` })),
+          el("div", { class: "d", text: `${pct(r.renewables_pct)} renewable` }),
+          el("div", { class: "flow", text: ni == null || Math.abs(ni) < 5 ? "about balanced" : `${ni > 0 ? "↑ exporting" : "↓ importing"} ${mw(ni)}` })));
+      }
+      const head = el("div", { class: "nem-ichead" }, el("span", { text: "Interconnectors: how full each one is" }),
+        el("span", { text: `NEM: ${cents(nem.price_c)}c/kWh average, ${mw(nem.demand_mw)}, ${pct(nem.renewables_pct)} renewable` }));
+      const g = el("div", { class: "nem-icgrid" });
+      for (const x of a.all_interconnectors || []) {
+        const m = IC[x.name]; if (!m || x.mw == null) continue;
+        const [from, to] = x.mw >= 0 ? [m[0], m[1]] : [m[1], m[0]];
+        const lim = x.mw >= 0 ? x.export_limit : (x.import_limit != null ? -x.import_limit : null);
+        const frac = lim ? Math.min(1, Math.abs(x.mw) / lim) : null;
+        g.append(el("div", { class: "lbl" }, el("b", { text: `${regionName(from)} → ${regionName(to)}` }), m[2] ? ` ${m[2]}` : ""),
+          el("div", { class: "val" }, mw(x.mw), frac != null ? el("span", { class: "pct", text: `${Math.round(frac * 100)}%` }) : null),
+          el("div", { class: "track", title: frac != null ? `${Math.round(frac * 100)}% of its ${Math.round(lim).toLocaleString()} MW limit in this direction` : "limit not reported" },
+            el("span", { style: `width:${frac != null ? Math.max(1, frac * 100) : 0}%` })));
+      }
+      out.append(t, head, g);
+    } else if (view === "map") {
+      const pos = { QLD1: [700, 70], NSW1: [700, 230], VIC1: [470, 330], SA1: [240, 250], TAS1: [470, 470] };
+      const svg = el("svg", { viewBox: "0 0 940 540", role: "img", "aria-label": "Prices, demand and flows across the NEM regions" });
+      for (const [x, y] of [["QLD1", "NSW1"], ["VIC1", "NSW1"], ["VIC1", "SA1"], ["TAS1", "VIC1"]]) {
+        const f = pairOf(x, y); if (!f || !R[x] || !R[y]) continue;
+        const [p, q] = f.mw >= 0 ? [pos[x], pos[y]] : [pos[y], pos[x]];
+        const d = `M${p[0]},${p[1]}L${q[0]},${q[1]}`, w = 3 + Math.min(6, Math.abs(f.mw) / 150);
+        svg.append(el("path", { class: "bed", d, "stroke-width": 3 }));
+        if (Math.abs(f.mw) >= 5) svg.append(el("path", { class: "wire", d, "stroke-width": w }));
+        const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2, dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy);
+        const nx = -dy / L, ny = dx / L, sg = ny > 0 ? -1 : 1;
+        svg.append(el("text", { class: "mw", x: mx + nx * 18 * sg, y: my + ny * 18 * sg + 5,
+          "text-anchor": Math.abs(nx) < 0.3 ? "middle" : (nx * sg > 0 ? "start" : "end") }, mw(f.mw), el("title", { text: f.parts.join("\n") })));
+      }
+      for (const [k, [x, y]] of Object.entries(pos)) {
+        const r = R[k]; if (!r) continue;
+        const mine = k === home, left = k === "SA1", anchor = left ? "end" : "start", lx = left ? x - 62 : x + 62;
+        svg.append(el("g", {}, el("title", { text: tipFor(r) }),
+          el("circle", { class: "ring" + (mine ? " home" : ""), cx: x, cy: y, r: 44, style: `stroke:${LEVEL[level(r)][0]}` }),
+          el("text", { class: "pr", x, y: y + 4, text: cents(r.price_c) }), el("text", { class: "pu", x, y: y + 20, text: "c/kWh" }),
+          el("text", { class: "nm", x: lx, y: y - 6, "text-anchor": anchor, text: full(k) + (mine ? " · yours" : "") }),
+          el("text", { class: "st", x: lx, y: y + 14, "text-anchor": anchor, text: `${mw(r.demand_mw)} · ${pct(r.renewables_pct)} renewable` })));
+      }
+      const scale = el("div", { class: "nem-scale" }, ...["cheap", "avg", "dear"].map((l) => el("span", {}, el("i", { style: `border-color:${LEVEL[l][0]}` }), LEVEL[l][1])),
+        el("span", { text: "wires: thicker = more power, moving towards where it flows" }));
+      out.append(marketTiles(), el("div", { class: "nem-flowmap" }, svg), scale);
+    } else {
+      const reg = (k) => {
+        const r = R[k]; if (!r) return el("div");
+        const mine = k === home;
+        return el("div", { class: "reg" + (mine ? " home" : ""), title: tipFor(r) },
+          el("div", { class: "k", text: full(k) + (mine ? " · yours" : "") }),
+          el("div", { class: "v" }, cents(r.price_c), el("small", { text: "c/kWh" })),
+          el("div", { class: "d", text: `${mw(r.demand_mw)} · ${pct(r.renewables_pct)} renewable` }));
+      };
+      const link = (x, y) => {
+        const f = pairOf(x, y), right = !f || f.mw >= 0, s = el("svg", { width: 80, height: 14, viewBox: "0 0 80 14", "aria-hidden": "true" });
+        s.append(el("path", { d: "M4 7H76", class: "ln" }), f && Math.abs(f.mw) >= 5 ? el("path", { d: right ? "M68 2L76 7L68 12" : "M12 2L4 7L12 12", class: "hd" }) : null);
+        return el("div", { class: "link", title: f ? f.parts.join("\n") : null }, el("span", { text: f ? mw(f.mw) : "–" }), s);
+      };
+      const chain = el("div", { class: "nem-chain" }, reg("QLD1"), link("QLD1", "NSW1"), reg("NSW1"), link("NSW1", "VIC1"), reg("VIC1"), link("VIC1", "SA1"), reg("SA1"));
+      const f = pairOf("TAS1", "VIC1");
+      const tas = el("div", { class: "nem-chain-tas" }, el("div", { class: "col" },
+        el("div", { class: "vlink", title: f ? f.parts.join("\n") : null, text: f ? `${f.mw >= 0 ? "↑" : "↓"} ${mw(f.mw)} Basslink` : "" }), reg("TAS1")));
+      out.append(marketTiles(), chain, tas);
     }
 
-    // ---- map (wide screens)
-    const W = 270, H = 118;
-    const pos = { QLD1: [640, 10], NSW1: [640, 180], SA1: [0, 220], VIC1: [340, 330], TAS1: [340, 510] };
-    // link ends: [regionA, regionB, end at A, end at B, label offset and anchor]  (A alphabetically first)
-    const links = [["NSW1", "QLD1", [775, 180], [775, 128], [14, 5, "start"]], ["NSW1", "VIC1", [640, 250], [540, 330], [-14, -8, "end"]],
-      ["SA1", "VIC1", [270, 279], [340, 389], [-10, 26, "end"]], ["TAS1", "VIC1", [475, 510], [475, 448], [14, 5, "start"]]];
-    const svg = el("svg", { viewBox: "0 0 910 630", role: "img", "aria-label": "Prices, demand and flows across the NEM regions" });
-    for (const [ra, rb, pa, pb, lab] of links) {
-      const f = pairs[[ra, rb].join("|")];
-      if (!f) continue;
-      svg.append(el("line", { class: "ic", x1: pa[0], y1: pa[1], x2: pb[0], y2: pb[1] }));
-      const [from, to] = f.mw >= 0 ? [pa, pb] : [pb, pa];
-      const mx = (pa[0] + pb[0]) / 2, my = (pa[1] + pb[1]) / 2;
-      const ang = Math.atan2(to[1] - from[1], to[0] - from[0]) * 180 / Math.PI;
-      if (Math.abs(f.mw) >= 5) svg.append(el("path", { class: "arrow", d: "M 9 0 L -7 -7 L -7 7 Z", transform: `translate(${mx} ${my}) rotate(${ang})` }));
-      svg.append(el("text", { class: "icl", x: mx + lab[0], y: my + lab[1], "text-anchor": lab[2] },
-        `${Math.abs(Math.round(f.mw)).toLocaleString()} MW`, el("title", { text: f.parts.join("\n") })));
-    }
-    for (const r of regions) {
-      const p = pos[r.region];
-      if (!p) continue;
-      const [x, y] = p, home = r.region === a.region;
-      const g = el("g", {},
-        el("title", { text: `${REGION_FULL[r.region] || r.region}: ${cents(r.price_c)}c/kWh ($${r.rrp == null ? "–" : Math.round(r.rrp).toLocaleString()}/MWh)` +
-          `${r.price_status && r.price_status !== "FIRM" ? ", not final" : ""}; demand ${mw(r.demand_mw)}; ${flowText(r)}` +
-          `${r.renewables_pct != null ? `; ${pct(r.renewables_pct)} renewable` : ""}${r.top_fuel ? `; most from ${r.top_fuel.toLowerCase()}` : ""}` }),
-        el("rect", { class: "rg" + (home ? " home" : ""), x, y, width: W, height: H, rx: 12 }),
-        el("text", { class: "rn", x: x + 14, y: y + 25, text: REGION_FULL[r.region] || r.region }),
-        home ? el("text", { class: "yours", x: x + W - 12, y: y + 25, text: "yours" }) : null,
-        el("text", { class: "rp " + priceCls(r), x: x + 14, y: y + 61 }, cents(r.price_c), el("tspan", { class: "ru", dx: 4, text: "c/kWh" })),
-        el("text", { class: "rs", x: x + 14, y: y + 85, text: `${mw(r.demand_mw)} demand` + (r.renewables_pct != null ? ` · ${pct(r.renewables_pct)} renewable` : "") }),
-        el("text", { class: "rs", x: x + 14, y: y + 106, text: flowText(r) }));
-      svg.append(g);
-    }
-    // whole-market totals in the open space at the top left
-    const tot = [["Whole market demand", mw(nem.demand_mw)], ["Renewable share", pct(nem.renewables_pct)],
-      ["Average price", nem.price_c == null ? "–" : `${cents(nem.price_c)}c/kWh`]];
-    tot.forEach(([k, v], i) => {
-      svg.append(el("text", { class: "tot-k", x: 0, y: 22 + i * 66, text: k }), el("text", { class: "tot-v", x: 0, y: 54 + i * 66, text: v }));
-    });
-    const map = $("grid-nem-map"); map.innerHTML = ""; map.append(svg);
-
-    // ---- table (phones)
+    // ---- table (phones, for the map and the chain)
     const t = $("grid-nem-table"); t.innerHTML = "";
     t.append(el("tr", {}, ...["Region", "c/kWh", "MW", "Renew.", "Flow MW"].map((h) => el("th", { text: h }))));
     for (const r of regions) {
       const ni = r.net_interchange_mw;
-      t.append(el("tr", { class: r.region === a.region ? "home" : "" },
+      t.append(el("tr", { class: r.region === home ? "home" : "" },
         el("td", { text: regionName(r.region) }), el("td", { text: cents(r.price_c) }),
         el("td", { text: r.demand_mw == null ? "–" : Math.round(r.demand_mw).toLocaleString() }),
         el("td", { text: pct(r.renewables_pct) }),
@@ -1558,6 +1621,7 @@
     t.append(el("tr", { class: "total" }, el("td", { text: "NEM" }), el("td", { text: cents(nem.price_c) }),
       el("td", { text: nem.demand_mw == null ? "–" : nem.demand_mw.toLocaleString() }), el("td", { text: pct(nem.renewables_pct) }), el("td", { text: "" })));
   }
+
 
   // ------------------------------------------------------------ settings
   const dlg = $("settings");

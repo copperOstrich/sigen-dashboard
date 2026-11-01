@@ -2,6 +2,19 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.12.0
+
+- The grid: the all-regions map is restyled to match the rest of the dashboard, in a choice of
+  three styles (Settings, Dashboard, Grid panel style):
+  - **Region tiles** (default): a tile per region with price, demand, renewable share and
+    flow, and a bar per interconnector showing how full it is against its limit (the separate
+    interconnector list at the top is dropped, as this covers it)
+  - **Nodes and wires**: like Right now, with each region's ring coloured by price against the
+    market average and moving wires sized by the power flowing
+  - **Chain**: the regions in a line as the grid connects them
+- Whole-market figures (average price and your region's rank, demand, renewable share, flow
+  into or out of your region) now sit in a tile row
+
 ## 1.11.1
 
 - Battery wear: Energy through it shows when the warranty energy limit

@@ -456,11 +456,19 @@ your region and shows:
 * demand, the large-scale generation mix (coal, gas, solar, wind, hydro, battery) and
   the renewable share
 * interconnector flows to neighbouring regions, plus price-cap and market-suspension flags
-* **all regions at a glance**: a map of NSW, Queensland, Victoria, South Australia and
-  Tasmania with each one's wholesale price, demand, renewable share and whether it's
-  importing or exporting, the flows between them, and whole-market demand, renewable share
-  and average price (a table on phones). It comes from the same AEMO requests, so it costs
-  nothing extra.
+* **all regions at a glance**: NSW, Queensland, Victoria, South Australia and Tasmania with
+  each one's wholesale price, demand, renewable share and whether it's importing or exporting,
+  the flows between them, and whole-market demand, renewable share and average price. It comes
+  from the same AEMO requests, so it costs nothing extra. Three styles, chosen in Settings
+  (Dashboard, `GRID_VIEW`):
+  * `tiles` (default): a tile per region, and a bar for each interconnector showing how full it
+    is against its limit
+  * `map`: nodes and wires like the Right now panel, each region's ring coloured by whether it's
+    cheaper or dearer than the market average, wires thicker for more power
+  * `chain`: the regions in a line as the grid connects them, Queensland to South Australia,
+    with Tasmania off Victoria
+
+  On phones, `map` and `chain` show as a table.
 
 Set your region with `AEMO_REGION` (`NSW1`, `QLD1`, `VIC1`, `SA1` or `TAS1`; default
 `NSW1`), or turn it off with `AEMO_ENABLED=0`. These feeds power AEMO's own NEM data
@@ -700,6 +708,8 @@ hand). Values in `sigen.env` win over the container's environment.
 | `BACKUP_TIME` | When to back up, 24-hour | `02:30` |
 | `BACKUP_KEEP_DAILY` / `BACKUP_KEEP_WEEKLY` | Daily copies to keep, then weekly ones | `7` / `4` |
 | `BACKUP_DIR` | Where backups go, inside the container | `backups` in the data folder |
+| **Dashboard** | | |
+| `GRID_VIEW` | How The grid shows all regions: `tiles`, `map` (nodes and wires) or `chain` | `tiles` |
 | **Home Assistant (MQTT)** | | |
 | `MQTT_HOST`, `MQTT_PORT` | Your MQTT broker; blank = off | off, `1883` |
 | `MQTT_USERNAME`, `MQTT_PASSWORD` | If the broker needs them | none |

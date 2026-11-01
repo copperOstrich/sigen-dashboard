@@ -25,6 +25,7 @@ def _s(key, group, label, help, kind="text", default="", **kw):
 INV, PRICES, SITE, MONEY, CAR, CHECKS, COLLECTOR = (
     "Inverter", "Prices", "Weather and solar forecast", "Money", "Car and fuel", "Checks", "Collector")
 BATTERY, APPL, BACKUP, MQTT = "Battery", "Appliances", "Backups", "Home Assistant (MQTT)"
+DASH = "Dashboard"
 
 ON_OFF = [["1", "On"], ["0", "Off"]]
 
@@ -109,6 +110,11 @@ SCHEMA = [
     _s("EXPORT_LIMIT_KW", CHECKS, "Export limit", "Your connection's export limit, for Solar limits. Blank = "
        "learned from where exports keep levelling off.", "number", "", min=0, max=1000, unit="kW",
        placeholder="learned"),
+    # ---------------------------------------------------------------- dashboard
+    _s("GRID_VIEW", DASH, "Grid panel style", "How The grid shows all five regions. Region tiles: a tile each, with "
+       "how full each interconnector is. Nodes and wires: a map like Right now, coloured by price. Chain: the regions "
+       "in a line as the grid connects them. On phones, nodes and wires and the chain become a table.",
+       "choice", "tiles", options=[["tiles", "Region tiles"], ["map", "Nodes and wires"], ["chain", "Chain"]]),
     # ---------------------------------------------------------------- battery
     _s("BATTERY_WARRANTY_YEARS", BATTERY, "Warranty length", "From your battery's warranty, counted from the "
        "day the system was switched on (Money).", "number", "10", min=1, max=30, unit="years"),
