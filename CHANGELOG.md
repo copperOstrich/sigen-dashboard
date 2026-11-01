@@ -2,6 +2,13 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.24.1
+
+- **Battery** and **System** show their tabs side by side, with no tab bar, when the panel is
+  wide enough (about 1,100 px, such as Full width in Arrange panels): Now beside Health, Status
+  beside Health. Narrower, they go back to tabs. Battery's Now drops its health line then, as the
+  Health tile beside it shows the same
+
 ## 1.24.0
 
 Consolidation, step 1 of 2: fewer panels, related things together in tabs. Each panel remembers

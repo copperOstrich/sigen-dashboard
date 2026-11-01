@@ -676,6 +676,13 @@ body.wall-mode { overflow-x: hidden; }
 .tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); font-weight: 600; }
 .tabs button:focus-visible { outline: 2px solid var(--home); outline-offset: 1px; }
 .tabpage.inactive { display: none; }
+.tabpage { container-type: inline-size; }
+/* wide Battery and System: every tab side by side, no tab bar */
+.group.together { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); column-gap: 28px; align-content: start; }
+.group.together > .group-head { grid-column: 1 / -1; }
+.group.together > .group-head .tabs { display: none; }
+.group.together > .tabpage.inactive { display: block; }
+.group.together > .tabpage:not([hidden]) ~ .tabpage:not([hidden]) { border-left: 1px solid var(--rule); padding-left: 28px; }
 .tabpage > .panel-head > h2 { display: none; }
 .tabpage > .panel-head:not(:has(> :not(h2):not(:empty))) { display: none; }
 .part + .part { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--rule); }
@@ -686,3 +693,4 @@ body.wall-mode { overflow-x: hidden; }
   .today > div { border-left: 0 !important; padding-left: 0 !important; }
   .panel-head { flex-wrap: wrap; }
 }
+.group.together #f-soh, .group.together .facts dt:has(+ #f-soh) { display: none; }  /* the Health tile beside it says it */

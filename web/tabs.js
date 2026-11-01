@@ -1,6 +1,8 @@
 // Panels with tabs (Battery, Solar, System, Prices and the grid): one tab showing at a time, the
 // last one chosen remembered in this browser. A tab with nothing to show yet (its page is hidden,
 // or every part on it is) is left out, and the panel hides when none has anything.
+// Panels marked data-together (Battery, System) show all their tabs side by side instead, when
+// they're wide enough (Full width in Arrange panels).
 (function () {
   const S = window.Sigen, el = S.el;
   const groups = [...document.querySelectorAll("section.group[data-panel]")];
@@ -9,11 +11,14 @@
   const pages = (g) => [...g.querySelectorAll(":scope > .tabpage")];
   const ready = (p) => !p.hidden && (!p.querySelector(":scope > .part") || [...p.querySelectorAll(":scope > .part")].some((x) => !x.hidden));
 
+  const TOGETHER_W = 1100;
   function render(g) {
     const ps = pages(g), avail = ps.filter(ready);
     const hide = !avail.length;
     if (g.hidden !== hide) g.hidden = hide;
     if (hide) return;
+    const together = g.hasAttribute("data-together") && avail.length > 1 && g.clientWidth >= TOGETHER_W;
+    if (g.classList.contains("together") !== together) { g.classList.toggle("together", together); redraw(); }
     let cur = g.dataset.tab;
     const want = S.store.get(KEY(g));
     // the remembered tab, as soon as it has something to show (its data can arrive after the page loads)
@@ -59,6 +64,10 @@
   for (const g of groups) {
     render(g);
     new MutationObserver(() => render(g)).observe(g, { subtree: true, attributes: true, attributeFilter: ["hidden"] });
+    if (g.hasAttribute("data-together")) {
+      let w = 0;
+      new ResizeObserver(() => { if (Math.abs(g.clientWidth - w) > 20) { w = g.clientWidth; render(g); } }).observe(g);
+    }
   }
   window.SigenTabs = { render: () => groups.forEach(render) };
 })();

@@ -719,6 +719,9 @@ browser), and a tab with nothing to show yet is left out:
 * **Solar**: Strings · Limits · Long term (solar vs weather)
 * **System**: Status (alarms, data feeds, events) · Health (insulation and temperatures over time)
 
+Battery and System show both tabs side by side when the panel is wide enough (Full width in
+Arrange panels).
+
 ### Ultrawide monitors
 
 On a very wide screen (about 3440 × 1440 and wider, more than twice as wide as it is tall, such as

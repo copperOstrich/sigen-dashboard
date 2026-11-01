@@ -674,7 +674,7 @@
     if (!box) return;
     const has = !!(d && d.days && d.days.length >= 2);
     if (box.hidden === has) box.hidden = !has;
-    if (!has || box.closest(".tabpage.inactive")) return;
+    if (!has || (box.closest(".tabpage.inactive") && !box.closest(".group.together"))) return;
     const t = d.days.map(dayT), lg = $(tr.id + "-legend"), chart = $(tr.id + "-chart");
     const dayTitle = (x) => new Date(x * 1000).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" });
     const r = trendSeries(tr.metric, d, t);
