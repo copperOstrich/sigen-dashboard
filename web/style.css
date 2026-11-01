@@ -561,3 +561,17 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .strings td.st-down { color: var(--bad); font-weight: 600; }
 .facts dd .small-link { font: 13px var(--font); color: var(--home); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; margin-left: 6px; }
 .facts dd .small-link:disabled { color: var(--ink-3); cursor: default; text-decoration: none; }
+
+/* ---------------------------------------------------------------- always-on use, storm (1.13) */
+.today.bl-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 4px 0 8px; }
+.bl-tiles .k { font-size: 13px; color: var(--ink-2); }
+.bl-tiles .d { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+.bl-tiles .d.up { color: var(--warn); } .bl-tiles .d.down { color: var(--good); }
+@media (max-width: 1080px) { .today.bl-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .today.bl-tiles > div:nth-child(4) { border-left: 0; padding-left: 0; } .today.bl-tiles > div:nth-child(5) { border-left: 1px solid var(--rule); padding-left: 16px; } }
+@media (max-width: 560px) { .today.bl-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .today.bl-tiles > div:nth-child(odd) { border-left: 0; padding-left: 0; } .today.bl-tiles > div:nth-child(even) { border-left: 1px solid var(--rule); padding-left: 16px; } }
+.banner.storm { background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border-color: color-mix(in srgb, var(--warn) 40%, var(--rule)); }
+.banner.storm svg { flex: none; color: var(--warn); }
+.banner.storm .txt { flex: 1; min-width: 220px; }
+.banner.storm b { font-weight: 600; }

@@ -11,6 +11,7 @@ inverter losses, temperature, shading and the array's real size.
 """
 import json
 import math
+import os
 import threading
 import time
 import urllib.error
@@ -328,7 +329,16 @@ class Weather:
             w = sum(simulator.solar_w(lt + timedelta(minutes=m)) for m in range(0, 60, 10)) / 6
             raw.append(w / 1000.0)
             cloud = simulator._rand(lt.date().isoformat(), "cloud") * 0.75  # the simulator's cloudiness
-            hourly_codes.append(0 if cloud < 0.1 else 1 if cloud < 0.25 else 2 if cloud < 0.5 else 3)
+            code = 0 if cloud < 0.1 else 1 if cloud < 0.25 else 2 if cloud < 0.5 else 3
+            storm = os.environ.get("SIM_STORM")  # e.g. "14-17": thunderstorms tomorrow from 2 pm to 5 pm
+            if storm and lt.date() == (datetime.fromtimestamp(now, self.tz) + timedelta(days=1)).date():
+                try:
+                    h0, h1 = (int(x) for x in storm.split("-"))
+                    if h0 <= lt.hour < h1:
+                        code = 95
+                except ValueError:
+                    pass
+            hourly_codes.append(code)
         hourly = []
         for i, t in enumerate(starts):
             if t < now - 26 * 3600:

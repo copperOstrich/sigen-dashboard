@@ -90,6 +90,7 @@
     renderBattery(bt, p);
     renderToday(d.today || {});
     renderSystem(d);
+    renderStorm(d.storm, bt);
     renderEv(d.ev);
     if (evOn(d.ev) && !evData) loadEv();
   }
@@ -1640,7 +1641,7 @@
     if (dlg.returnValue !== "save") return;
     S.setApiBase($("api-input").value.trim());
     sub.restart(); evData = null; loadWeather(); loadOutlook(); loadMonthly(); loadTrends(); loadMoney(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
-    loadAppliances(); loadLimits(); loadWear();
+    loadAppliances(); loadLimits(); loadWear(); loadBaseload();
   });
 
 
@@ -1780,6 +1781,58 @@
     try { wearData = await S.fetchJSON("/api/battery-wear"); renderWear(); } catch (e) { /* banner */ }
   }
 
+
+  // ------------------------------------------------------------ storm warning
+  function renderStorm(st, bt) {
+    const b = $("storm-banner");
+    b.classList.toggle("show", !!st);
+    if (!st) { b.innerHTML = ""; return; }
+    const at = new Date(st.at * 1000), until = new Date(st.until * 1000), now = new Date();
+    const tm = (d) => d.toLocaleTimeString([], { hour: "numeric", minute: d.getMinutes() ? "2-digit" : undefined });
+    const day = (d) => (d.toDateString() === now.toDateString() ? "" : (() => { const t = new Date(now); t.setDate(now.getDate() + 1);
+      return d.toDateString() === t.toDateString() ? " tomorrow" : ` ${d.toLocaleDateString([], { weekday: "long" })}`; })());
+    const when = st.now ? `now, until about ${tm(until)}` : `from ${tm(at)}${day(at)} until about ${tm(until)}`;
+    const soc = st.soc != null ? Math.round(st.soc) : null;
+    const batt = soc == null ? "" : st.now ? ` The battery is at ${soc}%.` : soc >= 90 ? ` The battery should be nearly full by then (about ${soc}%).`
+      : ` The battery outlook has it at about ${soc}% by then.`;
+    const tip = soc != null && soc < 90 && !st.now ? " To keep more in reserve for a power cut, raise the backup reserve in the mySigen app beforehand, and lower it again afterwards." : "";
+    b.innerHTML = "";
+    const ic = el("svg", { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 1.8, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" });
+    ic.append(el("path", { d: "M17.5 15.5a4 4 0 0 0-.9-7.9A6 6 0 0 0 5 9.5a3.5 3.5 0 0 0 .5 7" }), el("path", { d: "M12 12l-2.5 4.5h4L11 21" }));
+    b.append(ic, el("div", { class: "txt" }, el("b", { text: `${st.desc} forecast ${when}.` }), ` Power cuts are more likely in storms.${batt}${tip}`));
+  }
+
+  // ------------------------------------------------------------ always-on use
+  let blData = null;
+  function drawBaseload() {
+    const d = blData, panel = $("bl-panel");
+    panel.hidden = !(d && d.enabled);
+    if (panel.hidden) return;
+    const tiles = $("bl-tiles"); tiles.innerHTML = "";
+    const tile = (k, v, u, dtext, cls) => el("div", {}, el("div", { class: "k", text: k }), el("div", { class: "v" }, v, u ? el("small", { text: u }) : null),
+      dtext ? el("div", { class: "d" + (cls ? " " + cls : ""), text: dtext }) : null);
+    const ch = d.change_w;
+    tiles.append(
+      tile("Always on now", d.now_w, "W", "middle of the last 7 nights"),
+      tile("Four weeks ago", d.before_w ?? "–", d.before_w != null ? "W" : "",
+        ch == null ? "not enough history yet" : Math.abs(ch) < 10 ? "about the same" : `${ch > 0 ? "up" : "down"} ${Math.abs(ch)} W since`, ch == null || Math.abs(ch) < 10 ? null : ch > 0 ? "up" : "down"),
+      tile("A year of it", d.kwh_year.toLocaleString(), "kWh", `${(d.now_w * 24 / 1000).toFixed(1)} kWh a day`),
+      tile("Costs about", d.cost_year != null ? `$${d.cost_year.toLocaleString()}` : "–", d.cost_year != null ? "a year" : "",
+        d.price_c != null ? `at ${d.price_c}c/kWh` : "needs retailer prices"),
+      tile("Share of home use", d.share != null ? d.share : "–", d.share != null ? "%" : "", "the last 30 days"));
+    const t = d.nights.map((x) => new Date(x.day + "T03:00:00").getTime() / 1000);
+    C.lineChart($("bl-chart"), { t, series: [{ key: "w", label: "Always on", color: "var(--home)", values: d.nights.map((x) => x.w) }],
+      height: 170, yMin: 0, gapSeconds: 86400 * 3, yFmt: (v) => `${v} W`, tipFmt: (v) => (v == null ? "–" : `${Math.round(v)} W`),
+      tipTitle: (x) => `Night of ${new Date((x - 86400) * 1000).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}`,
+      ariaLabel: "Always-on use each night" });
+    $("bl-note").textContent = "The level the house doesn't drop below between midnight and 5 am (the quietest tenth of the night): fridge and freezer, network gear, standby power, pumps and anything left on. " +
+      "Every 10 W is about 88 kWh a year. A step up that stays is worth hunting down: switch things off at the wall one at a time and watch Home in Right now." +
+      (d.price_c != null ? " Priced at your average buy price, though overnight it mostly comes from the battery." : "");
+  }
+  async function loadBaseload() {
+    try { blData = await S.fetchJSON("/api/baseload?days=90"); drawBaseload(); } catch (e) { /* banner */ }
+  }
+
   // ------------------------------------------------------------ desktop: widget switch + updates
   if (S.isDesktop) {
     const wb = $("widget-btn");
@@ -1846,15 +1899,15 @@
   setInterval(loadWeather, 10 * 60000);
   loadOutlook();
   setInterval(loadOutlook, 5 * 60000);
-  loadMonthly(); loadTrends(); loadMoney(); loadAppliances(); loadLimits(); loadWear();
-  setInterval(() => { loadMonthly(); loadTrends(); loadMoney(); loadLimits(); loadWear(); }, 30 * 60000);
+  loadMonthly(); loadTrends(); loadMoney(); loadAppliances(); loadLimits(); loadWear(); loadBaseload();
+  setInterval(() => { loadMonthly(); loadTrends(); loadMoney(); loadLimits(); loadWear(); loadBaseload(); }, 30 * 60000);
   setInterval(loadAppliances, 5 * 60000);
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);
   setInterval(loadDaily, 10 * 60000);
-  window.SigenRedraw = () => { drawLimits(); drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); };
+  window.SigenRedraw = () => { drawBaseload(); drawLimits(); drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); };
   let rt;
-  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawLimits(); drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); }, 120); })
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawBaseload(); drawLimits(); drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); }, 120); })
     .observe(document.querySelector(".wrap"));
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawHistory(); drawDaily(); });
 })();

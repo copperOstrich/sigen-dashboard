@@ -183,7 +183,59 @@ solar, battery health and temperatures.
   <img alt="Trends chart of daily lowest and average insulation resistance over four months, staying between 0.5 and 0.8 megohms, above the warning and alarm lines" src="docs/screenshots/trends-light.png">
 </picture>
 
+**Solar limits**: solar the panels could have made but were held back from, and why: the
+export limit, a negative feed-in price, the inverter at its maximum or a full battery, with what
+those exports would have earned.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/limits-dark.png">
+  <img alt="Solar limits panel: 18.8 kWh held back in the last 30 days, mostly at the export limit, with daily bars by reason" src="docs/screenshots/limits-light.png">
+</picture>
+
+**Battery wear**: cycles, energy through the battery, health, round trip and temperature,
+against your warranty, including when the warranty's energy limit is likely to be reached.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/battery-wear-dark.png">
+  <img alt="Battery wear panel with tiles for cycles, energy through the battery, health, health at warranty end, round trip and temperature" src="docs/screenshots/battery-wear-light.png">
+</picture>
+
+**Always-on use**: what the house draws overnight when nothing much is running, how it's
+trending and what it costs a year.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/always-on-dark.png">
+  <img alt="Always-on use panel: 400 W now, 3,504 kWh and about $949 a year, with a chart of each night's baseline" src="docs/screenshots/always-on-light.png">
+</picture>
+
+**Best times to run appliances**: when to start the dishwasher, washing machine and dryer in
+the next 24 hours, from the battery outlook and price forecast.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/appliances-dark.png">
+  <img alt="Best times to run appliances: a table with the best start time, cost then and cost if started now for each appliance" src="docs/screenshots/appliances-light.png">
+</picture>
+
+**The grid, three ways**: all five regions as tiles with how full each interconnector is
+(above, with the price chart), as nodes and wires coloured by price, or as a chain following
+how the grid connects. Pick one in Settings.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/grid-map-dark.png">
+  <img alt="The grid as nodes and wires: each region a ring coloured by price against the market average, with moving wires showing the flows" src="docs/screenshots/grid-map-light.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/grid-chain-dark.png">
+  <img alt="The grid as a chain: Queensland, New South Wales, Victoria and South Australia in a line with flow arrows, and Tasmania below Victoria" src="docs/screenshots/grid-chain-light.png">
+</picture>
+
 **Arrange panels**: hide what you don't use, and change the order and width of the rest.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/arrange-dark.png">
+  <img alt="Arrange panels window listing each panel with a show checkbox, a width choice and up and down buttons" src="docs/screenshots/arrange-light.png" width="480">
+</picture>
 
 **Settings** (the gear): every setting below, grouped, with what each one does. Saving writes
 `sigen.env` in the data folder (the previous file is kept as `sigen.env.bak`, and your comments
@@ -194,8 +246,8 @@ at home too, with **Show** to reveal one. If the dashboard sits behind a reverse
 visitor looks local, so set `SETTINGS_EDIT_FROM` to the addresses allowed to make changes.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/arrange-dark.png">
-  <img alt="Arrange panels window listing each panel with a show checkbox, a width choice and up and down buttons" src="docs/screenshots/arrange-light.png" width="480">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/settings-dark.png">
+  <img alt="Settings page: settings grouped into sections, each with its value, default and an explanation, and a note that changes can be made from this network" src="docs/screenshots/settings-light.png">
 </picture>
 
 **Compact widget and phone**: the small widget view (`/widget.html`), and the dashboard
@@ -521,6 +573,14 @@ again and what's left over, and whether charging from the grid overnight is wort
 model of self-consumption, not of your retailer's control: with Amber SmartShift or another
 VPP managing the battery, it may export or charge differently, and the panel says so.
 
+### Storm warnings
+
+When the weather forecast shows thunderstorms in the next 36 hours, a banner says when, and how
+full the battery outlook expects the battery to be by then. Storms make power cuts more likely,
+so if it won't be nearly full, it suggests raising the backup reserve in the mySigen app
+beforehand (the dashboard only reads the inverter; it never changes its settings). The warning
+also goes in the event log.
+
 ### Best times to run appliances
 
 From the same projection and your retailer's price forecast, the dashboard suggests when to
@@ -645,6 +705,14 @@ day under 40%, or a string making next to nothing for 20 minutes while the other
 a red alarm. New shade, dirt, a failed panel or optimiser, or a tripped isolator show up this way.
 It starts after a week of string readings.
 
+### Always-on use
+
+Each night the home's use (without the car) between midnight and 5 am is sorted and its
+quietest tenth taken: the level the house doesn't drop below, made up of the fridge and
+freezer, network gear, standby power and anything left on. The panel shows the last week's
+level, the change from four weeks earlier, what a year of it adds up to and costs at your
+average buy price, and each night over the last 90 days. Every 10 W is about 88 kWh a year.
+
 ### Backups
 
 Each night (`BACKUP_TIME`, default 2:30 am) the database is copied while the collector keeps
@@ -725,7 +793,8 @@ hand). Values in `sigen.env` win over the container's environment.
 
 Simulator only: `SIM_PV_KWP`, `SIM_BATTERY_KWH`, `SIM_INVERTER_KW`, `SIM_EXPORT_LIMIT_KW`,
 `SIM_PV_STRINGS`, `SIM_EV_CHARGER`, `SIM_CHARGER_MODBUS`, `SIM_INSULATION_MOHM`, `SIM_ALARMS`,
-`SIM_STRING_FAULT` (`3:0.6:2` = PV3 at 60% for the last 2 days), `DEMO_HISTORY_DAYS`.
+`SIM_STRING_FAULT` (`3:0.6:2` = PV3 at 60% for the last 2 days), `SIM_STORM` (`14-17` =
+thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 
 ## API
 
@@ -751,6 +820,7 @@ Simulator only: `SIM_PV_KWP`, `SIM_BATTERY_KWH`, `SIM_INVERTER_KW`, `SIM_EXPORT_
 | `GET /api/strings-health` | Each solar string against its usual output over the last three days |
 | `GET /api/limits?days=30` | Solar held back each day by reason (export limit, negative price, inverter, battery full), with the learned limits |
 | `GET /api/battery-wear` | Cycles, throughput, round trip, health trend and warranty projection |
+| `GET /api/baseload?days=90` | Always-on use: each night's baseline, now and four weeks ago, and a year's kWh and cost |
 | `GET /api/appliances` | Best start time and cost for each appliance in `APPLIANCES` |
 | `GET /api/backups` | Backup status and the backups kept; `POST` (home network only) backs up now |
 | `GET /api/health` | `{ok, status, updated, version}` for monitoring |

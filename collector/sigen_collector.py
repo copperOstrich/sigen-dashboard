@@ -94,13 +94,14 @@ from limits import Limits  # noqa: E402
 from wear import battery_wear  # noqa: E402
 from advice import appliance_advice, parse as parse_appliances  # noqa: E402
 from mqtt import Mqtt  # noqa: E402
+from baseload import baseload  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.12.0"
+VERSION = "1.13.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -790,6 +791,7 @@ class Collector:
         self.health = StringsHealth(store, TZ, event=store.event, log=log)
         self.backups = self.mqtt = None  # set by main()
         self._backup_status, self._backup_at = None, 0
+        self.storm, self._storm_logged = None, None
 
     def snapshot(self):
         with self.cond:
@@ -863,10 +865,41 @@ class Collector:
                 res = self.outlook.compute(self.state, self.weather.snapshot() if self.weather else None,
                                            self.retailer.snapshot() if self.retailer else None, now)
                 self.outlook_summary = {k: v for k, v in res.items() if k != "projection"}
+                self.storm = self._storm_check(now)
             except Exception as e:  # the outlook is a nice-to-have; never stop the readings for it
                 self.outlook.computed = now
                 log("Battery outlook failed:", f"{type(e).__name__}: {e}")
                 traceback.print_exc()
+
+    def _storm_check(self, now):
+        """Thunderstorms forecast in the next 36 hours: when, and how full the battery should be then."""
+        w = self.weather.snapshot() if self.weather else None
+        if not w or w.get("status") != "ok":
+            return None
+        hours = sorted((h for h in w.get("hourly") or [] if h.get("icon") == "storm" and now - 3600 <= h["t"] <= now + 36 * 3600),
+                       key=lambda h: h["t"])
+        if not hours:
+            return None
+        start = hours[0]["t"]
+        end = start + 3600
+        for h in hours[1:]:
+            if h["t"] > end + 3600:  # a later, separate storm: just the first
+                break
+            end = h["t"] + 3600
+        soc = None
+        for r in self.outlook.rows or []:
+            if r["t"] <= max(start, now):
+                soc = r["soc"]
+        live = (self.state.get("battery") or {}).get("soc")
+        storm = {"at": int(start), "until": int(end), "desc": hours[0].get("desc") or "Thunderstorms",
+                 "soc": soc if start > now else live, "now": start <= now}
+        if self._storm_logged != start:
+            self._storm_logged = start
+            lt = datetime.fromtimestamp(start, TZ)  # (no %-I: Alpine's C library doesn't have it)
+            when = f"{lt:%a} {lt.hour % 12 or 12} {'am' if lt.hour < 12 else 'pm'}"
+            self.store.event("weather", f"{storm['desc']} forecast from {when}" +
+                             (f"; the battery should be about {round(storm['soc'])}% then" if storm["soc"] is not None else ""))
+        return storm
 
     def state_from(self, p, inv, now, ev=None):
         day = local_day(now)
@@ -1011,6 +1044,7 @@ class Collector:
             "aemo": self.aemo.summary() if self.aemo else {"enabled": False, "status": "off"},
             "weather": self.weather.summary() if self.weather else {"enabled": False, "status": "off"},
             "outlook": self.outlook_summary or {"enabled": False},
+            "storm": self.storm if self.storm and self.storm["until"] > now else None,
         }
         with self.cond:
             state["target"] = self.state["target"]
@@ -1403,6 +1437,8 @@ class Api(BaseHTTPRequestHandler):
                 return self._json(battery_wear(self.store, self.collector.snapshot(), TZ, installed=SYSTEM_INSTALLED or None,
                                                warranty_years=BATTERY_WARRANTY_YEARS, warranty_mwh=BATTERY_WARRANTY_MWH,
                                                warranty_soh=BATTERY_WARRANTY_SOH))
+            if url.path == "/api/baseload":
+                return self._json(baseload(self.store, TZ, min(400, max(7, int(q.get("days", ["90"])[0])))))
             if url.path == "/api/appliances":
                 o = self.collector.outlook
                 fc = (self.retailer.snapshot().get("forecast") if self.retailer else None) or []

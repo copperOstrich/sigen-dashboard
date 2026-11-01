@@ -2,6 +2,18 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.13.0
+
+- **Always-on use** panel: what the house draws overnight without the car (the quietest
+  tenth of midnight to 5 am), the last week against four weeks ago, what a year of it adds up
+  to and costs, and each night over the last 90 days
+- **Storm warnings**: when thunderstorms are forecast in the next 36 hours, a banner says when
+  and how full the battery should be by then, with a suggestion to raise the backup reserve in
+  the mySigen app if it won't be nearly full. Also logged as an event
+- README: screenshots of the new panels (Solar limits, Battery wear, Always-on use, Best times
+  to run appliances), the three grid styles and the Settings page; the complete-dashboard and
+  prices screenshots are updated
+
 ## 1.12.0
 
 - The grid: the all-regions map is restyled to match the rest of the dashboard, in a choice of
