@@ -32,7 +32,8 @@ Catch regressions before they reach the NAS, and keep the code easy to change.
 - [x] A smoke test that starts the collector on the simulator and checks every page and API
       endpoint answers without errors
 - [x] Both run on every push (GitHub Actions, "Tests")
-- [ ] Split `sigen_collector.py` (store, HTTP API, collector loop) into modules
+- [x] Database code split out of `sigen_collector.py` into `store.py` (1.15.1)
+- [ ] Split the HTTP API and the collector loop out too
 - [x] Data feeds in the System panel: each feed's status, last update and errors, backup age, disk space (1.15)
 
 ## Phase C: reconcile and report (1.16)

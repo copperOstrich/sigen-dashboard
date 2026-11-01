@@ -2,6 +2,12 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.15.1
+
+- Internal: the database code (minute readings, prices, retailer costs, bills, car sessions,
+  events and the queries behind the dashboard) moved out of `sigen_collector.py` into its own
+  module, `collector/store.py`. No change to how anything works; unit and smoke tests pass
+
 ## 1.15.0
 
 - Payback, retailer views: days from before the collector ran (mySigen imports) are now priced
