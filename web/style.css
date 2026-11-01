@@ -627,3 +627,16 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .ev-plan-out { margin-top: 8px; color: var(--ink-2); }
 .ev-plan-out b { color: var(--ink); }
 .ev-plan-out ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* ---- very wide screens (wall.js): every panel in columns, no scrolling */
+.wrap.wall { max-width: none; padding: 14px 18px 0; }
+.wrap.wall .topbar { margin-bottom: 10px; }
+.wrap.wall > .grid { display: grid; gap: 14px; align-items: start; }
+.wall-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.wall-col > section { grid-column: auto; }
+.foot.wall { max-width: none; margin: 0; padding: 8px 18px 10px; }
+body.wall-mode { overflow-x: hidden; }
+.wall-pref { margin: 14px 0 4px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; align-items: center; font-size: 14px; }
+.wall-pref select { font: inherit; font-size: 14px; padding: 5px 8px; border-radius: var(--r-ctl); border: 1px solid var(--rule-strong); background: var(--surface-2); color: var(--ink); }
+.wall-pref p { grid-column: 1 / -1; margin: 0; font-size: 12.5px; }
+@media (max-width: 560px) { .wall-pref { grid-template-columns: 1fr; } }

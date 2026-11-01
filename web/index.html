@@ -425,6 +425,14 @@
     <p class="muted" style="margin:0 0 10px;font-size:14px">Drag to reorder, or use the arrows. Untick a panel to hide it.
       Saved in this browser, so your phone and computer can each have their own layout.</p>
     <ol class="layout-list" id="layout-list"></ol>
+    <div class="wall-pref">
+      <label for="wall-pref">On very wide screens</label>
+      <select id="wall-pref">
+        <option value="auto">Show every panel at once, in columns</option>
+        <option value="off">Keep this layout</option>
+      </select>
+      <p class="muted">For ultrawide monitors (around 3440 × 1440 and wider): panels go in columns, scaled down a little if needed, so nothing needs scrolling.</p>
+    </div>
     <div class="row">
       <button class="ghost-btn" type="button" id="layout-reset">Reset to default</button>
       <span class="spacer" style="flex:1"></span>
@@ -451,5 +459,6 @@
 <script src="charts.js"></script>
 <script src="dashboard.js"></script>
 <script src="layout.js"></script>
+<script src="wall.js"></script>
 </body>
 </html>

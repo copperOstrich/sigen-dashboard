@@ -2,6 +2,15 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.21.0
+
+- **Ultrawide monitors**: when the window is about 3440 × 1440 or wider (more than twice as wide
+  as it is tall), every panel shows at once, in columns, with no scrolling. Panels keep the
+  Arrange panels order, and are scaled down only as far as needed for everything to fit (to 75%
+  at most). It repacks itself when panels appear or change size, and goes back to the normal
+  layout when the window is narrower (half of a 5120-wide screen keeps the normal layout).
+  **Arrange panels → On very wide screens** turns it off
+
 ## 1.20.0
 
 Problems that reach you: **phone alerts** through ntfy (free, no account; iPhone and Android app

@@ -672,6 +672,14 @@ Earlier versions had a Windows desktop app. It's been withdrawn: without a paid 
 certificate, Windows Smart App Control (and macOS) block it, and the browser does the same job.
 If you installed it, uninstall it from **Settings → Apps**.
 
+### Ultrawide monitors
+
+On a very wide screen (about 3440 × 1440 and wider, more than twice as wide as it is tall, such as
+5120 × 1440) the dashboard shows every panel at once with no scrolling. The panels are laid out
+in columns in your Arrange panels order, and scaled down only as far as needed (to 75% at most).
+Narrower windows, including half of a 5120-wide screen, keep the normal layout, and it switches
+as you resize. Turn it off under **Arrange panels → On very wide screens**.
+
 ## reMarkable 2 sleep screen (optional)
 
 The collector draws an e-ink version of the dashboard at `http://<collector>/eink.png`:
