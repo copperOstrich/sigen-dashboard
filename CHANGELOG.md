@@ -2,6 +2,26 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.14.0
+
+- **Bills win**: a bill now sets its period's costs exactly. Each day's bought and earned amounts
+  are scaled so the period adds up to the bill, so billed months match to the cent and stop
+  moving. Bills imported before this are picked up again from the `import` folder automatically
+- **Amber usage reports**: the 5-minute usage CSV from the Amber app or monthly email can go in
+  the `import` folder; each day's costs come from it exactly (by Amber's own Day column) and
+  aren't replaced by Amber's API figures. It also reaches back further than the API's 90 days
+- **Supply charge by date**: `RETAILER_SUPPLY_C_DAY` takes `2026-05-10:108.96,2026-07-01:119.6` so
+  months before a price change use the rate in force then (a single number still works)
+- Money panel: months are tagged **provisional** (some days still on Amber's estimates or the
+  dashboard's own pricing), **billed** (matches your bill) or **spike** (a price spike earned or
+  cost real money that month), and recent spike days are listed with what they earned and, where
+  the collector was running, the peak price and how long it lasted
+- **Tests**: unit tests for settings checks, importers, bill scaling, dated rates, export-limit
+  learning, appliance timing, MQTT packets and backup pruning, and a smoke test that runs the
+  collector on the simulator and checks every page and endpoint, a settings save and restart, and
+  the cross-site guard. Both run on every push
+- `ROADMAP.md`: the plan for the next phases
+
 ## 1.13.0
 
 - **Always-on use** panel: what the house draws overnight without the car (the quietest

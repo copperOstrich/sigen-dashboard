@@ -86,7 +86,7 @@ from charger import ChargerWatch  # noqa: E402
 from weather import Weather  # noqa: E402
 from outlook import Outlook  # noqa: E402
 from money import Money  # noqa: E402
-from importer import import_folder  # noqa: E402
+from importer import import_folder, reload_bills  # noqa: E402
 from fuel import Fuel  # noqa: E402
 from backup import Backups  # noqa: E402
 from strings_health import StringsHealth  # noqa: E402
@@ -101,7 +101,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.13.0"
+VERSION = "1.14.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -148,7 +148,7 @@ INSULATION_WARN = max(INSULATION_MIN, _env_num("INSULATION_WARN_MOHM", 0.5))
 COMPARE_PLANS = (ENV("COMPARE_PLANS", "") or "").strip().lower()
 SYSTEM_COST = _env_num("SYSTEM_COST", None)
 SYSTEM_INSTALLED = (ENV("SYSTEM_INSTALLED", "") or "").strip()
-RETAILER_SUPPLY_C_DAY = _env_num("RETAILER_SUPPLY_C_DAY", None)
+RETAILER_SUPPLY_C_DAY = (ENV("RETAILER_SUPPLY_C_DAY", "") or "").strip() or None  # a number, or dated: see money.parse_dated
 RETAILER_FEE_MONTHLY = _env_num("RETAILER_FEE_MONTHLY", None)
 RETAILER_SINCE = (ENV("RETAILER_SINCE", "") or "").strip()
 # the car against a fuel car (see fuel.py)
@@ -233,6 +233,11 @@ class Store:
             acols = {r[1] for r in self.db.execute("PRAGMA table_info(amber_days)")}
             if "avg_buy_c" not in acols:  # the day's average buy price (for days without minute readings)
                 self.db.execute("ALTER TABLE amber_days ADD COLUMN avg_buy_c REAL")
+            if "source" not in acols:  # "api" or "csv" (an imported Amber usage report, which the API doesn't replace)
+                self.db.execute("ALTER TABLE amber_days ADD COLUMN source TEXT")
+            # retailer bills: each one sets its period's costs exactly (see daily())
+            self.db.execute("CREATE TABLE IF NOT EXISTS bills(start TEXT, end TEXT, energy_cost REAL, export_credit REAL, "
+                            "avg_buy_c REAL, source TEXT, PRIMARY KEY(start, end))")
             cols = {r[1] for r in self.db.execute("PRAGMA table_info(samples)")}
             # buy_c/sell_c: retailer price (c/kWh, Amber sign) in force that minute; ev: AC charger W
             for c in ("buy_c", "sell_c", "ev"):
@@ -263,13 +268,31 @@ class Store:
             self.db.executemany("INSERT OR REPLACE INTO prices VALUES (?,?,?,?,?,?,?,?)", rows)
             self.db.commit()
 
-    def save_amber_days(self, days):
+    def save_amber_days(self, days, source="api"):
+        """Amber's daily costs. A day from an imported usage report (source "csv", every read actual)
+        isn't replaced by the API's figures for it."""
         with self.lock:
-            self.db.executemany("INSERT OR REPLACE INTO amber_days (day, import_kwh, import_cost, export_kwh, "
-                                "export_cost, estimated, avg_buy_c) VALUES (?,?,?,?,?,?,?)", [
-                (d, v["import_kwh"], v["import_cost"], v["export_kwh"], v["export_cost"], int(v["estimated"]),
-                 v.get("avg_buy_c")) for d, v in days.items()])
+            self.db.executemany(
+                "INSERT INTO amber_days (day, import_kwh, import_cost, export_kwh, export_cost, estimated, avg_buy_c, source) "
+                "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(day) DO UPDATE SET import_kwh=excluded.import_kwh, "
+                "import_cost=excluded.import_cost, export_kwh=excluded.export_kwh, export_cost=excluded.export_cost, "
+                "estimated=excluded.estimated, avg_buy_c=excluded.avg_buy_c, source=excluded.source "
+                "WHERE excluded.source = 'csv' OR amber_days.source IS NOT 'csv' OR amber_days.estimated = 1", [
+                    (d, v["import_kwh"], v["import_cost"], v["export_kwh"], v["export_cost"], int(v["estimated"]),
+                     v.get("avg_buy_c"), source) for d, v in days.items()])
             self.db.commit()
+
+    def save_bill(self, b, source=""):
+        with self.lock:
+            self.db.execute("INSERT OR REPLACE INTO bills VALUES (?,?,?,?,?,?)",
+                            (b["start"], b["end"], b["energy_cost"], b["export_credit"], b.get("avg_buy_c"), source))
+            self.db.commit()
+
+    def bills(self):
+        with self.lock:
+            return [dict(zip(("start", "end", "energy_cost", "export_credit", "avg_buy_c", "source"), r))
+                    for r in self.db.execute("SELECT start, end, energy_cost, export_credit, avg_buy_c, source FROM bills "
+                                             "ORDER BY start")]
 
     def amber_days_have(self, since):
         with self.lock:
@@ -610,7 +633,37 @@ class Store:
         return out
 
     def daily(self, days):
+        """Daily totals and costs for the last `days` days. A bill sets its whole period's costs: each
+        day's bought and earned amounts are scaled so the period adds up to the bill exactly (the
+        range is widened to whole bills first, so a bill cut by the window is still scaled right)."""
         since = (datetime.now(TZ) - timedelta(days=days)).strftime("%Y-%m-%d")
+        bills = [b for b in self.bills() if b["end"] > since]
+        wide = min([since] + [(datetime.fromisoformat(b["start"]) - timedelta(days=1)).strftime("%Y-%m-%d") for b in bills])
+        out = self._daily_since(wide)
+        for b in bills:
+            self._apply_bill_to(out, b)
+        return [e for e in out if e["day"] > since]
+
+    @staticmethod
+    def _apply_bill_to(out, b):
+        period = [e for e in out if b["start"] <= e["day"] <= b["end"] and e.get("bought") is not None]
+        if not period:
+            return
+        for key, target, kwh in (("bought", b["energy_cost"], "import"), ("earned", b["export_credit"], "export")):
+            have = sum(e[key] for e in period)
+            if have > 0:
+                weights = [e[key] / have for e in period]
+            else:  # nothing recorded: spread by energy instead
+                k = sum(e.get(kwh) or 0 for e in period)
+                weights = [((e.get(kwh) or 0) / k) if k else 1 / len(period) for e in period]
+            vals = [round(target * w, 2) for w in weights]
+            vals[-1] = round(vals[-1] + target - sum(vals), 2)  # rounding left over: the period still adds up
+            for e, v in zip(period, vals):
+                e[key] = v
+        for e in period:
+            e["cost"], e["cost_source"] = round(e["bought"] - e["earned"], 2), "bill"
+
+    def _daily_since(self, since):
         cols = ",".join(f"MIN({c}),MAX({c})" for c in COUNTERS)
         with self.lock:
             rows = self.db.execute(
@@ -1552,6 +1605,7 @@ def main():
     store = Store(DATA_DIR / ("simulator.db" if SIMULATE else "sigen.db"))
     host, port = (start_simulator(store) if SIMULATE else (HOST, PORT))
     import_folder(store, DATA_DIR, log=log)  # past days from a mySigen export, if any were dropped in
+    reload_bills(store, DATA_DIR, log=log)   # bills imported before they were kept
     (DATA_DIR / "import").mkdir(exist_ok=True)
     retailer = make_retailer(store)
     if retailer and RETAILER_SINCE:

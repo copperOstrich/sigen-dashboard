@@ -575,3 +575,9 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .banner.storm svg { flex: none; color: var(--warn); }
 .banner.storm .txt { flex: 1; min-width: 220px; }
 .banner.storm b { font-weight: 600; }
+
+/* ---------------------------------------------------------------- money tags (1.14) */
+#money-table .tag { font-size: 11px; padding: 0 6px; margin-left: 6px; font-family: var(--font); vertical-align: 1px; }
+#money-table .tag.prov { border-color: var(--warn); color: var(--warn); }
+#money-table .tag.billed { border-color: var(--good); color: var(--good); }
+#money-table .tag.spike-tag { border-color: var(--grid); color: var(--grid); }

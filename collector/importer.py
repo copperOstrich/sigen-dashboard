@@ -20,8 +20,15 @@ energy_cost is the usage and network demand charges (not the supply charge or me
 which come from RETAILER_SUPPLY_C_DAY / RETAILER_FEE_MONTHLY); export_credit is what the bill
 credits for exports; avg_buy_c (optional) is the bill's average usage rate in c/kWh. Each bill is
 spread over its days that have no costs yet, in proportion to each day's grid use and exports
-from the imported mySigen days, after taking off days whose costs are already known. Each file is imported once and renamed to "*.imported". Imported days only fill in
-days the collector didn't record itself; they never replace its own readings. Other exports
+from the imported mySigen days, after taking off days whose costs are already known. Each file is imported once and renamed to "*.imported". Bills are also kept, and
+from 1.14 a bill wins over everything else for its period: each day's bought and earned amounts are
+scaled so the period adds up to the bill exactly (see Store.daily). Imported days only fill in
+days the collector didn't record itself; they never replace its own readings.
+
+Amber's usage report (Amber app: Usage, download, or the monthly email, "Amber Usage <start> to
+<end>.csv": one row per 5-minute interval and channel with Price, Usage, Cost in cents and Read
+Quality) can go in the same folder too: each day's import and export cost is taken from it exactly,
+by Amber's own Day column, and kept in preference to Amber's API figures. Other exports
 (the 5-minute "Power" file, or yearly totals) are recognised and skipped.
 
 Standard library only: an .xlsx file is a zip of XML.
@@ -137,6 +144,61 @@ def parse_bills(rows):
     return out
 
 
+def parse_amber_usage(rows):
+    """{day: {import_kwh, import_cost, export_kwh, export_cost, estimated, avg_buy_c}} (costs in cents,
+    export_cost negative when paid) from an Amber usage report, or None if it isn't one."""
+    if not rows:
+        return None
+    head = [(h or "").strip().lower() for h in rows[0]]
+    need = {"day", "channel type", "price", "usage", "cost", "read quality"}
+    if not need <= set(head):
+        return None
+    ix = {h: i for i, h in enumerate(head)}
+    out, prices = {}, {}
+    for r in rows[1:]:
+        if len(r) < len(head) or not DAY.match((r[ix["day"]] or "").strip()):
+            continue
+        day, ch = r[ix["day"]].strip(), r[ix["channel type"]].strip().lower()
+        try:
+            use, cost, price = float(r[ix["usage"]]), float(r[ix["cost"]]), float(r[ix["price"]])
+        except ValueError:
+            continue
+        d = out.setdefault(day, {"import_kwh": 0.0, "import_cost": 0.0, "export_kwh": 0.0, "export_cost": 0.0,
+                                 "estimated": False})
+        if ch.startswith("feed"):
+            d["export_kwh"] += abs(use); d["export_cost"] += cost
+        else:
+            d["import_kwh"] += use; d["import_cost"] += cost
+            if ch == "general":
+                prices.setdefault(day, []).append(price)
+        if r[ix["read quality"]].strip().upper() != "ACTUAL":
+            d["estimated"] = True
+    for day, ps in prices.items():
+        out[day]["avg_buy_c"] = sum(ps) / len(ps)
+    if not out:
+        raise ValueError("the Amber usage report has no rows")
+    return out
+
+
+def reload_bills(store, data_dir, log=print):
+    """Bills imported before 1.14 weren't kept: read them again from the *.imported files, once."""
+    folder = Path(data_dir) / "import"
+    if store.bills() or not folder.is_dir():
+        return 0
+    n = 0
+    for f in sorted(folder.glob("*.csv.imported")):
+        try:
+            bs = parse_bills(read_rows(f))
+        except (ValueError, OSError, IndexError):
+            continue
+        for b in bs or []:
+            store.save_bill(b, source=f.name[:-len(".imported")])
+            n += 1
+    if n:
+        log(f"Import: kept {n} bills from earlier imports; they now set those periods' costs exactly")
+    return n
+
+
 def import_folder(store, data_dir, log=print):
     """Import every new file in DATA_DIR/import (mySigen days first, then bills). Returns days imported."""
     folder = Path(data_dir) / "import"
@@ -148,13 +210,23 @@ def import_folder(store, data_dir, log=print):
     for f in files:
         if f.suffix.lower() == ".csv":
             try:
-                b = parse_bills(read_rows(f))
+                rows = read_rows(f)
+                b = parse_bills(rows)
+                usage = None if b is not None else parse_amber_usage(rows)
             except (ValueError, OSError, IndexError) as e:
                 log(f"Import: skipped {f.name}: {e}")
                 f.rename(f.with_name(f.name + ".skipped"))
                 continue
             if b is not None:
                 bills.append((f, b))
+                continue
+            if usage is not None:
+                store.save_amber_days(usage, source="csv")
+                est = sum(1 for v in usage.values() if v["estimated"])
+                net = sum(v["import_cost"] + v["export_cost"] for v in usage.values()) / 100
+                log(f"Import: {f.name}: Amber usage for {len(usage)} days, {min(usage)} to {max(usage)}, "
+                    f"net ${net:.2f}" + (f" ({est} days still have estimated reads)" if est else ""))
+                f.rename(f.with_name(f.name + ".imported"))
                 continue
         try:
             days = parse_daily(read_rows(f))
@@ -169,6 +241,7 @@ def import_folder(store, data_dir, log=print):
         total += n
     for f, bs in bills:  # after the days, so each bill can be spread over them
         for b in bs:
+            store.save_bill(b, source=f.name)
             r = store.apply_bill(b)
             log(f"Import: {f.name}: bill {b['start']} to {b['end']}: ${b['energy_cost']:.2f} energy, "
                 f"${b['export_credit']:.2f} credit, spread over {r['filled']} days"

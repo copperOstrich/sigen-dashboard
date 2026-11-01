@@ -53,6 +53,35 @@ TRADE_GAP_S = 300      # minutes this far apart still belong to one event
 TRADE_MIN_KWH = 0.2    # smaller events are ignored
 
 
+def parse_dated(spec):
+    """A setting that may change over time: "119.6", or "2026-05-10:108.96,2026-07-01:119.6" (each value
+    from its date; days before the first date use the first). [(from, value)] sorted, or [] if unset."""
+    if spec is None or str(spec).strip() == "":
+        return []
+    out = []
+    for part in str(spec).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            d, v = part.split(":", 1)
+            out.append((date.fromisoformat(d.strip()).isoformat(), float(v)))
+        else:
+            out.append(("", float(part)))
+    return sorted(out)
+
+
+def dated_on(rates, day):
+    """The value in force on `day` from parse_dated()'s list (None if empty)."""
+    if not rates:
+        return None
+    v = rates[0][1]
+    for d, x in rates:
+        if not d or d <= day:
+            v = x
+    return v
+
+
 def _rule_matches(rule, lt):
     h = rule.get("hours")
     if h and not (h[0] <= lt.hour < h[1] if h[0] < h[1] else (lt.hour >= h[0] or lt.hour < h[1])):
@@ -98,7 +127,13 @@ class Money:
                 self.installed = date.fromisoformat(installed.strip())
             except ValueError:
                 log(f"SYSTEM_INSTALLED '{installed}' isn't a date like 2024-03-15; ignored")
-        self.supply_c_day, self.fee_monthly = supply_c_day, fee_monthly
+        try:
+            self.supply_rates = parse_dated(supply_c_day)
+        except ValueError:
+            log(f"RETAILER_SUPPLY_C_DAY '{supply_c_day}' isn't a number or a list like 2026-05-10:108.96,2026-07-01:119.6; ignored")
+            self.supply_rates = []
+        self.supply_c_day = dated_on(self.supply_rates, date.today().isoformat())  # today's, for display
+        self.fee_monthly = fee_monthly
         self.since = ""  # the day you started with your current retailer (earlier days were someone else)
         if retailer_since:
             try:
@@ -169,9 +204,10 @@ class Money:
         self._day_cache[key] = out
         return out
 
-    def _fixed_per_day(self):
-        """Your own retailer's supply charge and membership fee, per day ($), when set."""
-        return ((self.supply_c_day or 0) / 100) + ((self.fee_monthly or 0) * 12 / 365)
+    def _fixed_per_day(self, day=None):
+        """Your own retailer's supply charge (the rate in force that day) and membership fee, per day ($)."""
+        supply = dated_on(self.supply_rates, day or date.today().isoformat()) or 0
+        return supply / 100 + (self.fee_monthly or 0) * 12 / 365
 
     # ---------------------------------------------------------------- everything
     def summary(self, max_age=600):
@@ -191,10 +227,11 @@ class Money:
         days = self.store.daily(800)
         priced = [d for d in days if d.get("bought") is not None]
         plans = self.plans()
-        fixed = self._fixed_per_day()
-        fixed_known = self.supply_c_day is not None
+        fixed = self._fixed_per_day
+        fixed_known = bool(self.supply_rates)
         out = {"enabled": True, "retailer": self.retailer_name, "fixed_known": fixed_known,
                "supply_c_day": self.supply_c_day, "fee_monthly": self.fee_monthly,
+               "supply_rates": [{"from": d or None, "c_day": v} for d, v in self.supply_rates] if len(self.supply_rates) > 1 else None,
                "trades": self.trades(), "plans": None, "compare": None, "payback": None}
         # imported days still waiting for the retailer's costs (fetched in the background)
         out["waiting_days"] = sum(1 for d in days if d.get("imported") and d.get("bought") is None
@@ -206,7 +243,7 @@ class Money:
 
         # actual cost per day. Without your own supply charge, compare energy only (plans without
         # their supply charge too), or the comparison would be lopsided.
-        actual = {d["day"]: d["bought"] - d["earned"] + fixed for d in priced}
+        actual = {d["day"]: d["bought"] - d["earned"] + fixed(d["day"]) for d in priced}
         energy = {d["day"]: d["bought"] - d["earned"] for d in priced}
         plan_total = (lambda v: v["total"]) if fixed_known else (lambda v: v["total"] - v["supply"])
         # the comparison is about your current retailer, so only their days count
@@ -227,9 +264,14 @@ class Money:
             months = {}
             for d in complete:
                 r = self._day(d["day"], plans, today, d.get("imported"))
-                m = months.setdefault(d["day"][:7], {"month": d["day"][:7], "days": 0, "actual": 0.0,
-                                                     "plans": {p["name"]: 0.0 for p in plans["plans"]}})
+                m = months.setdefault(d["day"][:7], {"month": d["day"][:7], "days": 0, "actual": 0.0, "provisional": 0,
+                                                     "billed": 0, "plans": {p["name"]: 0.0 for p in plans["plans"]}})
                 m["days"] += 1
+                # days that may still change: Amber's estimates, and days priced from our own readings
+                if d.get("cost_source") in ("retailer-estimated", "calculated"):
+                    m["provisional"] += 1
+                if d.get("cost_source") == "bill":
+                    m["billed"] += 1
                 m["actual"] += actual[d["day"]]
                 for n, v in r["plans"].items():
                     m["plans"][n] += plan_total(v)
@@ -244,7 +286,7 @@ class Money:
             window = [d for d in complete if d["day"] > since]
             tot = {"days": len(window), "actual": round(sum(actual[d["day"]] for d in window), 2),
                    "actual_energy": round(sum(energy[d["day"]] for d in window), 2),
-                   "actual_fixed": round(fixed * len(window), 2),
+                   "actual_fixed": round(sum(fixed(d["day"]) for d in window), 2),
                    "first": window[0]["day"] if window else None, "last": window[-1]["day"] if window else None,
                    "plans": {p["name"]: 0.0 for p in plans["plans"]}}
             for d in window:
@@ -257,6 +299,8 @@ class Money:
                 tot["saving_vs_cheapest"] = round(tot["plans"][best] - tot["actual"], 2)
             out["compare"] = {"months": rows, "total": tot, "energy_only": not fixed_known,
                               "imported_days": sum(1 for d in window if d.get("imported"))}
+
+        out["spikes"] = self.spikes(priced)
 
         # ---- payback (energy only: supply charges are paid with or without solar)
         if self.system_cost:
@@ -381,6 +425,30 @@ class Money:
         return out
 
     # ---------------------------------------------------------------- battery trades
+    def spikes(self, days):
+        """Days a price spike made (or cost) real money: exports earning 50c/kWh or more on average and
+        at least $5, or imports costing $1/kWh or more and at least $5. With minute readings for the
+        day, also when the price was at $1/kWh or more and the peak."""
+        out = []
+        for d in days[-400:]:
+            kind = None
+            if (d.get("earned") or 0) >= 5 and (d.get("export") or 0) >= 1 and d["earned"] / d["export"] >= 0.5:
+                kind, amount, kwh = "export", d["earned"], d.get("export")
+            elif (d.get("bought") or 0) >= 5 and (d.get("import") or 0) >= 1 and d["bought"] / d["import"] >= 1.0:
+                kind, amount, kwh = "import", d["bought"], d.get("import")
+            if not kind:
+                continue
+            s = {"day": d["day"], "kind": kind, "amount": round(amount, 2), "kwh": kwh,
+                 "avg_c": round(amount / max(kwh or 0, 0.1) * 100, 1)}
+            with self.store.lock:
+                r = self.store.db.execute(
+                    f"SELECT MIN(ts), MAX(ts), COUNT(*), {'MAX(-sell_c)' if kind == 'export' else 'MAX(buy_c)'} FROM samples "
+                    f"WHERE day=? AND {'-sell_c' if kind == 'export' else 'buy_c'} >= 100", (d["day"],)).fetchone()
+            if r and r[2]:
+                s.update(start=r[0], end=r[1] + 60, minutes=r[2], peak_c=round(r[3], 1))
+            out.append(s)
+        return out[-12:]
+
     def trades(self, days=60):
         now = datetime.now(self.tz)
         today = now.strftime("%Y-%m-%d")

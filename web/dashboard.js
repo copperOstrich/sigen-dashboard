@@ -383,7 +383,11 @@
       for (const m of cmp.months.slice().reverse()) {
         const vals = [m.actual, ...names.map((n) => m.plans[n])];
         const min = Math.min(...vals);
-        tb.append(el("tr", {}, el("td", { text: `${mName(m.month)}${m.days < 28 ? ` (${m.days} d)` : ""}` }),
+        const spk = (d.spikes || []).filter((x) => x.day.startsWith(m.month));
+        tb.append(el("tr", {}, el("td", {}, `${mName(m.month)}${m.days < 28 ? ` (${m.days} d)` : ""}`,
+            m.provisional ? el("span", { class: "tag prov", title: `${m.provisional} day${m.provisional === 1 ? "" : "s"} still on ${me}'s estimates or the dashboard's own pricing, so this can still change`, text: "provisional" }) : null,
+            m.billed && m.billed === m.days ? el("span", { class: "tag billed", title: "Matches your bill exactly", text: "billed" }) : null,
+            spk.length ? el("span", { class: "tag spike-tag", title: spk.map((x) => `${new Date(x.day + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" })}: ${x.kind === "export" ? "earned" : "paid"} ${money$(x.amount, 2)}`).join("\n"), text: "spike" }) : null),
           ...vals.map((v, i) => el("td", { class: (i === 0 ? "mine " : "") + (v === min ? "best" : ""), text: money$(v, 2) }))));
       }
     }
@@ -391,7 +395,11 @@
     if (pl) {
       notes.push(`Each plan priced on your own grid use and exports, hour by hour${cmp && cmp.energy_only ? "" : ", with its daily supply charge"}. The same energy flows are used for every plan; on another plan the battery might be run differently, so treat this as a guide.`);
       if (cmp && cmp.energy_only) notes.push(`Energy only: set RETAILER_SUPPLY_C_DAY (and RETAILER_FEE_MONTHLY for a membership fee) from your ${me} bill to include supply charges.`);
-      else if (d.fixed_known) notes.push(`${me} includes your ${d.supply_c_day}c/day supply charge${d.fee_monthly ? ` and ${money$(d.fee_monthly, 2)}/month fee` : ""}.`);
+      else if (d.fixed_known) notes.push(`${me} includes your ${d.supply_rates ? `supply charge (${d.supply_rates.map((r) => `${r.c_day}c/day${r.from ? ` from ${new Date(r.from + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" })}` : ""}`).join(", ")})` : `${d.supply_c_day}c/day supply charge`}${d.fee_monthly ? ` and ${money$(d.fee_monthly, 2)}/month fee` : ""}.`);
+      const sp = d.spikes || [];
+      if (sp.length) notes.push("Price spikes: " + sp.slice(-4).map((x) => `${new Date(x.day + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" })} ` +
+        (x.kind === "export" ? `earned ${money$(x.amount, 2)} from ${x.kwh != null ? `${x.kwh.toFixed(1)} kWh exported` : "exports"}` : `cost ${money$(x.amount, 2)}`) +
+        (x.peak_c ? ` (up to $${(x.peak_c / 100).toFixed(2)}/kWh for ${x.minutes} min)` : "")).join("; ") + ".");
       const fromTxt = (d) => new Date(d + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
       notes.push(`Current prices (${pl.source}): ` + pl.list.map((p) => `${p.name} ${p.tou ? "time of use" : `${(+p.usage_c_kwh).toFixed(2)}c/kWh`}, ${(+p.supply_c_day).toFixed(2)}c/day, feed-in ${p.feed_in_c_kwh == null ? "–" : `${p.feed_in_c_kwh}c`}${p.from ? ` from ${fromTxt(p.from)}` : ""}`).join("; ") + ".");
       const early = pl.list.find((p) => p.first_from && cmp && cmp.months && cmp.months.length && cmp.months[0].month + "-31" < p.first_from);

@@ -460,8 +460,8 @@ about 90 days; the log says how far it got. If you joined your retailer after th
 switched on, set `RETAILER_SINCE`: the days before count towards payback, priced on the
 comparison plan, and are left out of the comparison.
 
-For older days than your retailer's service returns, use your bills: a CSV in the same
-`import` folder, one row per bill (dollars incl. GST):
+**Bills** set the record straight: a CSV in the same `import` folder, one row per bill
+(dollars incl. GST):
 
 ```
 start,end,energy_cost,export_credit,avg_buy_c
@@ -469,10 +469,22 @@ start,end,energy_cost,export_credit,avg_buy_c
 ```
 
 `energy_cost` is the bill's usage and network demand charges (not the supply charge or fee),
-`export_credit` what it credited for exports, and `avg_buy_c` (optional) its average usage rate.
-Each bill is spread over its days that have no costs yet, in proportion to each day's grid use
-and exports, after taking off any days already known, so monthly totals match the bills. A CSV with the same columns
-works too. The 5-minute **Power** export isn't needed and is skipped.
+`export_credit` what it credited for exports (leave out vouchers and referral credits), and
+`avg_buy_c` (optional) its average usage rate. A bill wins over every other source for its
+period: each day's bought and earned amounts are scaled so the period adds up to the bill
+exactly, and the Money panel marks the month **billed**. Add each new bill as it arrives (a new
+file, or the same file with a new row; bills are kept, so an old row can stay). The 5-minute
+**Power** export from mySigen isn't needed and is skipped.
+
+**Amber usage reports** go in the same folder: the CSV from the Amber app (Usage, download) or the
+monthly usage email, named like `Amber Usage 2026-10-01 to 2026-10-31.csv`, one row per 5-minute
+interval. Each day's costs are taken from it exactly, by Amber's own Day column, and kept in
+preference to the figures from Amber's API (which only reaches back about 90 days). Handy for
+filling the months before the collector ran, or checking a month against Amber's own numbers.
+
+Until a day has final figures (Amber's estimates, or the dashboard's own pricing for today and
+yesterday), the Money panel marks its month **provisional**: it can still move a little. Days a
+**price spike** made (or cost) real money are tagged too, and listed under the table.
 
 ### The car against a fuel car
 
@@ -762,7 +774,7 @@ hand). Values in `sigen.env` win over the container's environment.
 | `WEATHER_ENABLED` | `0` to turn weather off | on |
 | **Checks** | | |
 | `COMPARE_PLANS` | Compare with the Default Market Offer for your network: `nsw-ausgrid`, `nsw-endeavour`, `nsw-essential` (or put `plans.json` in the data folder) | off |
-| `RETAILER_SUPPLY_C_DAY` / `RETAILER_FEE_MONTHLY` | Your own retailer's daily supply charge (c/day) and monthly fee ($), from your bill | not included |
+| `RETAILER_SUPPLY_C_DAY` / `RETAILER_FEE_MONTHLY` | Your own retailer's daily supply charge (c/day incl. GST) and monthly fee ($), from your bill. If the supply charge has changed, give each rate from its date: `2026-05-10:108.96,2026-07-01:119.6` | not included |
 | `RETAILER_SINCE` | The day you started with your current retailer (`2026-05-10`); earlier days count towards payback (priced on the comparison plan, an estimate) but not the comparison | not set |
 | `SYSTEM_COST` / `SYSTEM_INSTALLED` | What the solar and battery cost ($) and the date it was switched on, for payback | off |
 | `INSULATION_WARN_MOHM` / `INSULATION_MIN_MOHM` | Insulation resistance warning and alarm levels, MΩ | `0.5` / `0.37` |
@@ -852,6 +864,17 @@ Signs: `grid` positive = buying, negative = selling. `battery` positive = chargi
 * **Which version am I running?** It's at the bottom of the dashboard, and in `/api/health`.
 * **Widget says "Can't reach collector"**: click its status text to open the dashboard and
   fix the address. The collector must be reachable from that computer on port 8080.
+
+## Development
+
+Standard library only. Tests:
+
+```
+python -m unittest discover -s tests     # unit tests
+python tests/smoke.py                    # starts the collector on the simulator and checks every endpoint
+```
+
+Both run on every push (GitHub Actions, **Tests**). See [ROADMAP.md](ROADMAP.md) for what's planned.
 
 ## Licence
 

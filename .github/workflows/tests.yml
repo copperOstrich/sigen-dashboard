@@ -1,0 +1,31 @@
+name: Tests
+
+# Unit tests and a smoke test (the collector on its built-in simulator, every page and API endpoint)
+# on every push and pull request. Standard library only, so no dependencies to install.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"   # the same as the Docker image
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Smoke test (simulator)
+        env:
+          TZ: Australia/Sydney
+        run: python tests/smoke.py

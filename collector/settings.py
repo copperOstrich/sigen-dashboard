@@ -75,8 +75,9 @@ SCHEMA = [
     # ---------------------------------------------------------------- money
     _s("COMPARE_PLANS", MONEY, "Compare with", "The Default Market Offer for your network (or put plans.json "
        "in the data folder).", "plans", ""),
-    _s("RETAILER_SUPPLY_C_DAY", MONEY, "Supply charge", "Your retailer's daily supply charge, from your bill.",
-       "number", "", min=0, max=1000, unit="c/day"),
+    _s("RETAILER_SUPPLY_C_DAY", MONEY, "Supply charge", "Your retailer's daily supply charge incl. GST, from your bill. "
+       "If it has changed, give each rate from its date: 2026-05-10:108.96,2026-07-01:119.6", "dated", "",
+       unit="c/day", placeholder="119.6, or date:rate,date:rate"),
     _s("RETAILER_FEE_MONTHLY", MONEY, "Monthly fee", "Any membership fee, e.g. Amber's.", "number", "",
        min=0, max=1000, unit="$/month"),
     _s("RETAILER_SINCE", MONEY, "With this retailer since", "Earlier days count towards payback but not "
@@ -302,6 +303,17 @@ def validate(key, value, all_values=None):
                 raise ValueError(f"'{p.strip()}' isn't tilt:azimuth:kW")
             if not (0 <= t <= 90 and -360 <= a <= 360 and 0 < kw <= 1000):
                 raise ValueError(f"'{p.strip()}': tilt 0-90, azimuth 0-360, kW above 0")
+    elif k == "dated":
+        try:
+            for part in value.split(","):
+                part = part.strip()
+                v = part.split(":", 1)[1] if ":" in part else part
+                if ":" in part:
+                    date.fromisoformat(part.split(":", 1)[0].strip())
+                if not 0 <= float(v) <= 10000:
+                    raise ValueError
+        except (ValueError, IndexError):
+            raise ValueError("A number, or date:value pairs like 2026-05-10:108.96,2026-07-01:119.6")
     elif k == "time":
         m = re.fullmatch(r"(\d{1,2}):(\d{2})", value)
         if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
