@@ -6,6 +6,11 @@ A simple, explainable model, not a copy of the inverter's own control:
   * solar: the weather forecast's hourly production if it's on, otherwise a typical recent day
   * the battery covers the home and stores surplus solar (self-consumption), between your
     reserve and charge limit, at its maximum charge and discharge rates, with round-trip losses
+  * temperature (1.18): daily home use over the last fortnight is compared with each day's mean
+    temperature (degrees below 18°C for heating, above 24°C for cooling). When they clearly go
+    together, each forecast day's use is scaled for its forecast temperature
+  * cost (1.18): the grid energy in and out at the retailer's forecast prices, for the rest of today
+    and tomorrow, where the forecast reaches
 
 It doesn't know about retailer or VPP control (Amber SmartShift exporting at a price spike,
 grid charging), so the advice says so where that matters.
@@ -20,8 +25,8 @@ HISTORY_DAYS = 14
 
 
 class Outlook:
-    def __init__(self, store, tz, log=print):
-        self.store, self.tz, self.log = store, tz, log
+    def __init__(self, store, tz, log=print, time_format="12h"):
+        self.store, self.tz, self.log, self.time_format = store, tz, log, time_format
         self.result = None
         self.computed = 0.0
         self.rows, self.limits = [], {}
@@ -57,7 +62,41 @@ class Outlook:
         return home, pv, n_days
 
     # ---------------------------------------------------------------- model
-    def compute(self, live, weather=None, prices=None, now=None):
+    @staticmethod
+    def degrees(t):
+        """Heating and cooling degrees for a mean temperature (°C)."""
+        return max(0.0, 18.0 - t) + max(0.0, t - 24.0)
+
+    def _temp_model(self, now, temps):
+        """{"a", "b", "mean", "r", "n"}: daily home kWh = a + b x degrees, if the last fortnight shows it."""
+        if not temps:
+            return None
+        rows = self.store.hourly_avgs(now - HISTORY_DAYS * 86400, now)
+        days = {}
+        for h, (_pv, home) in rows.items():
+            if home is None:
+                continue
+            d = days.setdefault(datetime.fromtimestamp(h, self.tz).date(), {"kwh": 0.0, "n": 0, "temps": []})
+            d["kwh"] += home / 1000; d["n"] += 1
+            if temps.get(h) is not None:
+                d["temps"].append(temps[h])
+        pts = [(self.degrees(sum(d["temps"]) / len(d["temps"])), d["kwh"]) for d in days.values()
+               if d["n"] >= 20 and len(d["temps"]) >= 18]
+        if len(pts) < 7:
+            return None
+        n = len(pts)
+        mx, my = sum(x for x, _ in pts) / n, sum(y for _, y in pts) / n
+        sxx = sum((x - mx) ** 2 for x, _ in pts); syy = sum((y - my) ** 2 for _, y in pts)
+        sxy = sum((x - mx) * (y - my) for x, y in pts)
+        if sxx < 1 or syy <= 0:
+            return None  # the weather barely changed, or use didn't
+        b = sxy / sxx
+        r = sxy / (sxx * syy) ** 0.5
+        if b <= 0 or r < 0.4:
+            return None
+        return {"a": my - b * mx, "b": b, "mean": my, "r": round(r, 2), "n": n}
+
+    def compute(self, live, weather=None, prices=None, now=None, temps=None):
         now = now or time.time()
         b = (live or {}).get("battery") or {}
         soc, cap = b.get("soc"), b.get("rated_kwh")
@@ -89,11 +128,26 @@ class Outlook:
 
         mid = datetime.fromtimestamp(now, self.tz).replace(hour=0, minute=0, second=0, microsecond=0)
         end = (mid + timedelta(days=2)).timestamp()  # to the end of tomorrow
-        price_at = {}
+        price_at, sell_at = {}, {}
         for p in (prices or {}).get("forecast") or []:
             if p.get("buy") is not None:
                 for t in range(int(p["t"]), int(p["end"]), STEP):
                     price_at[t // STEP * STEP] = p["buy"]
+                    if p.get("sell") is not None:
+                        sell_at[t // STEP * STEP] = p["sell"]
+        # home use scaled for each forecast day's temperature, when the fortnight shows the link
+        model = self._temp_model(now, temps)
+        day_factor, day_temp = {}, {}
+        if model:
+            by_day = {}
+            for h, t in (temps or {}).items():
+                if h >= now - 86400:
+                    by_day.setdefault(datetime.fromtimestamp(h, self.tz).date(), []).append(t)
+            for d, ts in by_day.items():
+                if len(ts) >= 12:
+                    mean_t = sum(ts) / len(ts)
+                    day_temp[d] = round(mean_t, 1)
+                    day_factor[d] = max(0.6, min(1.6, (model["a"] + model["b"] * self.degrees(mean_t)) / model["mean"]))
 
         e = cap * soc / 100.0
         e_min, e_max = cap * reserve / 100.0, cap * top / 100.0
@@ -103,7 +157,7 @@ class Outlook:
             lt = datetime.fromtimestamp(t, self.tz)
             hour_start = int(t // 3600 * 3600)
             kind = "weekend" if lt.weekday() >= 5 else "weekday"
-            load = home_prof[kind].get(lt.hour, home_prof["weekday"].get(lt.hour, 500.0))
+            load = home_prof[kind].get(lt.hour, home_prof["weekday"].get(lt.hour, 500.0)) * day_factor.get(lt.date(), 1.0)
             pv = fc.get(hour_start)
             if pv is None:
                 pv = pv_prof.get(lt.hour, 0.0) if solar_source == "recent days" or hour_start not in fc else 0.0
@@ -120,17 +174,50 @@ class Outlook:
                 e -= w / EFF_OUT * dt / 1000
                 grid_in = (need - w) * dt / 1000
             rows.append({"t": int(t), "soc": round(100 * e / cap, 1), "pv": round(pv), "load": round(load),
-                         "grid_in": grid_in, "grid_out": grid_out, "price": price_at.get(int(t) // STEP * STEP)})
+                         "grid_in": grid_in, "grid_out": grid_out, "price": price_at.get(int(t) // STEP * STEP),
+                         "sell": sell_at.get(int(t) // STEP * STEP)})
             t = (t // STEP + 1) * STEP
 
         self.rows, self.limits = rows, {"reserve": reserve, "top": top, "cap": cap}  # for appliance timing
         self.result = self._summarise(now, rows, soc, reserve, top, mid.timestamp(), solar_source, n_days, cap, live)
+        self.result["cost"] = self._costs(rows, mid.timestamp())
+        tom = (mid + timedelta(days=1)).date()
+        if model:
+            f = day_factor.get(tom)
+            self.result["temperature"] = {"r": model["r"], "days": model["n"], "kwh_per_degree": round(model["b"], 2),
+                                          "tomorrow_factor": round(f, 2) if f else None, "tomorrow_temp": day_temp.get(tom)}
+            if f and abs(f - 1) >= 0.05:
+                self.result["advice"].append(
+                    f"Tomorrow's home use is set about {abs(round((f - 1) * 100))}% {'higher' if f > 1 else 'lower'} than usual "
+                    f"for the weather (a mean of {day_temp[tom]:.0f}°C): your use goes up about {model['b']:.1f} kWh a day "
+                    "for each degree of heating or cooling.")
         self.computed = now
         return self.result
 
+    def _costs(self, rows, mid):
+        """Expected grid cost for the rest of today and for tomorrow, at the forecast prices (where they reach)."""
+        out = {}
+        for key, a, b in (("today", mid, mid + 86400), ("tomorrow", mid + 86400, mid + 2 * 86400)):
+            part = [r for r in rows if a <= r["t"] < b]
+            priced = [r for r in part if r["price"] is not None]
+            if not part or len(priced) < 0.75 * len(part):
+                continue
+            bought = sum(r["grid_in"] * r["price"] for r in priced) / 100
+            sold = sum(r["grid_out"] * (r.get("sell") or 0) for r in priced) / 100
+            out[key] = {"bought": round(bought, 2), "sold": round(sold, 2), "net": round(bought - sold, 2),
+                        "grid_kwh": round(sum(r["grid_in"] for r in part), 1), "export_kwh": round(sum(r["grid_out"] for r in part), 1),
+                        "covered": round(len(priced) / len(part), 2)}
+        return out
+
+    def _clock(self, ts):
+        lt = datetime.fromtimestamp(ts, self.tz)  # portable: no %-I (Alpine's C library lacks it)
+        if self.time_format == "24h":
+            return f"{lt.hour:02d}:{lt.minute:02d}"
+        return f"{lt.hour % 12 or 12}:{lt.minute:02d} {'am' if lt.hour < 12 else 'pm'}"
+
     def _summarise(self, now, rows, soc, reserve, top, mid, solar_source, n_days, cap, live):
         tomorrow0, tomorrow1 = mid + 86400, mid + 2 * 86400
-        clock = lambda ts: datetime.fromtimestamp(ts, self.tz).strftime("%-I:%M %p")
+        clock = self._clock
         when = lambda ts: (clock(ts) + (" tomorrow" if ts >= tomorrow0 else "")) if ts else None
 
         # tonight: the first stretch without solar surplus after now (or the coming night)

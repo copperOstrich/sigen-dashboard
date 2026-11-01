@@ -32,6 +32,7 @@ from advice import appliance_advice, parse as parse_appliances  # noqa: E402
 from mqtt import Mqtt  # noqa: E402
 from baseload import baseload  # noqa: E402
 from trading import trading  # noqa: E402
+from evplan import ev_plan, deadline  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
@@ -297,6 +298,17 @@ class Api(BaseHTTPRequestHandler):
                 bl = baseload(self.store, TZ, 30)
                 return self._json(trading(self.store, self.collector.snapshot(), TZ, days,
                                           baseload_w=bl.get("now_w") if bl.get("enabled") else None))
+            if url.path == "/api/ev-plan":
+                try:
+                    kwh = max(0.5, min(150.0, float(q.get("kwh", ["20"])[0])))
+                    by = deadline(q.get("by", ["07:00"])[0], TZ, time.time())
+                    rated = ((self.collector.snapshot().get("ev") or {}).get("rated_power") or 0) / 1000
+                    kw = max(1.0, min(22.0, float(q.get("kw", [rated or 7])[0])))
+                except (ValueError, TypeError):
+                    return self._json({"error": "kwh, by (HH:MM) and kw must be numbers"}, 400)
+                o = self.collector.outlook
+                fc = (self.retailer.snapshot().get("forecast") if self.retailer else None) or []
+                return self._json(ev_plan(o.rows, fc, kwh, by, kw, time.time()))
             if url.path == "/api/ui":
                 return self._json({"time_format": TIME_FORMAT if TIME_FORMAT in ("12h", "24h") else "12h", "version": VERSION})
             if url.path == "/api/bills":

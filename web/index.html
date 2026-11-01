@@ -192,6 +192,15 @@
           <div class="ev-fuel" id="ev-fuel" hidden></div>
           <table class="strings ev-sessions" id="ev-sessions"></table>
           <div class="ev-links" id="ev-links"></div>
+          <div class="ev-plan" id="ev-plan">
+            <form id="ev-plan-form" class="ev-plan-form">
+              <span class="k">Plan a charge:</span>
+              <label><input type="number" id="ev-plan-kwh" min="1" max="150" step="1" value="20" inputmode="decimal"> kWh</label>
+              <label>by <input type="time" id="ev-plan-by" value="07:00"></label>
+              <button class="ghost-btn" type="submit">Plan</button>
+            </form>
+            <div id="ev-plan-out" class="ev-plan-out"></div>
+          </div>
           <p class="chart-note" id="ev-note" hidden>The charger itself isn't readable over Modbus (it needs a Modbus address set by
             your installer), so charging is worked out from the inverter's own figures. That shows when the car charges and how much,
             but not when it's plugged in without charging, or the charger's alarms.</p>

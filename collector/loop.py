@@ -45,7 +45,7 @@ class Collector:
     def __init__(self, store, host, port, retailer=None, aemo=None, weather=None):
         self.store = store
         self.weather = weather
-        self.outlook = Outlook(store, TZ, log=log)
+        self.outlook = Outlook(store, TZ, log=log, time_format=TIME_FORMAT)
         self.outlook_summary = None
         self.retailer = retailer
         self.aemo = aemo
@@ -148,7 +148,8 @@ class Collector:
         if now - self.outlook.computed >= 300:
             try:
                 res = self.outlook.compute(self.state, self.weather.snapshot() if self.weather else None,
-                                           self.retailer.snapshot() if self.retailer else None, now)
+                                           self.retailer.snapshot() if self.retailer else None, now,
+                                           temps=getattr(self.weather, "temps", None) if self.weather else None)
                 self.outlook_summary = {k: v for k, v in res.items() if k != "projection"}
                 self.storm = self._storm_check(now)
             except Exception as e:  # the outlook is a nice-to-have; never stop the readings for it

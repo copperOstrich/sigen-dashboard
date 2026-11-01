@@ -52,10 +52,9 @@ How well the battery is being traded (Amber SmartShift or a VPP), not just what 
 
 ## Phase E: smarter forecasts (1.18)
 
-- [ ] Home use in the battery outlook learned against temperature, not just the hour
-- [ ] Tomorrow's expected cost from the price and solar forecasts
-- [ ] Car charging plan: given how many kWh the car needs and when it leaves, the cheapest window
-      (like appliance timing, for the car)
+- [x] Home use in the battery outlook learned against temperature (1.18)
+- [x] Expected cost for the rest of today and tomorrow (1.18)
+- [x] Car charging plan: kWh needed and leaving time, cheapest times before then (1.18)
 
 ## Parked
 

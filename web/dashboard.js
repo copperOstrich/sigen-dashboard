@@ -626,6 +626,14 @@
       add(t.full_at ? "Full again" : "Highest charge", t.full_at ? olWhen(t.full_at) : t.max_soc != null ? `${Math.round(t.max_soc)}%` : null);
       if (t.spare_kwh >= 0.5) add("Spare solar after that", `${t.spare_kwh.toFixed(0)} kWh`);
     }
+    const oc = o.cost || {};
+    const costTxt = (c) => `${c.net < 0 ? "$" + (-c.net).toFixed(2) + " back" : "$" + c.net.toFixed(2)}`;
+    if (oc.today || oc.tomorrow) f.append(el("div", { class: "sep" }));
+    if (oc.today) add("Rest of today, expected", costTxt(oc.today));
+    if (oc.tomorrow) add("Tomorrow, expected", costTxt(oc.tomorrow));
+    if (o.temperature && o.temperature.tomorrow_factor && Math.abs(o.temperature.tomorrow_factor - 1) >= 0.05) {
+      add("Tomorrow's use, for the weather", `${o.temperature.tomorrow_factor > 1 ? "+" : "−"}${Math.abs(Math.round((o.temperature.tomorrow_factor - 1) * 100))}%`);
+    }
     box.append(f);
     const adv = $("ol-advice"); adv.innerHTML = "";
     for (const a of o.advice || []) adv.append(el("p", { text: a }));
@@ -1921,6 +1929,35 @@
   async function loadTrading() {
     try { btData = await S.fetchJSON("/api/trading?days=30"); renderTrading(); } catch (e) { /* banner */ }
   }
+
+
+  // ------------------------------------------------------------ car charging plan
+  (function evPlan() {
+    const kwh = $("ev-plan-kwh"), by = $("ev-plan-by"), out = $("ev-plan-out");
+    if (!kwh) return;
+    kwh.value = S.store.get("sigen.evplan.kwh") || kwh.value;
+    by.value = S.store.get("sigen.evplan.by") || by.value;
+    const tm = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const day = (ts) => { const d = new Date(ts * 1000), n = new Date(); if (d.toDateString() === n.toDateString()) return "";
+      const t = new Date(n); t.setDate(n.getDate() + 1); return d.toDateString() === t.toDateString() ? " tomorrow" : ` ${d.toLocaleDateString([], { weekday: "short" })}`; };
+    $("ev-plan-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      S.store.set("sigen.evplan.kwh", kwh.value); S.store.set("sigen.evplan.by", by.value);
+      out.textContent = "Working it out…";
+      try {
+        const p = await S.fetchJSON(`/api/ev-plan?kwh=${encodeURIComponent(kwh.value)}&by=${encodeURIComponent(by.value)}`);
+        out.innerHTML = "";
+        if (!p.enabled) { out.textContent = `Can't plan yet: ${p.reason}.`; return; }
+        out.append(el("div", {}, el("b", { text: `$${p.cost.toFixed(2)}` }), ` for ${p.kwh} kWh, about ${p.avg_c}c/kWh at ${p.kw} kW` +
+          (p.solar_kwh >= 0.5 ? `, ${p.solar_kwh} kWh of it spare solar` : "") +
+          (p.saving != null && p.saving >= 0.05 ? `. Starting now instead: $${p.now_cost.toFixed(2)}.` : ".") +
+          (p.short_kwh > 0 ? ` The price forecast only reaches ${tm(p.until)}${day(p.until)}, so ${p.short_kwh} kWh is left for after that.` : "")));
+        const ul = el("ul");
+        for (const w of p.windows) ul.append(el("li", { text: `${tm(w.start)}${day(w.start)} to ${tm(w.end)}: ${w.kwh} kWh` }));
+        out.append(ul);
+      } catch (err) { out.textContent = `Couldn't plan: ${err.message}`; }
+    });
+  })();
 
   // ------------------------------------------------------------ desktop: widget switch + updates
   if (S.isDesktop) {

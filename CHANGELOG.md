@@ -2,6 +2,22 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.18.0
+
+- **Battery outlook learns the weather**: daily home use over the last fortnight is compared with
+  each day's mean temperature (degrees of heating below 18°C and cooling above 24°C). Where they
+  clearly go together, each forecast day's use is scaled for its forecast temperature, and the
+  advice says so ("tomorrow's home use is set about 15% higher for the weather")
+- **Expected cost** for the rest of today and for tomorrow in the Battery outlook, from the
+  projected grid energy in and out at your retailer's forecast prices (where the forecast reaches)
+- **Car charging plan** (Car charging panel): enter the kWh the car needs and when you leave, and
+  it picks the cheapest times before then from spare solar and the price forecast (one unbroken
+  block when that's within 5% of the cheapest split), with the cost against starting straight
+  away. Uses the charger's rated power when known, otherwise 7 kW
+- Battery outlook times are now written without a C-library-specific format and follow the Time
+  format setting
+- Tests: the temperature link and the charging plan
+
 ## 1.17.0
 
 - **Battery trading** panel (from the collector's minute readings, last 30 days):

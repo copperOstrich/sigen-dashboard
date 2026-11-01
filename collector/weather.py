@@ -113,6 +113,7 @@ class Weather:
         self.lock = threading.Lock()
         self.factor, self.factor_n = BASE_FACTOR, 0
         self.model = {}  # {hour start: kW before the factor}, past fortnight and forecast
+        self.temps = {}  # {hour start: °C}, past fortnight and forecast (for the outlook's temperature link)
         self.state = {"enabled": self.enabled, "status": "starting" if self.enabled else "off",
                       "mode": "simulator" if self.simulate else "live", "error": None, "updated": None,
                       "location": None, "planes": [], "factor": None, "current": None, "hourly": [], "daily": []}
@@ -252,6 +253,8 @@ class Weather:
         starts = [t - 3600 for t in times]
         self._calibrate(starts, pv, have_kw)
         self.model = {**{t: r for t, r in self.model.items() if t >= starts[0] - 86400}, **dict(zip(starts, pv))}
+        # temperature is a spot value at each time: it belongs to the hour starting then
+        self.temps = {int(t): v for t, v in zip(times, main["hourly"]["temperature_2m"]) if v is not None}
         self._publish(loc, planes, main, starts, pv, have_kw)
 
     def _calibrate(self, starts, raw, have_kw):

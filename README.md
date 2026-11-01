@@ -599,6 +599,19 @@ so if it won't be nearly full, it suggests raising the backup reserve in the myS
 beforehand (the dashboard only reads the inverter; it never changes its settings). The warning
 also goes in the event log.
 
+It also learns how your home use follows the weather: over the last fortnight, daily use against
+each day's mean temperature (heating below 18°C, cooling above 24°C). When the two clearly go
+together, each forecast day's use is scaled for its forecast temperature. And it shows the
+**expected cost** for the rest of today and tomorrow at your retailer's forecast prices.
+
+### Car charging plan
+
+In the Car charging panel, enter how many kWh the car needs and when you leave: the plan picks the
+cheapest times before then, using spare solar (at the feed-in price it would have earned) and the
+retailer's price forecast, and shows the cost against plugging in and charging straight away. It
+prefers one unbroken block when that's within 5% of the cheapest split. The house battery isn't
+counted on for the car.
+
 ### Best times to run appliances
 
 From the same projection and your retailer's price forecast, the dashboard suggests when to
@@ -851,6 +864,7 @@ thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 | `GET /api/baseload?days=90` | Always-on use: each night's baseline, now and four weeks ago, and a year's kWh and cost |
 | `GET /api/appliances` | Best start time and cost for each appliance in `APPLIANCES` |
 | `GET /api/trading?days=30` | Battery trading: spikes caught and missed, export prices, reserve what-if |
+| `GET /api/ev-plan?kwh=20&by=07:00` | Car charging plan: the cheapest times to charge that many kWh before then |
 | `GET /api/ui` | Display settings for the pages (time format) |
 | `GET /api/bills` | Each imported bill beside what the data had for its period, and the difference |
 | `GET /api/backups` | Backup status and the backups kept; `POST` (home network only) backs up now |

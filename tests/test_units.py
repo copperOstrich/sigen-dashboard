@@ -209,6 +209,47 @@ class Trading(unittest.TestCase):
         self.assertAlmostEqual(res["what_if"][0]["outage_hours"], 10.0)  # 4 kWh at 400 W
 
 
+class Forecasts(unittest.TestCase):
+    def test_temperature_model(self):
+        import time as _t
+        from datetime import datetime, timedelta
+        import sigen_collector as sc
+        from outlook import Outlook
+        st = sc.Store(Path(tempfile.mkdtemp()) / "t.db")
+        tz = sc.TZ
+        now = _t.time()
+        d0 = datetime.fromtimestamp(now, tz).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=14)
+        temps, rows = {}, []
+        for d in range(14):
+            mean_t = 22 + d  # 22..35 degrees: cooling degrees 0..11
+            kwh = 12 + 1.5 * Outlook.degrees(mean_t)
+            for h in range(24):
+                hs = int((d0 + timedelta(days=d, hours=h)).timestamp())
+                temps[hs] = mean_t
+                for m in range(0, 60, 1):
+                    rows.append((hs + m * 60, "d", 0, kwh * 1000 / 24, 0, 0, 50, 0, 0, 0, 0, 0, 0, None, None, None))
+        st.insert(rows)
+        m = Outlook(st, tz)._temp_model(now, temps)
+        self.assertIsNotNone(m)
+        self.assertAlmostEqual(m["b"], 1.5, delta=0.05)
+        self.assertGreater(m["r"], 0.95)
+        self.assertIsNone(Outlook(st, tz)._temp_model(now, {h: 20 for h in temps}))  # weather never changed
+
+    def test_ev_plan_cheapest(self):
+        import evplan
+        t0 = 1_800_000_000 // 900 * 900
+        rows = [{"t": t0 + i * 900, "grid_out": 2.0 if 20 <= i < 28 else 0.0} for i in range(48)]  # 8 kW spare, steps 20-27
+        fc = [{"t": t0, "end": t0 + 48 * 900, "buy": 40.0, "sell": 5.0}]
+        p = evplan.ev_plan(rows, fc, kwh=10, by_ts=t0 + 48 * 900, kw=7, now=t0)
+        self.assertTrue(p["enabled"])
+        self.assertAlmostEqual(p["kwh"], 10, places=3)
+        self.assertTrue(all(t0 + 20 * 900 <= w["start"] < t0 + 28 * 900 for w in p["windows"]))
+        self.assertAlmostEqual(p["avg_c"], 5.0, places=1)  # all from spare solar
+        self.assertGreater(p["saving"], 0)
+        short = evplan.ev_plan(rows, fc, kwh=100, by_ts=t0 + 4 * 900, kw=7, now=t0)
+        self.assertGreater(short["short_kwh"], 0)
+
+
 class Limits(unittest.TestCase):
     def test_ceiling(self):
         flat = [5000.0] * 60 + [3000.0 + i for i in range(500)]
