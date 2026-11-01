@@ -35,6 +35,7 @@ Standard library only: an .xlsx file is a zip of XML.
 """
 import csv
 import io
+import threading
 from datetime import datetime, timedelta, timezone
 import re
 import zipfile
@@ -237,7 +238,7 @@ def import_folder(store, data_dir, log=print):
                 store.save_csv_prices(intervals)
                 est = sum(1 for v in usage.values() if v["estimated"])
                 net = sum(v["import_cost"] + v["export_cost"] for v in usage.values()) / 100
-                log(f"Import: {f.name}: Amber usage for {len(usage)} days, {min(usage)} to {max(usage)}, "
+                log(f"Import: {f.name}: Amber usage for {len(usage)} day{'' if len(usage) == 1 else 's'}, {min(usage)} to {max(usage)}, "
                     f"net ${net:.2f}" + (f" ({est} days still have estimated reads)" if est else ""))
                 f.rename(f.with_name(f.name + ".imported"))
                 continue
@@ -262,3 +263,97 @@ def import_folder(store, data_dir, log=print):
                 + ("" if r["filled"] else "; no days without costs and with imported figures to spread it over"))
         f.rename(f.with_name(f.name + ".imported"))
     return total
+
+
+UPLOAD_MAX = 40 * 1024 * 1024
+_import_lock = threading.Lock()
+
+
+def safe_name(name):
+    """A plain file name for an upload: no folders, only .csv or .xlsx."""
+    base = re.sub(r"[^A-Za-z0-9 ._()+-]", "_", Path(str(name or "")).name).strip(" .")
+    if Path(base).suffix.lower() not in (".csv", ".xlsx"):
+        raise ValueError("only .csv (Amber usage, bills) and .xlsx or .csv (mySigen Energy export) files can be imported")
+    return base[:120] or "upload.csv"
+
+
+def import_upload(store, data_dir, name, data, log=print):
+    """Save an uploaded file in the import folder and import it straight away.
+    Returns {"ok", "file", "messages": [log lines], "days"}."""
+    if len(data) > UPLOAD_MAX:
+        raise ValueError("the file is larger than 40 MB")
+    folder = Path(data_dir) / "import"
+    folder.mkdir(parents=True, exist_ok=True)
+    base = safe_name(name)
+    stem, suf = Path(base).stem, Path(base).suffix
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    target = folder / f"{stem} (uploaded {stamp}){suf}"
+    lines = []
+
+    def note(msg):
+        lines.append(msg)
+        log(msg)
+    with _import_lock:
+        tmp = target.with_name("." + target.name + ".part")  # dot files are ignored by import_folder
+        tmp.write_bytes(data)
+        tmp.rename(target)
+        days = import_folder(store, data_dir, log=note)
+    ok = (target.with_name(target.name + ".imported")).exists()
+    return {"ok": ok, "file": target.name, "messages": lines, "days": days}
+
+
+def import_history(data_dir, limit=30):
+    """Files already in the import folder: imported, skipped (with why, from the name) or waiting."""
+    folder = Path(data_dir) / "import"
+    if not folder.is_dir():
+        return []
+    out = []
+    for f in folder.iterdir():
+        if f.name.startswith("."):
+            continue
+        n = f.name
+        state = "imported" if n.endswith(".imported") else "skipped" if n.endswith(".skipped") else (
+            "waiting" if f.suffix.lower() in (".csv", ".xlsx") else None)
+        if not state:
+            continue
+        st = f.stat()
+        out.append({"name": re.sub(r"\.(imported|skipped)$", "", n), "state": state, "bytes": st.st_size,
+                    "at": int(st.st_mtime)})
+    return sorted(out, key=lambda x: -x["at"])[:limit]
+
+
+def clean_bill(d, others=()):
+    """A bill typed in on the Settings page, checked: {start, end, energy_cost, export_credit, avg_buy_c}.
+    Raises ValueError {field: message} as its first argument."""
+    errs, b = {}, {}
+    for k in ("start", "end"):
+        v = str(d.get(k) or "").strip()
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+            b[k] = v
+        except ValueError:
+            errs[k] = "A date like 2026-09-30"
+    for k, need, hi in (("energy_cost", True, 100000), ("export_credit", True, 100000), ("avg_buy_c", False, 500)):
+        v = str(d.get(k) if d.get(k) is not None else "").strip().replace("$", "").replace(",", "")
+        if v == "":
+            if need:
+                errs[k] = "Needed (0 if none)"
+            b[k] = None if not need else 0.0
+            continue
+        try:
+            x = float(v)
+            if not 0 <= x <= hi:
+                raise ValueError
+            b[k] = round(x, 4)
+        except ValueError:
+            errs[k] = f"A number from 0 to {hi:,}"
+    if "start" in b and "end" in b and b["end"] < b["start"]:
+        errs["end"] = "Has to be on or after the start"
+    if not errs:
+        for o in others:
+            if o["start"] <= b["end"] and b["start"] <= o["end"]:
+                errs["start"] = f"Overlaps the bill for {o['start']} to {o['end']}"
+                break
+    if errs:
+        raise ValueError(errs)
+    return b

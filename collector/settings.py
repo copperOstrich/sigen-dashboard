@@ -118,6 +118,9 @@ SCHEMA = [
        "choice", "tiles", options=[["tiles", "Region tiles"], ["map", "Nodes and wires"], ["chain", "Chain"]]),
     _s("TIME_FORMAT", DASH, "Time format", "How times show everywhere on the dashboard, whatever your browser's "
        "language would choose.", "choice", "12h", options=[["12h", "12-hour (6:30 pm)"], ["24h", "24-hour (18:30)"]]),
+    _s("UPDATE_CHECK", DASH, "Tell me about new versions", "Checks GitHub's public releases list twice a day and "
+       "shows a notice when a newer collector is out. Nothing about your system is sent.", "choice", "on",
+       options=[["on", "On"], ["off", "Off"]]),
     # ---------------------------------------------------------------- battery
     _s("BATTERY_WARRANTY_YEARS", BATTERY, "Warranty length", "From your battery's warranty, counted from the "
        "day the system was switched on (Money).", "number", "10", min=1, max=30, unit="years"),

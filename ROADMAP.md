@@ -20,21 +20,10 @@ bump and changelog entry; the order can change as real use shows what matters.
   higher backup reserve would do.
 - **E. Smarter forecasts (1.18):** weather-aware home use in the outlook; expected cost for today
   and tomorrow; car charging plan.
+- **F. Less upkeep (1.19):** bills added, edited and removed on the Settings page; files imported
+  from the browser; database size, free disk and compacting; a new-version notice.
 
-## Phase F: less upkeep (next)
-
-The monthly chores, done from the dashboard.
-
-- [ ] Add a bill from the Settings page (period, energy charges, export credit) instead of editing
-      a CSV; list, edit and remove bills there
-- [ ] Upload an Amber usage report or mySigen export from the browser instead of copying it into
-      the `import` folder
-- [ ] "A new version is available" notice in the dashboard when a newer release is published
-      (with its changelog), so the NAS doesn't fall behind
-- [ ] Database size and growth in Data feeds; a monthly tidy-up (vacuum) after old minute history
-      is pruned
-
-## Phase G: problems that reach you
+## Phase G: problems that reach you (next)
 
 Alarms, a stopped string, a failed backup or the collector going quiet are only seen when the
 dashboard is open. (Amber already sends price notifications, so this is about the system's

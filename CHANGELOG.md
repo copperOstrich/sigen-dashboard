@@ -2,6 +2,25 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.19.0
+
+Less upkeep: the monthly chores, from the Settings page (home network only; no restart needed).
+
+- **Bills**: add a bill (period, energy charges, export credit, average rate), edit or remove it.
+  Each bill sits beside what the data had for its period. Overlapping bills are refused, and
+  removing one also removes day costs that were only estimated from it
+- **Import files**: choose or drop an Amber usage report, mySigen Energy export or bills CSV and
+  it's imported straight away, with what happened shown underneath and a list of earlier files.
+  Only .csv and .xlsx, up to 40 MB
+- **Database**: size, unused space, history span and free disk space, with a warning when the disk
+  is getting full and a button to compact the database
+- **New version notice**: the collector checks GitHub's public releases twice a day; when a newer
+  one is out the Settings gear gets a dot, the footer says so, and Settings > Version gives the
+  image tag to switch to. Turn it off with **Tell me about new versions** (`UPDATE_CHECK=off`)
+- Money figures refresh as soon as a bill or import changes past days
+- Tests: bill checks, upload names, version comparison; the smoke test adds, edits and removes a
+  bill, uploads files, compacts the database and sees a (simulated) new version
+
 ## 1.18.0
 
 - **Battery outlook learns the weather**: daily home use over the last fortnight is compared with

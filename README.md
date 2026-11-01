@@ -454,8 +454,9 @@ was switched on, export the daily figures from the mySigen app: the station's st
 **Energy**, **Day** view (one row per day; not Month, Year or Lifetime), export. You get a file
 named like `stationData-...-Energy.xlsx`.
 
-Copy it into the `import` folder inside the data folder (the collector creates it; on a QNAP,
-`/share/Container/sigen-dashboard/import`) and restart the container. The log says what it
+On the **Settings** page, under **Import files**, choose the file (or drop it there) and it's
+imported straight away. Or copy it into the `import` folder inside the data folder (the collector
+creates it; on a QNAP, `/share/Container/sigen-dashboard/import`) and restart the container. The log says what it
 imported, and the file is renamed to `.imported`. Imported days fill the daily and monthly
 history, the Money panel and payback, but never replace days the collector recorded itself.
 With Amber, the collector also fetches Amber's daily costs back to the first imported day
@@ -464,8 +465,9 @@ about 90 days; the log says how far it got. If you joined your retailer after th
 switched on, set `RETAILER_SINCE`: the days before count towards payback, priced on the
 comparison plan, and are left out of the comparison.
 
-**Bills** set the record straight: a CSV in the same `import` folder, one row per bill
-(dollars incl. GST):
+**Bills** set the record straight. Add each one on the Settings page under **Bills** (period,
+energy charges, export credit, optionally the average usage rate), where they can also be changed
+or removed. Or put a CSV in the same `import` folder, one row per bill (dollars incl. GST):
 
 ```
 start,end,energy_cost,export_credit,avg_buy_c
@@ -819,6 +821,7 @@ hand). Values in `sigen.env` win over the container's environment.
 | **Dashboard** | | |
 | `GRID_VIEW` | How The grid shows all regions: `tiles`, `map` (nodes and wires) or `chain` | `tiles` |
 | `TIME_FORMAT` | `12h` (6:30 pm) or `24h` (18:30), for every time on the dashboard | `12h` |
+| `UPDATE_CHECK` | `off` stops the twice-daily check of GitHub releases for a newer collector | `on` |
 | **Home Assistant (MQTT)** | | |
 | `MQTT_HOST`, `MQTT_PORT` | Your MQTT broker; blank = off | off, `1883` |
 | `MQTT_USERNAME`, `MQTT_PASSWORD` | If the broker needs them | none |
@@ -865,8 +868,12 @@ thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 | `GET /api/appliances` | Best start time and cost for each appliance in `APPLIANCES` |
 | `GET /api/trading?days=30` | Battery trading: spikes caught and missed, export prices, reserve what-if |
 | `GET /api/ev-plan?kwh=20&by=07:00` | Car charging plan: the cheapest times to charge that many kWh before then |
-| `GET /api/ui` | Display settings for the pages (time format) |
-| `GET /api/bills` | Each imported bill beside what the data had for its period, and the difference |
+| `GET /api/ui` | Display settings for the pages (time format) and a newer release, if there is one |
+| `GET /api/bills` | Each bill beside what the data had for its period, and the difference |
+| `POST /api/bills` | `{"action": "save", "bill": {...}, "replace": {start, end}}` or `{"action": "delete", "start", "end"}`; home network only |
+| `POST /api/import` | `{"name": "file.csv", "data": "<base64>"}`: imports an Amber usage report, mySigen export or bills CSV; home network only |
+| `GET /api/maintenance` | Database size, history span, free disk, recent imports and the version check |
+| `POST /api/maintenance` | `{"action": "vacuum"}` compacts the database; `{"action": "check-update"}` checks now; home network only |
 | `GET /api/backups` | Backup status and the backups kept; `POST` (home network only) backs up now |
 | `GET /api/health` | `{ok, status, updated, version}` for monitoring |
 | `GET /api/debug` | Raw register values, unsupported registers and the charger search, for troubleshooting |

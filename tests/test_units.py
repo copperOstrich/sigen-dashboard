@@ -18,6 +18,7 @@ import limits  # noqa: E402
 import money  # noqa: E402
 import mqtt  # noqa: E402
 import settings  # noqa: E402
+import updates  # noqa: E402
 from backup import Backups  # noqa: E402
 
 
@@ -295,6 +296,32 @@ class BackupPruning(unittest.TestCase):
         self.assertEqual(len(kept), 11)
         self.assertEqual(kept[-1], f"sigen-{(start + timedelta(days=59)).isoformat()}.db.gz")
         self.assertTrue((folder / "other-2026-01-01.db.gz").exists())
+
+
+
+class BillsAndUploads(unittest.TestCase):
+    def test_clean_bill(self):
+        b = importer.clean_bill({"start": "2026-09-01", "end": "2026-09-30", "energy_cost": "$1,040.50", "export_credit": "0"})
+        self.assertEqual((b["energy_cost"], b["export_credit"], b["avg_buy_c"]), (1040.5, 0.0, None))
+        with self.assertRaises(ValueError) as e:
+            importer.clean_bill({"start": "2026-09-30", "end": "2026-09-01", "energy_cost": "x", "export_credit": ""})
+        self.assertEqual(set(e.exception.args[0]), {"end", "energy_cost", "export_credit"})
+        with self.assertRaises(ValueError) as e:
+            importer.clean_bill({"start": "2026-09-01", "end": "2026-09-30", "energy_cost": 1, "export_credit": 1},
+                                [{"start": "2026-08-15", "end": "2026-09-01"}])
+        self.assertIn("Overlaps", e.exception.args[0]["start"])
+
+    def test_safe_name(self):
+        self.assertEqual(importer.safe_name("../../Amber Usage 2026.csv"), "Amber Usage 2026.csv")
+        for bad in ("evil.sh", "x.csv.exe", ""):
+            with self.assertRaises(ValueError):
+                importer.safe_name(bad)
+
+    def test_newer_version(self):
+        self.assertTrue(updates.newer("1.20.0", "1.19.0"))
+        self.assertTrue(updates.newer("v1.19.10", "1.19.9"))
+        self.assertFalse(updates.newer("1.19.0", "1.19.0"))
+        self.assertFalse(updates.newer("", "1.19.0"))
 
 
 if __name__ == "__main__":

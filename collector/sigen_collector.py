@@ -64,6 +64,7 @@ from weather import Weather  # noqa: E402
 from outlook import Outlook  # noqa: E402
 from money import Money  # noqa: E402
 from importer import import_folder, reload_bills  # noqa: E402
+from updates import UpdateCheck  # noqa: E402
 from fuel import Fuel  # noqa: E402
 from backup import Backups  # noqa: E402
 from strings_health import StringsHealth  # noqa: E402
@@ -128,6 +129,10 @@ def main():
                   retailer_since=RETAILER_SINCE, log=log)
     Api.collector, Api.store, Api.retailer, Api.aemo, Api.weather = collector, store, retailer, aemo, weather
     Api.money = money
+    sim_update = os.environ.get("SIM_UPDATE", "") if SIMULATE else ""  # the simulator pretends this version is out
+    Api.updates = UpdateCheck(VERSION, enabled=UPDATE_CHECK and (not SIMULATE or bool(sim_update)), log=log,
+                              fetch=(lambda: {"latest": sim_update, "url": "https://github.com/copperOstrich/sigen-dashboard/releases",
+                                              "published": "", "notes": "Simulated release notes."}) if sim_update else None)
     fuel = Fuel(store, TZ, FUEL_SETTINGS, locate=weather.location, simulate=SIMULATE, log=log)
     Api.fuel = money.fuel = collector.fuel = fuel
     if fuel.enabled:

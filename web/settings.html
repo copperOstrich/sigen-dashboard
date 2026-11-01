@@ -51,7 +51,47 @@
   .set-busy.show { display: flex; }
   .set-busy .box { background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--r-panel); padding: 20px 24px; max-width: 340px; text-align: center; }
   .set-busy .box p { font: 400 14px var(--font); color: var(--ink-2); margin: 6px 0 0; }
+  .set-note { margin-top: 10px; font-size: 13.5px; color: var(--ink-2); padding: 8px 12px; border-radius: var(--r-ctl); background: var(--surface-2); }
+  .set-note.ok { color: var(--ink); background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
+  .set-note.bad { color: var(--ink); background: color-mix(in srgb, var(--bad) 12%, var(--surface)); }
+  .table-scroll { overflow-x: auto; }
+  .bill-edit td { vertical-align: top; }
+  .bill-edit td.acts { white-space: nowrap; text-align: right; }
+  .bill-edit td.acts button + button { margin-left: 6px; }
+  .bill-edit .small { font-size: 12px; }
+  .bill-edit input { font: inherit; font-size: 14px; padding: 5px 8px; border-radius: var(--r-ctl); border: 1px solid var(--rule-strong);
+    background: var(--surface-2); color: var(--ink); width: 7.5em; }
+  .bill-edit td.dates input { width: 10.5em; }
+  .bill-edit tr.editing td { background: color-mix(in srgb, var(--home) 6%, transparent); }
+  .drop { display: block; border: 1.5px dashed var(--rule-strong); border-radius: var(--r-panel); padding: 22px; text-align: center;
+    color: var(--ink-2); cursor: pointer; font-size: 14px; }
+  .drop:hover, .drop.over { border-color: var(--home); color: var(--ink); background: color-mix(in srgb, var(--home) 6%, transparent); }
+  .drop strong { color: var(--home); }
+  #imp-file:focus-visible + .drop { outline: 2px solid var(--home); outline-offset: 2px; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .imp-log { margin: 8px 0 0; padding-left: 20px; font-size: 13px; color: var(--ink-2); }
+  .imp-hist { margin-top: 12px; font-size: 14px; }
+  .imp-hist summary { cursor: pointer; color: var(--ink-2); }
+  .bad-text { color: var(--bad); }
+  .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; margin: 4px 0 12px; font-size: 14px; }
+  .kv dt { color: var(--ink-3); }
+  .kv dd { margin: 0; word-break: break-all; }
+  .row-btns { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .muted.small { font-size: 12.5px; }
+  #version a { color: var(--home); font-size: 14px; }
+  .ver { font-size: 14px; margin: 4px 0 8px; }
+  .steps { font-size: 14px; padding-left: 20px; margin: 0 0 10px; }
+  .steps code { font-size: 13px; }
   @media (max-width: 640px) {
+    .bill-edit tr:first-child { display: none; }
+    .bill-edit, .bill-edit tbody, .bill-edit tr, .bill-edit td { display: block; }
+    .bill-edit tr { border-top: 1px solid var(--rule); padding: 10px 0; }
+    .bill-edit td, .bill-edit td.num, .bill-edit td.acts { border: 0; padding: 2px 0; text-align: left; }
+    .bill-edit td[data-label]::before { content: attr(data-label); display: inline-block; min-width: 92px; color: var(--ink-3); font-size: 13px; }
+    .bill-edit td.acts { padding-top: 8px; }
+    .bill-edit input, .bill-edit td.dates input { width: 9.5em; }
+    .kv { grid-template-columns: minmax(0, 1fr); gap: 0 0; }
+    .kv dd { margin-bottom: 6px; }
     .set-wrap { padding: 16px 14px 120px; }
     .set-row { grid-template-columns: minmax(0, 1fr); }
     .set-row > label { padding-top: 0; }
@@ -74,6 +114,7 @@
   <p class="set-intro" id="intro"></p>
   <nav class="set-nav" id="nav" aria-label="Setting groups"></nav>
   <div id="groups"></div>
+  <div id="data-panels"></div>
 </div>
 <div class="set-bar" id="bar">
   <div class="in">
@@ -85,5 +126,6 @@
 <div class="set-busy" id="busy" role="status" aria-live="polite"><div class="box"><span id="busy-title">Restarting the collector…</span><p id="busy-text">Applying your settings. This takes a few seconds.</p></div></div>
 <script src="common.js"></script>
 <script src="settings.js"></script>
+<script src="settings-data.js"></script>
 </body>
 </html>

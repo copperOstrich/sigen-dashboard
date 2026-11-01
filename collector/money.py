@@ -146,6 +146,11 @@ class Money:
         self._trade_cache = {}    # day -> [events]
         self._result, self._result_at = None, 0
 
+    def forget(self):
+        """Drop cached days, after a bill or an import changed what past days cost."""
+        self._day_cache, self._trade_cache = {}, {}
+        self._result, self._result_at = None, 0
+
     # ---------------------------------------------------------------- plans
     def plans(self):
         custom = self.data_dir / "plans.json"

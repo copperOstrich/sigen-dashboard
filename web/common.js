@@ -43,6 +43,20 @@
         store.set("sigen.timefmt", u.time_format);
         if (window.SigenRedraw) window.SigenRedraw();
       }
+      // a newer collector is out: a dot on the Settings gear and a line in the footer
+      if (u && u.update && u.update.newer) {
+        const gear = document.getElementById("config-btn"), foot = document.getElementById("foot");
+        const title = `Collector ${u.update.latest} is available`;
+        if (gear && !gear.querySelector(".upd-dot")) {
+          gear.append(Object.assign(document.createElement("span"), { className: "upd-dot" }));
+          gear.title = `Settings · ${title}`;
+          gear.setAttribute("aria-label", `Settings (${title})`);
+        }
+        if (foot && !document.getElementById("foot-update")) {
+          const a = Object.assign(document.createElement("a"), { id: "foot-update", href: "settings.html#version", textContent: title + " →" });
+          foot.prepend(a);
+        }
+      }
     }).catch(() => {});
   }, 0);
 

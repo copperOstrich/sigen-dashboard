@@ -119,9 +119,19 @@
       g.settings.forEach((e) => sec.append(row(e)));
       groups.append(sec);
     }
+    navData();
     if (keep && $(keep)) $(keep).focus();
     updateBar();
   }
+
+  // links to the bills, import, database and version panels (settings-data.js)
+  function navData() {
+    const nav = $("nav");
+    nav.querySelectorAll("a.data").forEach((a) => a.remove());
+    document.querySelectorAll("#data-panels section[data-nav]").forEach((s) =>
+      nav.append(el("a", { class: "data", href: "#" + s.id, text: s.dataset.nav })));
+  }
+  window.SigenSettingsNav = navData;
 
   function renderAccess() {
     $("access-dot").className = "dot " + (data.editable ? "ok" : "warn");

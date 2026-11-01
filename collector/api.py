@@ -22,7 +22,8 @@ from charger import ChargerWatch  # noqa: E402
 from weather import Weather  # noqa: E402
 from outlook import Outlook  # noqa: E402
 from money import Money  # noqa: E402
-from importer import import_folder, reload_bills  # noqa: E402
+from importer import import_folder, reload_bills, import_upload, import_history, clean_bill  # noqa: E402
+import base64  # noqa: E402
 from fuel import Fuel  # noqa: E402
 from backup import Backups  # noqa: E402
 from strings_health import StringsHealth  # noqa: E402
@@ -51,6 +52,8 @@ class Api(BaseHTTPRequestHandler):
     restart = None
     backups = None
     limits = None
+    updates = None
+    money = None
 
     def log_message(self, fmt, *args):
         pass
@@ -101,7 +104,7 @@ class Api(BaseHTTPRequestHandler):
     def do_POST(self):
         url = urlparse(self.path)
         try:
-            if url.path not in ("/api/settings", "/api/backups"):
+            if url.path not in ("/api/settings", "/api/backups", "/api/bills", "/api/import", "/api/maintenance"):
                 return self._json({"error": "not found"}, 404)
             refused = self._post_refused()
             if refused:
@@ -113,9 +116,17 @@ class Api(BaseHTTPRequestHandler):
                 self.collector._backup_at = 0
                 return self._json(res, 200 if res.get("ok") else 500)
             n = int(self.headers.get("Content-Length") or 0)
-            if n > 100_000:
+            if n > (60_000_000 if url.path == "/api/import" else 100_000):
                 return self._json({"error": "too large"}, 413)
             body = json.loads(self.rfile.read(n) or b"{}")
+            if not isinstance(body, dict):
+                return self._json({"error": "expected an object"}, 400)
+            if url.path == "/api/bills":
+                return self._post_bills(body)
+            if url.path == "/api/import":
+                return self._post_import(body)
+            if url.path == "/api/maintenance":
+                return self._post_maintenance(body)
             changes = body.get("changes") or {}
             if not isinstance(changes, dict):
                 return self._json({"error": "changes must be an object"}, 400)
@@ -156,6 +167,79 @@ class Api(BaseHTTPRequestHandler):
         except Exception as e:
             traceback.print_exc()
             self._json({"error": str(e)}, 500)
+
+    def _changed_costs(self):
+        if Api.money:
+            Api.money.forget()
+
+    def _post_bills(self, body):
+        action = body.get("action")
+        if action == "delete":
+            n = self.store.delete_bill(str(body.get("start")), str(body.get("end")))
+            if not n:
+                return self._json({"error": "No bill with those dates"}, 404)
+            log(f"Bills: removed the bill for {body.get('start')} to {body.get('end')} from the dashboard")
+            self._changed_costs()
+            return self._json({"ok": True, "bills": self.store.bill_check()})
+        if action != "save":
+            return self._json({"error": "action must be save or delete"}, 400)
+        was = body.get("replace") or {}
+        others = [b for b in self.store.bills() if not (b["start"] == was.get("start") and b["end"] == was.get("end"))]
+        try:
+            b = clean_bill(body.get("bill") or {}, others)
+        except ValueError as e:
+            errs = e.args[0] if e.args and isinstance(e.args[0], dict) else {"start": str(e)}
+            return self._json({"error": "The bill needs fixing", "errors": errs}, 400)
+        if was.get("start") and was.get("end"):
+            self.store.delete_bill(str(was["start"]), str(was["end"]))
+        self.store.save_bill(b, source="typed in")
+        r = self.store.apply_bill(b)
+        log(f"Bills: {'changed' if was else 'added'} the bill for {b['start']} to {b['end']} from the dashboard "
+            f"(${b['energy_cost']:.2f} energy, ${b['export_credit']:.2f} credit)")
+        self._changed_costs()
+        return self._json({"ok": True, "filled": r["filled"], "bills": self.store.bill_check()})
+
+    def _post_import(self, body):
+        try:
+            data = base64.b64decode(str(body.get("data") or ""), validate=True)
+        except (ValueError, TypeError):
+            return self._json({"error": "The file didn't arrive in one piece; try again"}, 400)
+        if not data:
+            return self._json({"error": "The file is empty"}, 400)
+        try:
+            res = import_upload(self.store, DATA_DIR, body.get("name"), data, log=log)
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        self._changed_costs()
+        return self._json(res, 200 if res["ok"] else 422)
+
+    def _post_maintenance(self, body):
+        if body.get("action") == "vacuum":
+            res = self.store.vacuum()
+            log(f"Database compacted from the dashboard: {res['before'] / 1e6:.1f} MB to {res['after'] / 1e6:.1f} MB "
+                f"in {res['seconds']} s")
+            return self._json(res)
+        if body.get("action") == "check-update":
+            if not Api.updates:
+                return self._json({"enabled": False})
+            Api.updates._at = 0
+            return self._json(Api.updates.status(wait=True))
+        return self._json({"error": "unknown action"}, 400)
+
+    def _maintenance(self):
+        editable, _ = self._settings_access()
+        info = self.store.db_info()
+        try:
+            du = shutil.disk_usage(self.store.path.parent)
+            info["disk"] = {"total": du.total, "free": du.free}
+        except OSError:
+            pass
+        if not editable:
+            info["file"] = None
+        return {"editable": editable, "version": VERSION, "database": info,
+                "imports": import_history(DATA_DIR) if editable else [],
+                "update": Api.updates.status() if Api.updates else {"enabled": False, "current": VERSION},
+                "upgrade": {"image": "ghcr.io/copperostrich/sigen-dashboard"}}
 
     def do_OPTIONS(self):
         self._headers(204, "text/plain", {"Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -310,7 +394,11 @@ class Api(BaseHTTPRequestHandler):
                 fc = (self.retailer.snapshot().get("forecast") if self.retailer else None) or []
                 return self._json(ev_plan(o.rows, fc, kwh, by, kw, time.time()))
             if url.path == "/api/ui":
-                return self._json({"time_format": TIME_FORMAT if TIME_FORMAT in ("12h", "24h") else "12h", "version": VERSION})
+                up = Api.updates.status() if Api.updates else {}
+                return self._json({"time_format": TIME_FORMAT if TIME_FORMAT in ("12h", "24h") else "12h", "version": VERSION,
+                                   "update": {k: up.get(k) for k in ("latest", "url", "newer")} if up.get("newer") else None})
+            if url.path == "/api/maintenance":
+                return self._json(self._maintenance())
             if url.path == "/api/bills":
                 return self._json({"bills": self.store.bill_check()})
             if url.path == "/api/baseload":

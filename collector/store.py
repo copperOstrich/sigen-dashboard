@@ -185,8 +185,46 @@ class Store:
                        "export_kwh": e, "export_cost": -max(0.0, credit) * (e / te if te else 1 / len(todo)),
                        "estimated": True, "avg_buy_c": b.get("avg_buy_c")}
         if days:
-            self.save_amber_days(days)
+            self.save_amber_days(days, source="bill")
         return {"filled": len(days), "known": len(known)}
+
+    def delete_bill(self, start, end):
+        """Take a bill out, with the day costs that were only estimated from it."""
+        with self.lock:
+            n = self.db.execute("DELETE FROM bills WHERE start=? AND end=?", (start, end)).rowcount
+            self.db.execute("DELETE FROM amber_days WHERE source='bill' AND day>=? AND day<=?", (start, end))
+            self.db.commit()
+        return n
+
+    # ---- the database itself
+    def db_info(self):
+        """File sizes, rows per table and the span of history, for Settings > Data."""
+        def size(p):
+            try:
+                return p.stat().st_size
+            except OSError:
+                return 0
+        with self.lock:
+            tables = [r[0] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+            rows = {t: self.db.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0] for t in tables}
+            first, last = self.db.execute("SELECT MIN(ts), MAX(ts) FROM samples").fetchone()
+            page, free = (self.db.execute("PRAGMA page_size").fetchone()[0],
+                          self.db.execute("PRAGMA freelist_count").fetchone()[0])
+        wal = self.path.with_name(self.path.name + "-wal")
+        return {"file": str(self.path), "bytes": size(self.path), "wal_bytes": size(wal), "free_bytes": page * free,
+                "rows": rows, "first": first, "last": last, "retention_days": RETENTION_DAYS}
+
+    def vacuum(self):
+        """Give unused space back to the disk. Blocks writes while it runs (seconds, for most databases)."""
+        before = self.db_info()
+        t0 = time.time()
+        with self.lock:
+            self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            self.db.execute("VACUUM")
+            self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        after = self.db_info()
+        return {"ok": True, "before": before["bytes"] + before["wal_bytes"], "after": after["bytes"] + after["wal_bytes"],
+                "seconds": round(time.time() - t0, 1)}
 
     def imported_days(self, since=""):
         with self.lock:
@@ -554,7 +592,7 @@ class Store:
             srcs = sorted({e.get("cost_source") or "estimated from the bill" for e in have})
             out.append({"start": b["start"], "end": b["end"], "days": n, "days_with_data": len(have),
                         "bill": {"bought": b["energy_cost"], "earned": b["export_credit"],
-                                 "net": round(b["energy_cost"] - b["export_credit"], 2)},
+                                 "net": round(b["energy_cost"] - b["export_credit"], 2)}, "avg_buy_c": b.get("avg_buy_c"),
                         "data": {"bought": round(bought, 2), "earned": round(earned, 2), "net": round(bought - earned, 2)},
                         "difference": round((b["energy_cost"] - b["export_credit"]) - (bought - earned), 2),
                         "sources": srcs, "file": b.get("source")})
