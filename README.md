@@ -230,6 +230,10 @@ how the grid connects. Pick one in Settings.
   <img alt="The grid as a chain: Queensland, New South Wales, Victoria and South Australia in a line with flow arrows, and Tasmania below Victoria" src="docs/screenshots/grid-chain-light.png">
 </picture>
 
+**Year in review** (a link under Monthly summary): the last 12 months at a glance, with monthly
+charts and highlights, printable to A4. The monthly **Printable report** also covers solar held
+back, price spikes, always-on use and battery cycles for the month.
+
 **Arrange panels**: hide what you don't use, and change the order and width of the rest.
 
 <picture>
@@ -836,6 +840,7 @@ thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 | `GET /api/battery-wear` | Cycles, throughput, round trip, health trend and warranty projection |
 | `GET /api/baseload?days=90` | Always-on use: each night's baseline, now and four weeks ago, and a year's kWh and cost |
 | `GET /api/appliances` | Best start time and cost for each appliance in `APPLIANCES` |
+| `GET /api/bills` | Each imported bill beside what the data had for its period, and the difference |
 | `GET /api/backups` | Backup status and the backups kept; `POST` (home network only) backs up now |
 | `GET /api/health` | `{ok, status, updated, version}` for monitoring |
 | `GET /api/debug` | Raw register values, unsupported registers and the charger search, for troubleshooting |

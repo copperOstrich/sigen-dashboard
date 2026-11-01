@@ -49,6 +49,11 @@
   <div class="kpis" id="kpis"></div>
   <h2>Compared with</h2>
   <table class="rt" id="cmp"></table>
+  <div id="also-wrap" hidden>
+    <h2>Also this month</h2>
+    <div class="kpis" id="also"></div>
+    <p class="fine" id="also-fine"></p>
+  </div>
   <h2>Day by day</h2>
   <table class="rt" id="days"></table>
   <p class="fine" id="fine"></p>
@@ -91,6 +96,7 @@
     for (const [label, f] of rows) c.append(el("tr", {}, el("td", { text: label }), ...cols.map((x) => el("td", { text: f(x) }))));
     // day by day for the month
     const start = new Date(m.month + "-01T00:00:00"), back = Math.ceil((Date.now() - start.getTime()) / 86400000) + 1;
+    renderAlso(m, Math.min(400, back));
     const daily = (await S.fetchJSON(`/api/daily?days=${Math.min(800, back)}`)).filter((d) => d.day.startsWith(m.month));
     const t = $("days"); t.innerHTML = "";
     t.append(el("tr", {}, ...["Day", "Solar", "Home", "Car", "Bought", "Sold", "Net cost"].map((h) => el("th", { text: h }))));
@@ -107,6 +113,40 @@
       `Report made ${new Date().toLocaleString()} by Home Energy.`;
     history.replaceState(null, "", `?month=${m.month}${q.get("api") ? `&api=${encodeURIComponent(q.get("api"))}` : ""}`);
   }
+  // solar held back, price spikes, always-on use and the battery, for the month shown
+  async function renderAlso(m, back) {
+    const get = (u) => S.fetchJSON(u).catch(() => null);
+    const [lim, bl, mon, wear] = await Promise.all([get(`/api/limits?days=${back}`), get(`/api/baseload?days=${Math.max(7, back)}`),
+      get("/api/money"), get("/api/battery-wear")]);
+    const box = $("also"); box.innerHTML = "";
+    const kpi = (label, v, unit, d) => el("div", { class: "kpi" }, el("div", { class: "k", text: label }),
+      el("div", { class: "v" }, v, unit ? el("small", { text: unit }) : null), d ? el("div", { class: "k", style: "margin-top:2px", text: d }) : null);
+    const notes = [];
+    const inMonth = (x) => x.day.startsWith(m.month);
+    if (lim && lim.days) {
+      const ds = lim.days.filter(inMonth), R = { export: "export limit", negative: "negative prices", inverter: "inverter maximum", full: "battery full" };
+      const tot = {}; let mins = 0;
+      for (const d of ds) for (const r of Object.keys(R)) { const x = d[r] || {}; tot[r] = (tot[r] || 0) + (x.kwh || 0); mins += x.minutes || 0; }
+      const kwhs = Object.values(tot).reduce((a, b) => a + b, 0), top = Object.keys(tot).sort((a, b) => tot[b] - tot[a])[0];
+      if (ds.length) box.append(lim.modelled ? kpi("Solar held back", kwhs.toFixed(1), "kWh", kwhs >= 0.1 ? `mostly ${R[top]}` : "none")
+        : kpi("Limited solar", (mins / 60).toFixed(0), "h", ""));
+    }
+    const sp = ((mon && mon.spikes) || []).filter(inMonth);
+    box.append(kpi("Price spikes", sp.length, sp.length === 1 ? "day" : "days",
+      sp.length ? `${sp[0].kind === "export" ? "earned" : "cost"} ${money(sp.reduce((a, x) => a + x.amount, 0))}` : "none"));
+    for (const x of sp) notes.push(`${new Date(x.day + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "long" })}: a price spike ` +
+      `${x.kind === "export" ? "earned" : "cost"} ${money(x.amount)}${x.peak_c ? ` (up to $${(x.peak_c / 100).toFixed(2)}/kWh for ${x.minutes} minutes)` : ""}.`);
+    if (bl && bl.enabled) {
+      const ns = bl.nights.filter(inMonth).map((x) => x.w).sort((a, b) => a - b);
+      if (ns.length) box.append(kpi("Always-on use", ns[Math.floor(ns.length / 2)], "W", `${ns.length} nights`));
+    }
+    if (wear && wear.enabled && m.discharge != null) {
+      box.append(kpi("Battery cycles", (m.discharge / wear.rated_kwh).toFixed(1), "", `${(m.discharge / m.days / wear.rated_kwh).toFixed(2)} a day`));
+    }
+    $("also-wrap").hidden = !box.children.length;
+    $("also-fine").textContent = notes.join(" ");
+  }
+
   $("prev").addEventListener("click", () => { if (idx > 0) { idx--; render(); } });
   $("next").addEventListener("click", () => { if (idx < months.length - 1) { idx++; render(); } });
   S.fetchJSON("/api/monthly?months=36").then((m) => {

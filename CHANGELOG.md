@@ -2,6 +2,21 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.16.0
+
+- **Your bills against the data** (Money panel): each bill beside what the dashboard had for its
+  period before the bill took over (Amber's figures, a usage report, or its own pricing) and the
+  difference, so you can see how close Amber's daily figures run to the final bill
+- **Printable report**: a new "Also this month" section with solar held back (and the main
+  reason), price spikes and what they earned, the month's always-on use and battery cycles
+- **Year in review** (Monthly summary, Year in review): the last 12 months (or since the start)
+  with solar made, use, self-sufficiency, money bought, sold and saved against the Default
+  Market Offer, payback, battery cycles, solar held back and price spikes; monthly charts of
+  solar and net cost; and highlights such as the best solar day, the biggest earning day and the
+  longest run barely using the grid. Prints to A4
+- Internal: `sigen_collector.py` is now just the entry point. Settings live in `config.py`, the
+  collector loop in `loop.py` and the HTTP API in `api.py` (with the database in `store.py`)
+
 ## 1.15.1
 
 - Internal: the database code (minute readings, prices, retailer costs, bills, car sessions,

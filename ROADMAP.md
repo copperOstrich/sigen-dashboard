@@ -22,7 +22,7 @@ The money figures should match the retailer's bills to the cent and say when the
 - [x] "provisional", "billed" and "spike" tags in the Money panel's months, and price-spike days
       listed with what they earned
 
-## Phase B: reliability (1.14 to 1.15)
+## Phase B: reliability (1.14 to 1.16)
 
 Catch regressions before they reach the NAS, and keep the code easy to change.
 
@@ -33,16 +33,14 @@ Catch regressions before they reach the NAS, and keep the code easy to change.
       endpoint answers without errors
 - [x] Both run on every push (GitHub Actions, "Tests")
 - [x] Database code split out of `sigen_collector.py` into `store.py` (1.15.1)
-- [ ] Split the HTTP API and the collector loop out too
+- [x] HTTP API, collector loop and settings split out too: `api.py`, `loop.py`, `config.py` (1.16)
 - [x] Data feeds in the System panel: each feed's status, last update and errors, backup age, disk space (1.15)
 
 ## Phase C: reconcile and report (1.16)
 
-- [ ] "Check against your bill": each month the dashboard's figures beside the bill and Amber's
-      usage report, with the difference explained (supply charge, demand charge, vouchers)
-- [ ] The printable monthly report gains the newer panels: solar limits, battery wear, always-on
-      use, price spikes
-- [ ] A year-in-review page: production, self-sufficiency, money saved, best and worst days
+- [x] "Your bills against the data": each bill beside what the data had for its period (1.16)
+- [x] The printable monthly report gains solar held back, price spikes, always-on use and battery cycles (1.16)
+- [x] Year in review page: production, self-sufficiency, money, payback and highlights (1.16)
 
 ## Phase D: battery trading insight (1.17)
 

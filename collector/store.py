@@ -537,6 +537,29 @@ class Store:
         for e in period:
             e["cost"], e["cost_source"] = round(e["bought"] - e["earned"], 2), "bill"
 
+    def bill_check(self):
+        """Each bill beside what the data said for its period before the bill took over (Amber's
+        figures, a usage report, or the dashboard's own pricing), and the difference."""
+        out = []
+        bills = self.bills()
+        if not bills:
+            return out
+        first = (datetime.fromisoformat(bills[0]["start"]) - timedelta(days=1)).strftime("%Y-%m-%d")
+        raw = self._daily_since(first)
+        for b in bills:
+            days = [e for e in raw if b["start"] <= e["day"] <= b["end"]]
+            have = [e for e in days if e.get("bought") is not None]
+            n = (datetime.fromisoformat(b["end"]) - datetime.fromisoformat(b["start"])).days + 1
+            bought, earned = sum(e["bought"] for e in have), sum(e["earned"] for e in have)
+            srcs = sorted({e.get("cost_source") or "estimated from the bill" for e in have})
+            out.append({"start": b["start"], "end": b["end"], "days": n, "days_with_data": len(have),
+                        "bill": {"bought": b["energy_cost"], "earned": b["export_credit"],
+                                 "net": round(b["energy_cost"] - b["export_credit"], 2)},
+                        "data": {"bought": round(bought, 2), "earned": round(earned, 2), "net": round(bought - earned, 2)},
+                        "difference": round((b["energy_cost"] - b["export_credit"]) - (bought - earned), 2),
+                        "sources": srcs, "file": b.get("source")})
+        return out
+
     def _daily_since(self, since):
         cols = ",".join(f"MIN({c}),MAX({c})" for c in COUNTERS)
         with self.lock:

@@ -405,6 +405,22 @@
           ...vals.map((v, i) => el("td", { class: (i === 0 ? "mine " : "") + (v === min ? "best" : ""), text: money$(v, 2) }))));
       }
     }
+    // ---- bills against the data
+    S.fetchJSON("/api/bills").then((bc) => {
+      const bt = $("money-bills"), list = (bc && bc.bills) || [];
+      bt.hidden = !list.length; bt.innerHTML = "";
+      if (!list.length) return;
+      const dm = (x) => new Date(x + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" });
+      bt.append(el("tr", {}, el("th", { text: "Your bills" }), el("th", { text: "Bill" }), el("th", { text: "The data had" }), el("th", { text: "Difference" })));
+      for (const b of list.slice().reverse()) {
+        const diff = b.difference, small = Math.abs(diff) < 0.5;
+        bt.append(el("tr", { title: `Bill: ${money$(b.bill.bought, 2)} energy, ${money$(b.bill.earned, 2)} credit. ` +
+            `The data: ${money$(b.data.bought, 2)} and ${money$(b.data.earned, 2)} (${b.sources.join(", ")}), ${b.days_with_data} of ${b.days} days. Now set to the bill.` },
+          el("td", { text: `${dm(b.start)} to ${dm(b.end)}` }), el("td", { text: money$(b.bill.net, 2) }), el("td", { text: money$(b.data.net, 2) }),
+          el("td", { class: small ? "best" : null, text: small ? "matches" : `${diff > 0 ? "+" : "−"}${money$(Math.abs(diff), 2)}` })));
+      }
+    }).catch(() => {});
+
     const notes = [];
     if (pl) {
       notes.push(`Each plan priced on your own grid use and exports, hour by hour${cmp && cmp.energy_only ? "" : ", with its daily supply charge"}. The same energy flows are used for every plan; on another plan the battery might be run differently, so treat this as a guide.`);
@@ -480,6 +496,7 @@
     const base = S.apiBase();
     $("mo-links").innerHTML = "";
     $("mo-links").append(el("a", { href: `${base}/report.html?month=${m.month}${base ? `&api=${encodeURIComponent(base)}` : ""}`, target: "_blank", text: "Printable report" }),
+      el("a", { href: `${base}/year.html${base ? `?api=${encodeURIComponent(base)}` : ""}`, target: "_blank", text: "Year in review" }),
       el("a", { href: `${base}/api/monthly?months=36&format=csv`, download: "home-energy-monthly.csv", target: "_blank", text: "CSV" }));
     const src = m.cost_source === "retailer" ? "Costs from your retailer's meter data" : m.cost_source ? "Costs worked out from live prices" : "Add retailer prices to see costs";
     $("mo-note").textContent = `${src}. "Solar and battery value" is what the energy you made and stored would have cost at your average buy price (${m.avg_buy_c != null ? `${m.avg_buy_c}c/kWh` : "–"}) plus what you earned selling, before supply charges.` +

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Year in review · Home energy</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<style>
+  .yr { max-width: 1040px; margin: 0 auto; padding: 24px 24px 56px; }
+  .yr header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  .yr h1 { font: 600 26px/1.2 var(--font); margin: 0; }
+  .yr .sub { color: var(--ink-3); }
+  .yr .bar { margin-left: auto; display: flex; gap: 8px; }
+  .yr h2 { font: 600 16px var(--font); margin: 0 0 10px; }
+  .yr .panel { margin-bottom: 16px; }
+  .ytiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+  .ytiles > div { padding: 10px 16px; border-left: 1px solid var(--rule); border-top: 1px solid var(--rule); }
+  .ytiles > div:nth-child(4n+1) { border-left: 0; padding-left: 0; }
+  .ytiles > div:nth-child(-n+4) { border-top: 0; }
+  .ytiles .k { font-size: 13px; color: var(--ink-2); }
+  .ytiles .v { font: 600 26px/1.25 var(--font-num); font-variant-numeric: tabular-nums; }
+  .ytiles .v small { font-size: 14px; color: var(--ink-2); font-weight: 500; margin-left: 3px; }
+  .ytiles .d { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+  .hl { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
+  .hl li { padding: 9px 0; border-top: 1px solid var(--rule); display: flex; gap: 12px; justify-content: space-between; font-size: 14px; }
+  .hl li .k { color: var(--ink-2); }
+  .hl li .v { font-family: var(--font-num); text-align: right; }
+  .hl li .v small { display: block; color: var(--ink-3); font: 12.5px var(--font); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .ytiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ytiles > div:nth-child(4n+1) { border-left: 1px solid var(--rule); padding-left: 16px; }
+    .ytiles > div:nth-child(odd) { border-left: 0; padding-left: 0; } .ytiles > div:nth-child(-n+4) { border-top: 1px solid var(--rule); }
+    .ytiles > div:nth-child(-n+2) { border-top: 0; } .hl, .two { grid-template-columns: 1fr; } }
+  @media print { .bar { display: none !important; } body { background: #fff; } .panel { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="yr">
+  <header>
+    <h1 id="title">Your year</h1>
+    <span class="sub" id="sub"></span>
+    <span class="bar">
+      <a class="ghost-btn" href="./" style="text-decoration:none">← Dashboard</a>
+      <button class="primary-btn" type="button" onclick="window.print()">Print or save as PDF</button>
+    </span>
+  </header>
+  <section class="panel"><div class="ytiles" id="tiles"></div></section>
+  <div class="two">
+    <section class="panel"><h2>Solar made each month</h2><div class="chart" id="pv-chart"></div></section>
+    <section class="panel"><h2>Net cost each month</h2><div class="chart" id="cost-chart"></div></section>
+  </div>
+  <section class="panel"><h2>Highlights</h2><ul class="hl" id="hl"></ul></section>
+  <p class="chart-note" id="fine"></p>
+</div>
+<script src="common.js"></script>
+<script src="charts.js"></script>
+<script>
+(async function () {
+  const S = window.Sigen, C = window.SigenCharts, el = S.el, $ = (id) => document.getElementById(id);
+  const get = (u) => S.fetchJSON(u).catch(() => null);
+  const money = (v, d = 0) => (v == null ? "–" : `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`);
+  const n0 = (v) => (v == null ? "–" : Math.round(v).toLocaleString());
+  const dlong = (d) => new Date(d + "T12:00:00").toLocaleDateString([], { weekday: "short", day: "numeric", month: "long", year: "numeric" });
+  const mshort = (m) => new Date(m + "-15T12:00:00").toLocaleDateString([], { month: "short" });
+  const [months0, daily, mon, lim, wear] = await Promise.all([get("/api/monthly?months=13"), get("/api/daily?days=366"),
+    get("/api/money"), get("/api/limits?days=365"), get("/api/battery-wear")]);
+  if (!months0 || !months0.length) { $("sub").textContent = "Not enough history yet."; return; }
+  const months = months0.slice(-12), days = (daily || []).filter((d) => d.day >= months[0].month + "-01");
+  const sum = (k) => months.reduce((a, m) => a + (m[k] || 0), 0);
+  const pv = sum("pv"), load = sum("load"), ev = sum("ev"), imp = sum("import"), exp = sum("export"), dis = sum("discharge");
+  const bought = sum("bought"), earned = sum("earned"), priced = months.some((m) => m.net != null);
+  const first = months[0].month, last = months[months.length - 1].month;
+  const span = `${new Date(first + "-15T12:00:00").toLocaleDateString([], { month: "long", year: "numeric" })} to ${new Date(last + "-15T12:00:00").toLocaleDateString([], { month: "long", year: "numeric" })}`;
+  $("title").textContent = months.length >= 12 ? "Your year" : `Your ${months.length} months`;
+  $("sub").textContent = span;
+  document.title = `${$("title").textContent} · Home energy`;
+  const tile = (k, v, u, d) => el("div", {}, el("div", { class: "k", text: k }), el("div", { class: "v" }, v, u ? el("small", { text: u }) : null),
+    d ? el("div", { class: "d", text: d }) : null);
+  const used = load + ev, ss = used > 0 ? Math.max(0, Math.min(100, (1 - imp / used) * 100)) : null;
+  const sc = pv > 0 ? Math.max(0, Math.min(100, (1 - exp / pv) * 100)) : null;
+  const cmp = mon && mon.compare && mon.compare.total, pb = mon && mon.payback;
+  $("tiles").append(
+    tile("Solar made", n0(pv), "kWh", `${(pv / Math.max(1, days.length || months.reduce((a, m) => a + m.days, 0))).toFixed(1)} kWh a day`),
+    tile("Home and car used", n0(used), "kWh", ev > 0.5 ? `${n0(ev)} kWh of it the car` : null),
+    tile("Self-sufficient", ss == null ? "–" : Math.round(ss), ss == null ? "" : "%", "of your use came from your own system"),
+    tile("Solar used at home", sc == null ? "–" : Math.round(sc), sc == null ? "" : "%", "the rest was sold"),
+    tile("Bought", n0(imp), "kWh", priced ? `${money(bought)} paid` : null),
+    tile("Sold", n0(exp), "kWh", priced ? `${money(earned)} earned` : null),
+    tile("Net energy cost", priced ? money(bought - earned) : "–", "", "before supply charges"),
+    cmp ? tile(`Against the ${cmp.cheapest}`, money(Math.abs(cmp.saving_vs_cheapest)), cmp.saving_vs_cheapest >= 0 ? "saved" : "extra", `over ${cmp.days} days`)
+      : tile("Battery discharged", n0(dis), "kWh"),
+    pb ? tile("Paid back so far", Math.round(pb.pct), "%", `of ${money(pb.cost)}${pb.payback_date ? `, about ${new Date(pb.payback_date + "T12:00:00").getFullYear()}` : ""}`) : tile("Battery discharged", n0(dis), "kWh"),
+    wear && wear.enabled ? tile("Battery cycles", (dis / wear.rated_kwh).toFixed(0), "", `${n0(dis)} kWh through it`) : tile("Battery discharged", n0(dis), "kWh"),
+    tile("Solar held back", lim && lim.modelled ? (Object.values(lim.period).reduce((a, x) => a + (x.kwh || 0), 0)).toFixed(0) : "–",
+      lim && lim.modelled ? "kWh" : "", lim && lim.modelled ? "by export limits, negative prices and a full battery" : "needs the weather forecast"),
+    tile("Price spikes", ((mon && mon.spikes) || []).filter((x) => x.day >= first + "-01").length, "",
+      ((mon && mon.spikes) || []).length ? `${money(((mon && mon.spikes) || []).filter((x) => x.day >= first + "-01").reduce((a, x) => a + (x.kind === "export" ? x.amount : -x.amount), 0))} net` : "none recorded"));
+  C.barChart($("pv-chart"), { labels: months.map((m) => mshort(m.month)), values: months.map((m) => m.pv), color: "var(--solar)", height: 200,
+    yFmt: (v) => `${v}`, title: (i) => months[i].month, tip: (i) => [["Solar", `${n0(months[i].pv)} kWh`, "var(--solar)"], ["Days", months[i].days, null]],
+    ariaLabel: "Solar made each month, kWh" });
+  C.barChart($("cost-chart"), { labels: months.map((m) => mshort(m.month)), values: months.map((m) => m.net), allowNegative: true, height: 200,
+    color: (v) => (v != null && v < 0 ? "var(--battery)" : "var(--grid)"), yFmt: (v) => (v < 0 ? `-$${-v}` : `$${v}`), title: (i) => months[i].month,
+    tip: (i) => [["Net cost", money(months[i].net, 2), null], ["Bought", money(months[i].bought, 2), "var(--grid)"], ["Earned", money(months[i].earned, 2), "var(--battery)"]],
+    ariaLabel: "Net energy cost each month" });
+  const hl = $("hl"), add = (k, v, sub) => hl.append(el("li", {}, el("span", { class: "k", text: k }), el("span", { class: "v" }, v, sub ? el("small", { text: sub }) : null)));
+  const best = (arr, f, dir = 1) => arr.filter((d) => f(d) != null).sort((a, b) => dir * (f(b) - f(a)))[0];
+  const full = days.filter((d) => !d.imported || d.pv != null);
+  const b1 = best(full, (d) => d.pv); if (b1) add("Best solar day", `${b1.pv.toFixed(1)} kWh`, dlong(b1.day));
+  const b2 = best(full, (d) => d.earned); if (b2 && b2.earned) add("Biggest earning day", money(b2.earned, 2), dlong(b2.day));
+  const b3 = best(full, (d) => d.cost, -1); if (b3 && b3.cost != null) add("Best day for money", money(b3.cost, 2), dlong(b3.day));
+  const b4 = best(full, (d) => d.cost); if (b4 && b4.cost != null) add("Dearest day", money(b4.cost, 2), dlong(b4.day));
+  const b5 = best(full, (d) => d.load + (d.ev || 0)); if (b5) add("Most energy used", `${(b5.load + (b5.ev || 0)).toFixed(1)} kWh`, dlong(b5.day));
+  let run = 0, bestRun = 0, end = null;
+  for (const d of full) { run = (d.import != null && d.import < 1) ? run + 1 : 0; if (run > bestRun) { bestRun = run; end = d.day; } }
+  if (bestRun >= 2) add("Longest run barely using the grid", `${bestRun} days`, `under 1 kWh a day, to ${dlong(end)}`);
+  const bm = months.slice().sort((a, b) => b.pv - a.pv)[0]; add("Best month for solar", `${n0(bm.pv)} kWh`, new Date(bm.month + "-15T12:00:00").toLocaleDateString([], { month: "long", year: "numeric" }));
+  const wm = months.filter((m) => m.days >= 20).sort((a, b) => a.pv - b.pv)[0]; if (wm && wm !== bm) add("Quietest month for solar", `${n0(wm.pv)} kWh`, new Date(wm.month + "-15T12:00:00").toLocaleDateString([], { month: "long", year: "numeric" }));
+  $("fine").textContent = `Energy from the inverter's own counters (and mySigen imports for days before the collector ran). Money from your retailer's figures and bills, before supply charges unless stated. ` +
+    (months.length < 12 ? `Shows the ${months.length} months recorded so far. ` : "") + `Made ${new Date().toLocaleString()} by Home Energy.`;
+})();
+</script>
+</body>
+</html>

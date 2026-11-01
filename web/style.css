@@ -591,3 +591,10 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .feeds .fs { color: var(--ink-2); text-align: right; font-size: 12.5px; }
 .feeds li.bad .fs { color: var(--bad); font-weight: 600; }
 .feeds li.off .fn, .feeds li.off .fs { color: var(--ink-3); }
+
+/* ---------------------------------------------------------------- bill check (1.16) */
+.bill-check { margin-top: 14px; }
+.bill-check td, .bill-check th { padding: 5px 0; }
+.bill-check th:nth-child(n+2), .bill-check td:nth-child(n+2) { padding-left: 12px; }
+.bill-check td:first-child { font-family: var(--font); }
+.bill-check td.best { color: var(--good); }
