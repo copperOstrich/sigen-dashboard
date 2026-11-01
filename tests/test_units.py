@@ -152,6 +152,36 @@ class Money(unittest.TestCase):
         self.assertIsNone(out[3]["bought"])  # no figures that day: left alone
 
 
+class HourlyPricing(unittest.TestCase):
+    def test_imported_day_priced_by_hour(self):
+        import time as _t
+        from datetime import datetime, timedelta
+        import sigen_collector as sc
+        st = sc.Store(Path(tempfile.mkdtemp()) / "t.db")
+        tz = sc.TZ
+        # yesterday from the collector: home 200 W all day, 2,200 W from 6 to 9 pm (evening-heavy)
+        y = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+        rows = []
+        for m in range(1440):
+            ts = int((y + timedelta(minutes=m)).timestamp())
+            load = 2200.0 if 18 <= (y + timedelta(minutes=m)).hour < 21 else 200.0
+            rows.append((ts, y.date().isoformat(), 0, load, 0, load, 50, 0, 0, 0, 0, 0, 0, None, None, None))
+        st.insert(rows)
+        # an imported day a month back: 10 kWh, prices 10c all day but 50c from 6 to 9 pm
+        d = (y - timedelta(days=30)).date().isoformat()
+        st.save_imported_days({d: {"pv": 0, "load": 10.0, "ev": 0, "charge": 0, "discharge": 0, "import": 10, "export": 0}})
+        d0 = datetime.fromisoformat(d).replace(tzinfo=tz)
+        iv = [(int((d0 + timedelta(minutes=5 * i)).timestamp()), 50.0 if 18 <= (d0 + timedelta(minutes=5 * i)).hour < 21 else 10.0)
+              for i in range(288)]
+        st.save_csv_prices(iv)
+        st.save_amber_days({d: {"import_kwh": 10, "import_cost": 0, "export_kwh": 0, "export_cost": 0, "estimated": False,
+                                "avg_buy_c": 15.0}}, source="csv")
+        cost = st.no_solar_cost(d)
+        # evening share = 3 x 2200 / (21 x 200 + 3 x 2200) = 0.611; 10 kWh: 6.11 kWh at 50c + 3.89 at 10c = $3.44
+        self.assertAlmostEqual(cost, 3.44, delta=0.05)
+        self.assertGreater(cost, 10 * 15.0 / 100)  # more than the flat daily average gives
+
+
 class Limits(unittest.TestCase):
     def test_ceiling(self):
         flat = [5000.0] * 60 + [3000.0 + i for i in range(500)]

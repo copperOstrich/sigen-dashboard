@@ -18,6 +18,7 @@ The money figures should match the retailer's bills to the cent and say when the
 - [x] Amber usage reports (the 5-minute CSV from the app or monthly email) imported as exact
       daily costs, and not replaced by Amber's API figures
 - [x] Supply charge by date, so months before a price change use the rate then
+- [x] Days before the collector ran priced hour by hour from Amber usage reports (1.15)
 - [x] "provisional", "billed" and "spike" tags in the Money panel's months, and price-spike days
       listed with what they earned
 
@@ -32,7 +33,7 @@ Catch regressions before they reach the NAS, and keep the code easy to change.
       endpoint answers without errors
 - [x] Both run on every push (GitHub Actions, "Tests")
 - [ ] Split `sigen_collector.py` (store, HTTP API, collector loop) into modules
-- [ ] A health page: last reading, each feed's status and errors, backup age, disk space, in one place
+- [x] Data feeds in the System panel: each feed's status, last update and errors, backup age, disk space (1.15)
 
 ## Phase C: reconcile and report (1.16)
 

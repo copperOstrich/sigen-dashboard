@@ -43,6 +43,7 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 import signal
 import sqlite3
 import sys
@@ -101,7 +102,7 @@ from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
                        RUNNING_STATE, decode_alarms)
 
-VERSION = "1.14.0"
+VERSION = "1.15.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -267,6 +268,27 @@ class Store:
         with self.lock:
             self.db.executemany("INSERT OR REPLACE INTO prices VALUES (?,?,?,?,?,?,?,?)", rows)
             self.db.commit()
+
+    def save_csv_prices(self, intervals):
+        """5-minute buy prices from an Amber usage report (channel "csv-general"; never the live feed's rows)."""
+        with self.lock:
+            self.db.executemany("INSERT OR REPLACE INTO prices (start, channel, end, per_kwh) VALUES (?, 'csv-general', ?, ?)",
+                                [(t, t + 300, p) for t, p in intervals])
+            self.db.commit()
+
+    def home_profile(self, days=30):
+        """Share of a day's home use in each local hour, from the collector's own recent days ({hour: share})."""
+        now = time.time()
+        rows = self.hourly_avgs(now - days * 86400, now)
+        by = {}
+        for h, (_pv, home) in rows.items():
+            if home is not None:
+                by.setdefault(datetime.fromtimestamp(h, TZ).hour, []).append(home)
+        if len(by) < 24:
+            return None
+        avg = {hr: sum(v) / len(v) for hr, v in by.items()}
+        tot = sum(avg.values())
+        return {hr: v / tot for hr, v in avg.items()} if tot > 0 else None
 
     def save_amber_days(self, days, source="api"):
         """Amber's daily costs. A day from an imported usage report (source "csv", every read actual)
@@ -552,12 +574,25 @@ class Store:
         if flows and len(prices) >= 20:  # prices for nearly every hour
             avg = sum(prices.values()) / len(prices)
             return sum(load * prices.get(h, avg) for h, imp, exp, load in flows) / 100
-        # otherwise (an imported day): the day's home and car use at that day's average buy price
+        # otherwise (an imported day): the day's home and car use, spread over the hours like the house
+        # usually uses it, at each hour's price from an Amber usage report; or at the day's average price
         with self.lock:
             imp = self.db.execute("SELECT load, ev FROM imported_days WHERE day=?", (day,)).fetchone()
             a = self.db.execute("SELECT avg_buy_c FROM amber_days WHERE day=?", (day,)).fetchone()
-        if imp and a and a[0] is not None:
-            return ((imp[0] or 0) + (imp[1] or 0)) * a[0] / 100
+            d0 = datetime.fromisoformat(day).replace(tzinfo=TZ)
+            hp = dict(self.db.execute("SELECT (start/3600)*3600, AVG(per_kwh) FROM prices WHERE channel='csv-general' "
+                                      "AND start>=? AND start<? GROUP BY 1", (int(d0.timestamp()),
+                                                                             int((d0 + timedelta(days=1)).timestamp()))).fetchall())
+        if not imp:
+            return None
+        kwh = (imp[0] or 0) + (imp[1] or 0)
+        prof = self.home_profile() if len(hp) >= 20 else None
+        if prof:
+            avg = sum(hp.values()) / len(hp)
+            return sum(kwh * prof.get(datetime.fromtimestamp(h, TZ).hour, 0) * hp.get(h, avg)
+                       for h in {int((d0 + timedelta(hours=i)).timestamp()) // 3600 * 3600 for i in range(24)}) / 100
+        if a and a[0] is not None:
+            return kwh * a[0] / 100
         return None
 
     def cost_for_day(self, day):
@@ -845,6 +880,7 @@ class Collector:
         self.backups = self.mqtt = None  # set by main()
         self._backup_status, self._backup_at = None, 0
         self.storm, self._storm_logged = None, None
+        self.fuel = None  # set by main()
 
     def snapshot(self):
         with self.cond:
@@ -923,6 +959,43 @@ class Collector:
                 self.outlook.computed = now
                 log("Battery outlook failed:", f"{type(e).__name__}: {e}")
                 traceback.print_exc()
+
+    def _feeds(self, now):
+        """Each data source: status, last update and any error, for the System panel's Data feeds."""
+        def from_state(name, obj, what):
+            if obj is None:
+                return None
+            st = getattr(obj, "state", None) or {}
+            if not (st.get("enabled", True)):
+                return {"name": name, "status": "off", "what": what}
+            return {"name": name, "status": st.get("status") or "?", "updated": st.get("updated"),
+                    "error": st.get("error"), "what": what, "mode": st.get("mode")}
+        out = [{"name": "Inverter", "status": "ok", "updated": now, "what": "Modbus readings",
+                "mode": "simulator" if SIMULATE else "live"}]
+        r = from_state((self.retailer.state.get("provider") if self.retailer else None) or "Retailer prices",
+                       self.retailer, "prices and costs")
+        out += [x for x in (r, from_state("AEMO", self.aemo, "wholesale market"),
+                            from_state("Weather", self.weather, "forecast")) if x]
+        if self.fuel is not None:
+            fs = dict(getattr(self.fuel, "state", {}) or {})
+            if getattr(self.fuel, "enabled", False):
+                out.append({"name": "Fuel prices", "status": fs.get("status") or "?", "updated": fs.get("updated"),
+                            "error": fs.get("error"), "what": getattr(self.fuel, "source", "") or ""})
+        if self.mqtt:
+            m = self.mqtt.summary()
+            out.append({"name": "Home Assistant", "status": "ok" if m["status"] == "connected" else m["status"],
+                        "error": m.get("error"), "what": "MQTT"})
+        b = self._backup_status or {}
+        if b.get("enabled"):
+            last = (b.get("last") or {}).get("ts")
+            st = "error" if b.get("error") else "first one soon" if not last else "stale" if now - last > 30 * 3600 else "ok"
+            out.append({"name": "Backups", "status": st, "updated": last, "error": b.get("error"), "what": "nightly database copy"})
+        try:
+            free = shutil.disk_usage(DATA_DIR).free
+            out.append({"name": "Disk space", "status": "warn" if free < 1e9 else "ok", "what": f"{free / 1e9:.1f} GB free"})
+        except OSError:
+            pass
+        return out
 
     def _storm_check(self, now):
         """Thunderstorms forecast in the next 36 hours: when, and how full the battery should be then."""
@@ -1088,6 +1161,7 @@ class Collector:
                 "max_active_power": r(p.get("max_active_power")),
                 "backup": self._backup_status or {"enabled": False},
                 "mqtt": self.mqtt.summary() if self.mqtt else {"enabled": False},
+                "feeds": self._feeds(now),
             },
             "alarms": alarms + [a for a in (ev or {}).get("alarms", [])],
             "ev": ev or {"enabled": False, "status": "off"},
@@ -1631,7 +1705,7 @@ def main():
     Api.collector, Api.store, Api.retailer, Api.aemo, Api.weather = collector, store, retailer, aemo, weather
     Api.money = money
     fuel = Fuel(store, TZ, FUEL_SETTINGS, locate=weather.location, simulate=SIMULATE, log=log)
-    Api.fuel = money.fuel = fuel
+    Api.fuel = money.fuel = collector.fuel = fuel
     if fuel.enabled:
         threading.Thread(target=fuel.run, daemon=True).start()
     backups = Backups(store.path, BACKUP_DIR, TZ, keep_daily=BACKUP_KEEP_DAILY, keep_weekly=BACKUP_KEEP_WEEKLY,

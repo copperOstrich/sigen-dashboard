@@ -2,6 +2,19 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 1.15.0
+
+- Payback, retailer views: days from before the collector ran (mySigen imports) are now priced
+  hour by hour when an Amber usage report covers them: the day's home use is spread over the
+  hours the way the house usually uses it (learned from the collector's own recent days) and
+  priced at each hour's actual Amber price, instead of the day's average price. Evening-heavy
+  use is no longer undervalued, so those days' savings come out higher (and closer to the truth)
+- Amber usage reports' 5-minute prices are kept for this (re-import a report to add them)
+- System panel: **Data feeds** lists the inverter, retailer prices, AEMO, weather, fuel prices,
+  Home Assistant, backups and disk space, each with its status, when it last updated and any
+  error (hover)
+- Tests: hourly pricing of imported days
+
 ## 1.14.0
 
 - **Bills win**: a bill now sets its period's costs exactly. Each day's bought and earned amounts

@@ -219,6 +219,20 @@
       if (canEdit && !bk.busy) dd.append(el("button", { class: "small-link", type: "button", text: "Back up now", onclick: backupNow }));
       f.append(el("dt", { text: "Last backup" }), dd);
     }
+    const fd = $("feeds");
+    if (fd) {
+      fd.innerHTML = "";
+      const ago = (ts) => { if (!ts) return ""; const m = Math.round((Date.now() / 1000 - ts) / 60);
+        return m < 2 ? "just now" : m < 90 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
+      for (const x of s.feeds || []) {
+        const st = x.status === "ok" ? "ok" : x.status === "off" ? "off" : ["error", "stale", "warn"].includes(x.status) ? "bad" : "wait";
+        const label = st === "ok" ? (x.mode === "simulator" ? "simulated" : "ok") : st === "off" ? "off" : x.status === "stale" ? "overdue" : st === "bad" ? "problem" : x.status;
+        fd.append(el("li", { class: "feed " + st, title: x.error || "" },
+          el("span", { class: "dot " + (st === "ok" ? "ok" : st === "bad" ? "bad" : st === "off" ? "" : "warn") }),
+          el("span", { class: "fn", text: x.name }), el("span", { class: "fw", text: x.what || "" }),
+          el("span", { class: "fs", text: [label, st === "ok" || st === "bad" ? ago(x.updated) : ""].filter(Boolean).join(", ") })));
+      }
+    }
     const mq = s.mqtt || {};
     if (mq.enabled) f.append(el("dt", { text: "Home Assistant" }), el("dd", { class: mq.status === "error" ? "warn" : null,
       style: "font-family:var(--font);font-size:14px", title: mq.error || `Publishing to ${mq.topic}${mq.discovery ? ", with discovery" : ""}`,

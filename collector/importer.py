@@ -35,6 +35,7 @@ Standard library only: an .xlsx file is a zip of XML.
 """
 import csv
 import io
+from datetime import datetime, timedelta, timezone
 import re
 import zipfile
 import xml.etree.ElementTree as ET
@@ -154,7 +155,8 @@ def parse_amber_usage(rows):
     if not need <= set(head):
         return None
     ix = {h: i for i, h in enumerate(head)}
-    out, prices = {}, {}
+    out, prices, intervals = {}, {}, []
+    aest = timezone(timedelta(hours=10))  # NEM time is always AEST (no daylight saving)
     for r in rows[1:]:
         if len(r) < len(head) or not DAY.match((r[ix["day"]] or "").strip()):
             continue
@@ -171,12 +173,21 @@ def parse_amber_usage(rows):
             d["import_kwh"] += use; d["import_cost"] += cost
             if ch == "general":
                 prices.setdefault(day, []).append(price)
+                # the interval's price, kept to price days the collector didn't record hour by hour
+                # (NEM time is the interval's end; the local "Start Time" column can be an hour off in summer)
+                if "nem time" in ix:
+                    try:
+                        end = datetime.strptime(r[ix["nem time"]].strip(), "%Y-%m-%d %H:%M:%S").replace(tzinfo=aest)
+                        intervals.append((int(end.timestamp()) - 300, price))
+                    except ValueError:
+                        pass
         if r[ix["read quality"]].strip().upper() != "ACTUAL":
             d["estimated"] = True
     for day, ps in prices.items():
         out[day]["avg_buy_c"] = sum(ps) / len(ps)
     if not out:
         raise ValueError("the Amber usage report has no rows")
+    out["_intervals"] = intervals  # [(start ts, buy c/kWh)], taken out by the caller
     return out
 
 
@@ -221,7 +232,9 @@ def import_folder(store, data_dir, log=print):
                 bills.append((f, b))
                 continue
             if usage is not None:
+                intervals = usage.pop("_intervals", [])
                 store.save_amber_days(usage, source="csv")
+                store.save_csv_prices(intervals)
                 est = sum(1 for v in usage.values() if v["estimated"])
                 net = sum(v["import_cost"] + v["export_cost"] for v in usage.values()) / 100
                 log(f"Import: {f.name}: Amber usage for {len(usage)} days, {min(usage)} to {max(usage)}, "

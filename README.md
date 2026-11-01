@@ -479,7 +479,9 @@ file, or the same file with a new row; bills are kept, so an old row can stay). 
 **Amber usage reports** go in the same folder: the CSV from the Amber app (Usage, download) or the
 monthly usage email, named like `Amber Usage 2026-10-01 to 2026-10-31.csv`, one row per 5-minute
 interval. Each day's costs are taken from it exactly, by Amber's own Day column, and kept in
-preference to the figures from Amber's API (which only reaches back about 90 days). Handy for
+preference to the figures from Amber's API (which only reaches back about 90 days). Its 5-minute
+prices are kept too: payback prices days from before the collector ran hour by hour with them,
+spreading each day's use the way your house usually uses it, rather than at the day's average. Handy for
 filling the months before the collector ran, or checking a month against Amber's own numbers.
 
 Until a day has final figures (Amber's estimates, or the dashboard's own pricing for today and
