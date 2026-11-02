@@ -2,11 +2,13 @@
 // last one chosen remembered in this browser. A tab with nothing to show yet (its page is hidden,
 // or every part on it is) is left out, and the panel hides when none has anything.
 // Panels marked data-together (Battery, System) show all their tabs side by side instead, when
-// they're wide enough (Full width in Arrange panels).
+// they're wide enough (Full width in Arrange panels). Panels marked data-steady keep one height
+// whichever tab is showing.
 (function () {
   const S = window.Sigen, el = S.el;
   const groups = [...document.querySelectorAll("section.group[data-panel]")];
-  const KEY = (g) => "sigen.tab." + g.dataset.panel;
+  // a panel's own default tab (data-default) is part of the key, so changing it starts afresh
+  const KEY = (g) => "sigen.tab." + g.dataset.panel + (g.dataset.default ? "." + g.dataset.default : "");
 
   const pages = (g) => [...g.querySelectorAll(":scope > .tabpage")];
   const ready = (p) => !p.hidden && (!p.querySelector(":scope > .part") || [...p.querySelectorAll(":scope > .part")].some((x) => !x.hidden));
@@ -19,11 +21,16 @@
     if (hide) return;
     const together = g.hasAttribute("data-together") && avail.length > 1 && g.clientWidth >= TOGETHER_W;
     if (g.classList.contains("together") !== together) { g.classList.toggle("together", together); redraw(); }
+    // data-steady: every tab takes the height of the tallest, so switching doesn't resize the panel
+    g.classList.toggle("steady", g.hasAttribute("data-steady") && !together);
     let cur = g.dataset.tab;
     const want = S.store.get(KEY(g));
     // the remembered tab, as soon as it has something to show (its data can arrive after the page loads)
     if (!g._chosen && want && avail.some((p) => p.dataset.tab === want)) cur = want;
-    else if (!g._chosen && !want) cur = avail[0].dataset.tab;  // nothing chosen yet: the first tab, once it has data
+    else if (!g._chosen && !want) {  // nothing chosen yet: the panel's default, or its first tab, once it has data
+      const def = avail.find((p) => p.dataset.tab === g.dataset.default);
+      cur = (def || avail[0]).dataset.tab;
+    }
     if (!avail.some((p) => p.dataset.tab === cur)) cur = avail[0].dataset.tab;
     const changed = g.dataset.tab !== cur;
     g.dataset.tab = cur;

@@ -99,7 +99,7 @@
       <p class="flow-caption visually-hidden" id="caption" aria-live="polite"></p>
     </section>
 
-    <section class="panel span-4 group" data-panel="battery" data-name="Battery" data-together>
+    <section class="panel span-4 group" data-panel="battery" data-name="Battery" data-together data-steady>
       <div class="group-head"><h2>Battery</h2><div class="tabs" role="tablist" aria-label="Battery"></div></div>
       <div class="tabpage" data-tab="Now" role="tabpanel" id="batt-now" aria-labelledby="batt-h">
       <div class="panel-head"><h2 id="batt-h">Battery</h2><span class="sub" id="batt-sub"></span></div>
@@ -129,8 +129,10 @@
         <div class="today wear-tiles" id="wear-tiles"></div>
         <p class="chart-note" id="wear-note"></p>
             </div>
+      </div>
+      <div class="tabpage" data-tab="Over time" role="tabpanel" id="batt-over">
         <div class="part trend" id="tb" hidden>
-          <div class="panel-head"><h3>Over time</h3><div class="legend" id="tb-legend"></div><span class="spacer"></span>
+          <div class="panel-head"><div class="legend" id="tb-legend"></div><span class="spacer"></span>
           <div class="seg" id="tb-metric" role="group" aria-label="Measure">
             <button type="button" data-m="battery" aria-pressed="true">Health</button>
             <button type="button" data-m="batt_temp" aria-pressed="false">Temperature</button>
@@ -384,7 +386,7 @@
       </div>
     </section>
 
-    <section class="panel span-12 group" data-panel="money" data-name="Money">
+    <section class="panel span-12 group" data-panel="money" data-name="Money" data-default="Payback">
       <div class="group-head"><h2>Money</h2><div class="tabs" role="tablist" aria-label="Money"></div></div>
       <div class="tabpage" data-tab="Plans" role="tabpanel" id="wi-panel" aria-labelledby="wi-h" hidden>
       <div class="panel-head"><h2 id="wi-h">What if</h2><span class="sub" id="wi-sub"></span><span class="spacer"></span>
@@ -432,8 +434,8 @@
         <div class="part trend" id="ty" hidden>
           <div class="panel-head"><h3>Over time</h3><div class="legend" id="ty-legend"></div><span class="spacer"></span>
           <div class="seg" id="ty-metric" role="group" aria-label="Measure">
-            <button type="button" data-m="insulation" aria-pressed="true">Insulation</button>
-            <button type="button" data-m="inv_temp" aria-pressed="false">Inverter temperature</button>
+            <button type="button" data-m="inv_temp" aria-pressed="true">Temperature</button>
+            <button type="button" data-m="insulation" aria-pressed="false">Insulation</button>
           </div>
           <div class="seg" id="ty-range" role="group" aria-label="Time range">
             <button type="button" data-d="90" aria-pressed="false">3 months</button>

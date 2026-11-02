@@ -670,17 +670,17 @@ Ten panels; related things share a panel, with tabs. Each panel remembers the ta
 (per browser), and a tab with nothing to show yet is left out:
 
 * **Right now** and **Today so far**
-* **Battery**: Now · Health (wear, warranty, health and temperature over time)
+* **Battery**: Now · Health (wear and warranty) · Over time (health and temperature)
 * **Forecast**: Next two days (battery outlook, weather, four days of solar) · Best times
 * **Car charging**
 * **Prices and the grid**: Your price · The grid
 * **History**: Power · Days · Months · Always-on
 * **Solar**: Strings · Limits · Long term (solar vs weather)
-* **Money**: Plans · Payback · Trading
-* **System**: Status · Health (insulation and inverter temperature over time)
+* **Money**: Payback · Plans · Trading (opens on Payback)
+* **System**: Status · Health (inverter temperature and insulation over time)
 
-Battery and System show both tabs side by side when the panel is wide enough (Full width in
-Arrange panels).
+Battery and System show all their tabs together when the panel is wide enough (Full width in
+Arrange panels). Battery keeps one height whichever tab is showing.
 
 ### Ultrawide monitors
 

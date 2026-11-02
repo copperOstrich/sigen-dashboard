@@ -675,11 +675,18 @@ body.wall-mode { overflow-x: hidden; }
 .tabpage.inactive { display: none; }
 .tabpage { container-type: inline-size; }
 /* wide Battery and System: every tab side by side, no tab bar */
-.group.together { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); column-gap: 28px; align-content: start; }
+.group.together { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; column-gap: 28px; align-content: start; }
 .group.together > .group-head { grid-column: 1 / -1; }
 .group.together > .group-head .tabs { display: none; }
 .group.together > .tabpage.inactive { display: block; }
-.group.together > .tabpage:not([hidden]) ~ .tabpage:not([hidden]) { border-left: 1px solid var(--rule); padding-left: 28px; }
+.group.together > .tabpage:not([hidden]) ~ .tabpage:not([hidden]) { grid-column: 2; border-left: 1px solid var(--rule); padding-left: 28px; }
+.group.together > .group-head + .tabpage { grid-column: 1; grid-row: 2 / span 3; }
+.group.together > .tabpage:not([hidden]) ~ .tabpage:not([hidden]) ~ .tabpage:not([hidden]) { padding-top: 18px; margin-top: 4px; border-top: 1px solid var(--rule); }
+/* steady panels: all tabs share one cell, the hidden ones invisible but still taking their room */
+.group.steady { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; }
+.group.steady > .group-head { grid-row: 1; }
+.group.steady > .tabpage { grid-row: 2; grid-column: 1; }
+.group.steady > .tabpage.inactive:not([hidden]) { display: block; visibility: hidden; pointer-events: none; }
 .tabpage > .panel-head > h2 { display: none; }
 .tabpage > .panel-head:not(:has(> :not(h2):not(:empty))) { display: none; }
 .part + .part { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--rule); }
