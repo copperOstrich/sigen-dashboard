@@ -7,7 +7,7 @@ Release notes for each tagged version. The Docker image is tagged with the same 
 - **Battery** has three tabs, Now · Health · Over time, and keeps the same height whichever is
   showing (the tallest tab sets it), so the row beside Right now doesn't jump. At full width all
   three show together: Now on the left, Health above Over time on the right
-- **Money** opens on Payback
+- **Money** opens on Payback, now its first tab: Payback · Plans · Trading
 - **System**'s chart opens on the inverter's temperature (Insulation is the other choice)
 
 ## 2.0.0
