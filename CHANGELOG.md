@@ -2,6 +2,38 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 2.0.0
+
+A cleaner dashboard: ten panels instead of twenty-one, related things together in tabs, and
+nothing shown twice. Your Arrange panels layout carries over (a merged panel takes the place of
+the first one it replaced), and each panel remembers the tab you last chose.
+
+- **Forecast**: Next two days · Best times. Battery outlook and Weather and solar forecast are
+  one: the outlook chart now has the solar so far as well as expected, and the weather is a line
+  for now plus four day cards, so tomorrow's solar is shown once (not three times) and there's one
+  solar chart, not two
+- **History**: Power · Days · Months · Always-on. Replaces Power and battery charge, Daily
+  energy, Monthly summary and Always-on use
+- **Money**: Plans · Payback · Trading. Plans (What if) is the only plan comparison now, so
+  there's one figure per plan instead of two that disagreed; Money's month-by-month plan table,
+  "Is your retailer worth it?" and its battery trades list are gone (Trading covers trades, and
+  bills against the data are in Settings > Bills)
+- **System** is full width by default, Status beside Health
+- No more repeats:
+  - Battery's Now no longer shows health (it's on Health) or the power (it's on Right now)
+  - Battery temperature over time is under Battery > Health; System > Health has the inverter's
+  - The car panel no longer repeats this session's energy or the charger's Modbus unit (System has it)
+  - Data feeds no longer repeats Backups and Home Assistant, which have their own lines
+  - Your price no longer repeats the renewables share (The grid has it)
+  - Right now's caption, which repeated the diagram, is kept for screen readers only
+  - Battery > Health no longer repeats the battery's size
+- What if's explanation folds away under "How this is worked out"
+- Payback's setup hint points to Settings rather than naming setting keys
+- README screenshots retaken for the new layout; `tools/screenshots.js` makes them from the
+  simulator
+- Ultrawide: with less to show, everything fits at a larger scale (85% rather than 75% on a
+  5120 × 1440 screen)
+
 ## 1.24.1
 
 - **Battery** and **System** show their tabs side by side, with no tab bar, when the panel is

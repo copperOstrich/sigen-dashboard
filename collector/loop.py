@@ -381,7 +381,7 @@ class Collector:
             self.cond.notify_all()
 
     def _track_day(self, p, inv, now):
-        """Daily min/max/average of slow-moving health figures, for the Trends panel."""
+        """Daily min/max/average of slow-moving health figures, for the Over time charts."""
         day = local_day(now)
         if day != self.day_key:
             if self.day_key and self.day_acc:
@@ -489,7 +489,7 @@ def start_simulator(store):
     if rows:
         store.insert(rows)
         log(f"Pre-filled {DEMO_DAYS} days of simulated history ({len(rows)} samples)")
-        # daily health figures for the Trends panel
+        # daily health figures for the Over time charts
         socs = {}
         for r in rows:
             socs.setdefault(r[1], []).append(r[6])

@@ -114,7 +114,7 @@ class PvSeason:
             self._at = time.time()
             try:
                 self.update()
-            except Exception as e:  # never break Trends for it
+            except Exception as e:  # never break the chart for it
                 self.log(f"Solar vs weather: {type(e).__name__}: {e}")
         with self.store.lock:
             rows = self.store.db.execute("SELECT day, n, kwh, model FROM pv_index WHERE model > 0 ORDER BY day").fetchall()

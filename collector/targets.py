@@ -3,7 +3,7 @@ month is tracking and which past months made it.
 
 Each target is a number for every month ("90"), or different numbers for groups of months, as
 first-last:value pairs ("12-2:90,3-11:70" = 90% from December to February, 70% otherwise). The
-cost target is the Monthly summary's Net cost (energy bought less energy sold, before supply
+cost target is History > Months' Net cost (energy bought less energy sold, before supply
 charges): -50 means earning $50 more than you spend.
 
 This month's finish is projected from the month so far plus the remaining days at the last

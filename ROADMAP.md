@@ -22,27 +22,19 @@ bump and changelog entry; the order can change as real use shows what matters.
   and tomorrow; car charging plan.
 - **F. Less upkeep (1.19):** bills added, edited and removed on the Settings page; files imported
   from the browser; database size, free disk and compacting; a new-version notice.
+- **Consolidation (1.24–2.0):** ten panels with tabs instead of twenty-one; nothing shown twice.
 - **G. Problems that reach you (1.20):** phone alerts through ntfy for alarms, strings,
   insulation, the inverter, backups, data feeds and storms with a low battery; quiet hours; a
   weekly summary.
 
-## Consolidation (2.0, next)
-
-The dashboard grew a panel per feature; related things now share a panel with tabs.
-
-- [x] Step 1 (1.24): Battery (Now, Health), Solar (Strings, Limits, Long term), System (Status,
-      Health), Prices and the grid; Trends shared out among them
-- [ ] Step 2 (2.0): Money (Payback and bills, Plans from What if, Trading), Forecast (weather and
-      battery outlook in one, Best times), History (Power, Days, Months, Always-on)
-
-## Phase H: deeper insight
+## Phase H: deeper insight (done in 1.22–1.23)
 
 - [x] Solar health over the seasons: yield against the weather model, strings year on year (1.22)
 - [x] Plan what-ifs priced on your own year, with the battery run for each plan, and more panels
       or more battery (1.23)
 - [x] Self-sufficiency and money targets ("90% self-sufficient this summer") with progress (1.22)
 
-## Phase I: for other households
+## Phase I: for other households (next)
 
 The repo is public; making it easier for other SigenStor owners helps it stay healthy.
 

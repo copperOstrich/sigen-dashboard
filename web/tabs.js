@@ -23,6 +23,7 @@
     const want = S.store.get(KEY(g));
     // the remembered tab, as soon as it has something to show (its data can arrive after the page loads)
     if (!g._chosen && want && avail.some((p) => p.dataset.tab === want)) cur = want;
+    else if (!g._chosen && !want) cur = avail[0].dataset.tab;  // nothing chosen yet: the first tab, once it has data
     if (!avail.some((p) => p.dataset.tab === cur)) cur = avail[0].dataset.tab;
     const changed = g.dataset.tab !== cur;
     g.dataset.tab = cur;

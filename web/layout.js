@@ -12,13 +12,18 @@
     let saved = null;
     try { saved = JSON.parse(S.store.get(KEY) || "null"); } catch (e) { saved = null; }
     if (!saved || !Array.isArray(saved.order)) return structuredClone(DEFAULT);
-    // 2.0 merged panels into tabbed ones: an old panel's place and on/off pass to the one it joined
-    const MOVED = { wear: "battery", strings: "solar", limits: "solar", trends: "solar", grid: "price" };
+    // 1.24 and 2.0 merged panels into tabbed ones: an old panel's place passes to the one it joined
+    // (the first of them in your order), and switched off stays off only for its main tab
+    const MOVED = { wear: "battery", strings: "solar", limits: "solar", trends: "solar", grid: "price",
+      outlook: "forecast", weather: "forecast", appliances: "forecast",
+      power: "history", daily: "history", monthly: "history", baseload: "history",
+      whatif: "money", trading: "money" };
+    const MAIN = new Set(["strings", "outlook", "power"]);
     const mv = (k) => MOVED[k] || k;
+    if (saved.width && saved.width.system === "4" && saved.width.daily === "8") saved.width.system = "12";  // its old partner joined History
     saved.order = [...new Set(saved.order.map(mv))];
-    // switched off stays off only for the panel that became the tabbed one's main tab
-    if (saved.off) saved.off = [...new Set(saved.off.filter((k) => !MOVED[k] || k === "strings").map(mv))];
-    if (saved.width) for (const [k, v] of Object.entries(MOVED)) if (saved.width[k] != null && saved.width[v] == null && v !== "battery") saved.width[v] = saved.width[k];
+    if (saved.off) saved.off = [...new Set(saved.off.filter((k) => !MOVED[k] || MAIN.has(k)).map(mv))];
+    if (saved.width) for (const k of Object.keys(MOVED)) delete saved.width[k];
     // panels added in later versions go where they are by default
     const order = saved.order.filter((k) => byKey[k]);
     DEFAULT.order.forEach((k, i) => { if (!order.includes(k)) order.splice(Math.min(i, order.length), 0, k); });

@@ -178,7 +178,7 @@ class Api(BaseHTTPRequestHandler):
             self._json({"error": str(e)}, 500)
 
     def _pv_index(self, all_days, days):
-        """Solar vs weather, lined up with the Trends days."""
+        """Solar vs weather, lined up with the trend days."""
         if not Api.pvseason:
             return {"enabled": False, "reason": "needs the weather forecast (set your location)"}
         ser, summary = Api.pvseason.series(days)

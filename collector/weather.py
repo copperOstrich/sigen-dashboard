@@ -115,7 +115,7 @@ class Weather:
         self.model = {}  # {hour start: kW before the factor}, past fortnight and forecast
         self.temps = {}  # {hour start: °C}, past fortnight and forecast (for the outlook's temperature link)
         self._backfilled = False
-        with store.lock:  # the model's past hours, kept for Solar vs weather (Trends) over the seasons
+        with store.lock:  # the model's past hours, kept for Solar vs weather (Solar > Long term) over the seasons
             store.db.execute("CREATE TABLE IF NOT EXISTS pv_model(ts INTEGER PRIMARY KEY, kw REAL)")
             store.db.commit()
         self.state = {"enabled": self.enabled, "status": "starting" if self.enabled else "off",

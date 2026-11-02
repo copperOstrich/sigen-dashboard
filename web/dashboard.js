@@ -108,17 +108,15 @@
     const w = p.battery || 0;
     let state = "Idle";
     if (w > S.IDLE_W) {
-      state = `Charging at ${S.kw(w)}`;
-      if (b.chargeable_kwh != null && w > 200) state += `, full in about ${hhmm(b.chargeable_kwh * 1000 / w)}`;
+      // the power itself is on Right now
+      state = b.chargeable_kwh != null && w > 200 ? `Charging, full in about ${hhmm(b.chargeable_kwh * 1000 / w)} at this rate` : "Charging";
     } else if (w < -S.IDLE_W) {
-      state = `Supplying ${S.kw(w)}`;
-      if (b.available_kwh != null) state += `, lasts about ${hhmm(b.available_kwh * 1000 / -w)} at this rate`;
+      state = b.available_kwh != null ? `Discharging, lasts about ${hhmm(b.available_kwh * 1000 / -w)} at this rate` : "Discharging";
     }
     $("batt-state").textContent = state;
     $("batt-sub").textContent = b.rated_kwh ? `${b.rated_kwh} kWh${b.packs ? `, ${b.packs} modules` : ""}` : "";
     $("f-avail").textContent = b.available_kwh == null ? "–" : `${b.available_kwh.toFixed(1)} kWh usable`;
     $("f-room").textContent = S.kwh(b.chargeable_kwh);
-    $("f-soh").textContent = S.pct(b.soh, 1);
     $("f-temp").textContent = b.cell_temp_avg == null ? "–" :
       `${b.cell_temp_avg.toFixed(1)} °C` + (b.temp_min != null && b.temp_max != null ? ` (${b.temp_min.toFixed(0)}–${b.temp_max.toFixed(0)})` : "");
     $("f-volt").textContent = b.cell_v_min == null ? (b.cell_v_avg ? `${b.cell_v_avg.toFixed(3)} V` : "–") :
@@ -224,7 +222,8 @@
       fd.innerHTML = "";
       const ago = (ts) => { if (!ts) return ""; const m = Math.round((Date.now() / 1000 - ts) / 60);
         return m < 2 ? "just now" : m < 90 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
-      for (const x of s.feeds || []) {
+      // backups and Home Assistant have their own lines above
+      for (const x of (s.feeds || []).filter((f) => f.name !== "Backups" && f.name !== "Home Assistant")) {
         const st = x.status === "ok" ? "ok" : x.status === "off" ? "off" : ["error", "stale", "warn"].includes(x.status) ? "bad" : "wait";
         const label = st === "ok" ? (x.mode === "simulator" ? "simulated" : "ok") : st === "off" ? "off" : x.status === "stale" ? "overdue" : st === "bad" ? "problem" : x.status;
         fd.append(el("li", { class: "feed " + st, title: x.error || "" },
@@ -285,15 +284,16 @@
     if (a.add_kw > 0) parts.push(`Another ${a.kwp ? a.add_kw + " kW of panels" : "quarter more panels"} would save about ${money0(gain("more_panels"))} a year.`);
     $("wi-lead").textContent = parts.join(" ");
     const c = d.check;
-    $("wi-note").textContent = `Each cost includes the plan's supply charge and is scaled to a year` +
-      (d.full_year ? "." : `; with ${d.days} days of readings the seasons you haven't recorded yet aren't in it, so treat it as a guide.`) +
-      ` Your recorded hours are played back through a battery of ${a.usable_kwh} kWh usable (${a.charge_kw} kW in, ${a.discharge_kw} kW out, ${a.round_trip}% round trip),` +
-      ` run the way each plan rewards: on time of use it also charges from the grid in the cheap hours for the dear ones; on wholesale prices it charges when power is about free and sells when feed-in pays $1/kWh or more.` +
-      ` It knows the next day's use and solar, so it does a little better than a real battery would.` +
+    const how = `Your recorded hours are played back through a battery of ${a.usable_kwh} kWh usable (${a.charge_kw} kW in, ${a.discharge_kw} kW out, ${a.round_trip}% round trip),` +
+      " run the way each plan rewards: on time of use it also charges from the grid in the cheap hours for the dear ones; on wholesale prices it charges when power is about free and sells when feed-in pays $1/kWh or more." +
+      " It knows the next day's use and solar, so it does a little better than a real battery would." +
       (a.export_limit_kw ? ` Exports are capped at ${a.export_limit_kw} kW.` : "") + (a.inverter_kw ? ` More panels are capped at the inverter's ${a.inverter_kw} kW.` : "") +
       (c ? ` Check: simulated this way, your system as it is would have cost ${money0(c.simulated)} a year on wholesale prices; as it actually ran, ${money0(c.actual)}` +
-        ` (the gap is partly your battery's real control, partly the model knowing the day ahead).` : "") +
-      ` The other plans are your comparison plans (Settings > Money); add a real quote to plans.json in the data folder to compare it too.`;
+        " (the gap is partly your battery's real control, partly the model knowing the day ahead)." : "") +
+      " Costs include each plan's supply charge. The other plans are your comparison plans (Settings > Money); add a real quote to plans.json in the data folder to compare it too.";
+    const note = $("wi-note"); note.innerHTML = "";
+    note.append(d.full_year ? "A year's cost on each plan. " : `Scaled to a year from ${d.days} days, so seasons not recorded yet aren't in it. `,
+      el("details", { class: "how" }, el("summary", { text: "How this is worked out" }), el("p", { text: how })));
   }
   $("wi-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -308,46 +308,14 @@
     if (panel.hidden) return;
     const me = d.retailer || "Your retailer";
     const cmp = d.compare, pb = d.payback, tr = d.trades || {}, pl = d.plans;
-    $("money-sub").textContent = pl ? `compared with ${pl.list.length === 1 ? `the ${pl.list[0].name}` : "other plans"}${pl.title ? `, ${pl.title}` : ""}` : "";
-
-    // ---- is your retailer worth it?
-    const c1 = $("money-compare"); c1.innerHTML = "";
-    c1.append(el("h3", { text: `Is ${me} worth it?` }));
-    if (!pl) {
-      c1.append(el("div", { class: "setup" },
-        el("p", { text: "Compare what you pay with the Default Market Offer (the standard-plan price cap) or your own quotes, using your own usage hour by hour." }),
-        el("p", {}, "Set ", el("code", { text: "COMPARE_PLANS" }), " to ", el("code", { text: "nsw-ausgrid" }), ", ",
-          el("code", { text: "nsw-endeavour" }), " or ", el("code", { text: "nsw-essential" }),
-          ", or put your own plans in ", el("code", { text: "plans.json" }), " in the data folder.")));
-    } else if (!cmp || !cmp.total || !cmp.total.days) {
-      c1.append(el("p", { class: "setup", text: d.reason ? `Not yet: ${d.reason}.` : "Not enough history yet; check back after a full day." }));
-    } else {
-      const t = cmp.total, best = t.cheapest, diff = t.saving_vs_cheapest;
-      const span = t.days >= 360 ? "the last 12 months" : `the last ${t.days} day${t.days === 1 ? "" : "s"}`;
-      c1.append(el("div", { class: "big" }, money$(Math.abs(diff)), el("small", { text: diff >= 0 ? "saved" : "extra" })),
-        el("p", { class: "lead", text: `${me} cost ${money$(Math.abs(diff))} ${diff >= 0 ? "less" : "more"} than ${pl.list.length === 1 ? `the ${best}` : `the cheapest alternative (${best})`} over ${span}${cmp.energy_only ? ", energy only" : ""}.` }));
-      const rows = [[me, t.actual, true], ...Object.entries(t.plans).map(([n, v]) => [n, v, false])].sort((a, b) => a[1] - b[1]);
-      const dshort = (x) => new Date(x + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" });
-      const max = Math.max(...rows.map((r) => Math.abs(r[1])), 1);
-      for (const [n, v, mine] of rows) {
-        c1.append(el("div", { class: "mix-row cmp-row" + (mine ? " mine" : ""), title: `${n}: ${money$(v, 2)} over ${span}` },
-          el("span", { class: "mix-k", text: n }),
-          el("span", { class: "mix-bar" }, el("i", { style: `width:${Math.max(1, Math.abs(v) / max * 100)}%` })),
-          el("span", { class: "mix-v", text: money$(v) })));
-      }
-      // the same split as the retailer's app (energy) and bill (plus fixed charges), to check against
-      c1.append(el("p", { class: "chart-note", text: `${me}, ${dshort(t.first)} to ${dshort(t.last)}: ${money$(t.actual_energy, 2)} for energy` +
-        (t.actual_fixed ? ` plus ${money$(t.actual_fixed, 2)} supply charge and fee` : "") + "." }));
-    }
-    if (d.waiting_days) c1.append(el("p", { class: "chart-note", text: `${d.waiting_days} imported day${d.waiting_days === 1 ? " is" : "s are"} waiting for ${me}'s costs, which the collector fetches in the background; they're left out until then.` }));
+    $("money-sub").textContent = "";
 
     // ---- payback
     const c2 = $("money-payback"); c2.innerHTML = "";
-    c2.append(el("h3", { text: "Solar and battery payback" }));
     if (!pb) {
       c2.append(el("p", { class: "setup" }, d.reason && !cmp ? `Not yet: ${d.reason}.` : "",
-        ...(d.reason && !cmp ? [] : ["Set ", el("code", { text: "SYSTEM_COST" }), " (what the system cost, in dollars) and, optionally, ",
-          el("code", { text: "SYSTEM_INSTALLED" }), " (the date it was switched on) to track when it pays for itself."])));
+        ...(d.reason && !cmp ? [] : ["Add what the system cost (and when it was switched on) under ",
+          el("a", { href: "settings.html#money", text: "Settings > Money" }), " to track when it pays for itself."])));
     } else {
       const sd = pb.standard, wf = pb.with_fuel;
       // date on one line, years under it (so the cell never wraps mid-phrase)
@@ -408,82 +376,6 @@
           (pb.previous_days ? ` (the ${pb.previous_days} days before you joined ${me} are on the ${pb.previous_plan} in both views: an estimate)` : "") + "." : "") }));
     }
 
-    // ---- battery trades
-    const c3 = $("money-trades"); c3.innerHTML = "";
-    c3.append(el("h3", { text: "Battery trades with the grid" }));
-    const tm = (tr.months || {})[tr.this_month], lm = (tr.months || {})[tr.last_month];
-    const sumLine = (label, m) => {
-      if (!m) return el("p", { class: "lead", text: `${label}: none` });
-      const parts = [];
-      if (m.exported_kwh) parts.push(`sent ${m.exported_kwh.toFixed(1)} kWh to the grid for ${m.priced ? money$(m.export_value, 2) : "–"}`);
-      if (m.imported_kwh) parts.push(`charged ${m.imported_kwh.toFixed(1)} kWh from the grid for ${m.priced ? money$(m.import_cost, 2) : "–"}`);
-      return el("p", { class: "lead", text: `${label}: ${parts.join("; ")}.` });
-    };
-    if (!(tr.events || []).length) {
-      c3.append(el("p", { class: "lead", text: "None in the last 60 days. When the battery sends power to the grid, or charges from it, beyond what the house needs (usually your retailer's battery control, such as Amber SmartShift), it shows here." }));
-    } else {
-      const net = tm ? (tm.export_value || 0) - (tm.import_cost || 0) : 0;
-      c3.append(el("div", { class: "big" }, money$(net, 2), el("small", { text: "this month" })),
-        sumLine("This month", tm), sumLine("Last month", lm));
-      const ul = el("ul", { class: "trade-list" });
-      for (const e of tr.events.slice(0, 6)) {
-        const st = new Date(e.start * 1000), en = new Date(e.end * 1000);
-        const when = `${st.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}, ${st.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} to ${en.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
-        ul.append(el("li", {}, el("span", { class: "when", text: when }),
-          el("span", { text: `${e.kind === "export" ? "Sent" : "Charged"} ${e.kwh.toFixed(1)} kWh${e.avg_c != null ? ` at ${Math.round(e.avg_c)}c` : ""}` }),
-          el("span", { class: "amt", text: e.value == null ? "–" : `${e.kind === "export" ? "+" : "−"}${money$(e.value, 2)}` })));
-      }
-      c3.append(ul);
-    }
-
-    // ---- month by month table
-    const tb = $("money-table"); tb.innerHTML = "";
-    if (pl && cmp && cmp.months && cmp.months.length) {
-      const names = pl.list.map((p) => p.name);
-      tb.append(el("tr", {}, el("th", { text: "Month" }), el("th", { class: "mine", text: me }), ...names.map((n) => el("th", { text: n }))));
-      for (const m of cmp.months.slice().reverse()) {
-        const vals = [m.actual, ...names.map((n) => m.plans[n])];
-        const min = Math.min(...vals);
-        const spk = (d.spikes || []).filter((x) => x.day.startsWith(m.month));
-        tb.append(el("tr", {}, el("td", {}, `${mName(m.month)}${m.days < 28 ? ` (${m.days} d)` : ""}`,
-            m.provisional ? el("span", { class: "tag prov", title: `${m.provisional} day${m.provisional === 1 ? "" : "s"} still on ${me}'s estimates or the dashboard's own pricing, so this can still change`, text: "provisional" }) : null,
-            m.billed && m.billed === m.days ? el("span", { class: "tag billed", title: "Matches your bill exactly", text: "billed" }) : null,
-            spk.length ? el("span", { class: "tag spike-tag", title: spk.map((x) => `${new Date(x.day + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" })}: ${x.kind === "export" ? "earned" : "paid"} ${money$(x.amount, 2)}`).join("\n"), text: "spike" }) : null),
-          ...vals.map((v, i) => el("td", { class: (i === 0 ? "mine " : "") + (v === min ? "best" : ""), text: money$(v, 2) }))));
-      }
-    }
-    // ---- bills against the data
-    S.fetchJSON("/api/bills").then((bc) => {
-      const bt = $("money-bills"), list = (bc && bc.bills) || [];
-      bt.hidden = !list.length; bt.innerHTML = "";
-      if (!list.length) return;
-      const dm = (x) => new Date(x + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" });
-      bt.append(el("tr", {}, el("th", { text: "Your bills" }), el("th", { text: "Bill" }), el("th", { text: "The data had" }), el("th", { text: "Difference" })));
-      for (const b of list.slice().reverse()) {
-        const diff = b.difference, small = Math.abs(diff) < 0.5;
-        bt.append(el("tr", { title: `Bill: ${money$(b.bill.bought, 2)} energy, ${money$(b.bill.earned, 2)} credit. ` +
-            `The data: ${money$(b.data.bought, 2)} and ${money$(b.data.earned, 2)} (${b.sources.join(", ")}), ${b.days_with_data} of ${b.days} days. Now set to the bill.` },
-          el("td", { text: `${dm(b.start)} to ${dm(b.end)}` }), el("td", { text: money$(b.bill.net, 2) }), el("td", { text: money$(b.data.net, 2) }),
-          el("td", { class: small ? "best" : null, text: small ? "matches" : `${diff > 0 ? "+" : "−"}${money$(Math.abs(diff), 2)}` })));
-      }
-    }).catch(() => {});
-
-    const notes = [];
-    if (pl) {
-      notes.push(`Each plan priced on your own grid use and exports, hour by hour${cmp && cmp.energy_only ? "" : ", with its daily supply charge"}. The same energy flows are used for every plan; on another plan the battery might be run differently, so treat this as a guide.`);
-      if (cmp && cmp.energy_only) notes.push(`Energy only: set RETAILER_SUPPLY_C_DAY (and RETAILER_FEE_MONTHLY for a membership fee) from your ${me} bill to include supply charges.`);
-      else if (d.fixed_known) notes.push(`${me} includes your ${d.supply_rates ? `supply charge (${d.supply_rates.map((r) => `${r.c_day}c/day${r.from ? ` from ${new Date(r.from + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" })}` : ""}`).join(", ")})` : `${d.supply_c_day}c/day supply charge`}${d.fee_monthly ? ` and ${money$(d.fee_monthly, 2)}/month fee` : ""}.`);
-      const sp = d.spikes || [];
-      if (sp.length) notes.push("Price spikes: " + sp.slice(-4).map((x) => `${new Date(x.day + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short" })} ` +
-        (x.kind === "export" ? `earned ${money$(x.amount, 2)} from ${x.kwh != null ? `${x.kwh.toFixed(1)} kWh exported` : "exports"}` : `cost ${money$(x.amount, 2)}`) +
-        (x.peak_c ? ` (up to $${(x.peak_c / 100).toFixed(2)}/kWh for ${x.minutes} min)` : "")).join("; ") + ".");
-      const fromTxt = (d) => new Date(d + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
-      notes.push(`Current prices (${pl.source}): ` + pl.list.map((p) => `${p.name} ${p.tou ? "time of use" : `${(+p.usage_c_kwh).toFixed(2)}c/kWh`}, ${(+p.supply_c_day).toFixed(2)}c/day, feed-in ${p.feed_in_c_kwh == null ? "–" : `${p.feed_in_c_kwh}c`}${p.from ? ` from ${fromTxt(p.from)}` : ""}`).join("; ") + ".");
-      const early = pl.list.find((p) => p.first_from && cmp && cmp.months && cmp.months.length && cmp.months[0].month + "-31" < p.first_from);
-      if (early) notes.push(`Months before ${fromTxt(early.first_from)} use the earliest prices in the plans file.`);
-      if (cmp && cmp.imported_days) notes.push(`${cmp.imported_days} of these days come from a mySigen export (daily totals${pl.list.some((p) => p.tou) ? ", so time-of-use plans are approximate for them" : ""}).`);
-    }
-    $("money-note").textContent = notes.join(" ");
   }
 
   // ------------------------------------------------------------ monthly summary
@@ -660,12 +552,17 @@
       const lo = v.length ? Math.floor(Math.min(...v) - 1) : 90;
       series = [{ key: "soh", label: "Health", color: "var(--battery)", values: d.stats.soh.avg }];
       opts = { yMin: Math.max(0, lo), yMax: 100, yFmt: (x) => `${x}%`, tipFmt: (x) => (x == null ? "–" : `${x.toFixed(1)}%`) };
-      note = "State of health as the battery reports it: how much of its original capacity is left. Expect a slow decline of around a percent or two a year. Temperatures are under System > Health.";
-    } else {
-      series = [{ key: "bt", label: "Battery, hottest each day", color: "var(--battery)", values: d.stats.battery_temp.max },
-        { key: "it", label: "Inverter, hottest each day", color: "var(--grid)", dash: "5 4", values: d.stats.inverter_temp.max }];
+      note = "State of health as the battery reports it: how much of its original capacity is left. Expect a slow decline of around a percent or two a year.";
+    } else if (m === "batt_temp") {
+      series = [{ key: "max", label: "Hottest cell each day", color: "var(--battery)", values: d.stats.battery_temp.max },
+        { key: "avg", label: "Daily average", color: "var(--battery)", dash: "2 3", values: d.stats.battery_temp.avg }];
       opts = { yFmt: (x) => `${x}°`, tipFmt: (x) => (x == null ? "–" : `${x.toFixed(1)} °C`) };
-      note = "Hottest battery cell and inverter temperature each day. Summer peaks are expected; a steady rise against similar weather can mean poor airflow around the units.";
+      note = "Battery cell temperature each day. Heat ages a battery faster than use does: summer peaks are expected, but a steady rise against similar weather can mean poor airflow around it.";
+    } else {
+      series = [{ key: "max", label: "Hottest each day", color: "var(--grid)", values: d.stats.inverter_temp.max },
+        { key: "avg", label: "Daily average", color: "var(--grid)", dash: "2 3", values: d.stats.inverter_temp.avg }];
+      opts = { yFmt: (x) => `${x}°`, tipFmt: (x) => (x == null ? "–" : `${x.toFixed(1)} °C`) };
+      note = "Inverter temperature each day. Summer peaks are expected; a steady rise against similar weather can mean poor airflow around it, which makes it hold back power on hot days.";
     }
     return { series, opts, note, empty };
   }
@@ -728,8 +625,6 @@
     box.append(el("p", { class: "ol-head", text: o.headline }));
     const f = el("dl", { class: "facts" });
     const add = (k, v) => { if (v != null && v !== "") f.append(el("dt", { text: k }), el("dd", { text: v })); };
-    const soc = live && live.battery ? live.battery.soc : null;
-    add("Battery now", soc != null ? `${Math.round(soc)}%` : null);
     add("Lowest point", o.lowest ? `${Math.round(o.lowest.soc)}% at ${olWhen(o.lowest.t)}` : null);
     add(`Reaches ${o.reserve}% reserve`, o.empty_at ? olWhen(o.empty_at) : "not tonight");
     if (o.night_grid_kwh > 0.05) add("From the grid until sunrise", `${o.night_grid_kwh.toFixed(1)} kWh` + (o.night_cost != null ? `, $${o.night_cost.toFixed(2)}` : ""));
@@ -737,7 +632,6 @@
     const t = o.tomorrow;
     if (t) {
       f.append(el("div", { class: "sep" }));
-      add(`${t.label}: solar`, `${t.pv_kwh.toFixed(0)} kWh`);
       add(`${t.label}: home use`, `${t.home_kwh.toFixed(0)} kWh`);
       add(t.full_at ? "Full again" : "Highest charge", t.full_at ? olWhen(t.full_at) : t.max_soc != null ? `${Math.round(t.max_soc)}%` : null);
       if (t.spare_kwh >= 0.5) add("Spare solar after that", `${t.spare_kwh.toFixed(0)} kWh`);
@@ -764,14 +658,14 @@
     if (!o || !o.enabled || $("ol-panel").hidden) return;
     const proj = o.projection || [], nowT = Date.now() / 1000;
     const rows = new Map();
-    const row = (t) => { if (!rows.has(t)) rows.set(t, { t, act: null, fc: null, pv: null, load: null }); return rows.get(t); };
-    if (olPast) olPast.t.forEach((t, i) => { if (olPast.soc[i] != null && t < nowT) row(t).act = olPast.soc[i]; });
+    const row = (t) => { if (!rows.has(t)) rows.set(t, { t, act: null, fc: null, pv: null, load: null, pvAct: null }); return rows.get(t); };
+    if (olPast) olPast.t.forEach((t, i) => { if (t < nowT) { const r = row(t); if (olPast.soc[i] != null) r.act = olPast.soc[i]; if (olPast.pv && olPast.pv[i] != null) r.pvAct = olPast.pv[i]; } });
     for (const p of proj) Object.assign(row(p.t), { fc: p.soc, pv: p.pv, load: p.load });
     // join the actual line to the projection at "now"
     if (proj.length && olPast) { const r0 = row(proj[0].t); if (r0.act == null && live && live.battery) r0.act = live.battery.soc; }
     const lst = [...rows.values()].sort((a, b) => a.t - b.t);
     const lg = $("ol-legend"); lg.innerHTML = "";
-    const items = [["Charge so far", "var(--battery)", false], ["Expected charge", "var(--battery)", true], ["Expected solar", "var(--solar)", true], ["Usual home use", "var(--home)", true]];
+    const items = [["Charge so far", "var(--battery)", false], ["Expected charge", "var(--battery)", true], ["Solar so far", "var(--solar)", false], ["Expected solar", "var(--solar)", true], ["Usual home use", "var(--home)", true]];
     for (const [l, c, d] of items) lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw" + (d ? " dash" : ""), style: `border-color:${c}` }), l));
     const title = (t) => new Date(t * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
     C.lineChart($("ol-chart"), {
@@ -784,10 +678,11 @@
     // same time axis as the charge chart above, so the two line up
     C.lineChart($("ol-flow"), {
       t: lst.map((r) => r.t), height: 120, yMin: 0, markerT: nowT, markerLabel: "",
-      series: [{ key: "pv", label: "Expected solar", color: "var(--solar)", dash: "5 4", values: lst.map((r) => r.pv) },
+      series: [{ key: "pva", label: "Solar so far", color: "var(--solar)", values: lst.map((r) => r.pvAct) },
+        { key: "pv", label: "Expected solar", color: "var(--solar)", dash: "5 4", values: lst.map((r) => r.pv) },
         { key: "load", label: "Usual home use", color: "var(--home)", dash: "2 3", values: lst.map((r) => r.load) }],
       yFmt: S.kwAxis, tipFmt: (v) => (v == null ? "–" : S.kw(v)), tipTitle: title,
-      ariaLabel: "Expected solar and usual home use for the same period",
+      ariaLabel: "Solar so far, expected solar and usual home use for the same period",
     });
   }
 
@@ -800,7 +695,7 @@
   }
 
   // ------------------------------------------------------------ weather and solar forecast
-  let wxData = null, wxActual = null;
+  let wxData = null;
   const WXI = {
     sun: '<circle class="sun" cx="12" cy="12" r="4.5" fill="none" stroke="currentColor"/><path class="sun" stroke="currentColor" d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>',
     part: '<circle class="sun" cx="9" cy="9" r="3.6" fill="none" stroke="currentColor"/><path class="sun" stroke="currentColor" d="M9 2v1.6M2 9h1.6M4 4l1.1 1.1M14 4l-1.1 1.1"/><path fill="var(--surface)" stroke="currentColor" d="M8 19.5h9.5a3.5 3.5 0 0 0 .2-7 5 5 0 0 0-9.6 1.3A2.9 2.9 0 0 0 8 19.5z"/>',
@@ -830,31 +725,16 @@
       now.append(el("p", { class: "setup", text: w.status === "error" ? `Weather isn't available right now (${w.error}). It retries every few minutes.` : "Getting the forecast…" }));
       return;
     }
-    const c = w.current, today = w.daily[0], tom = w.daily[1];
+    const c = w.current, today = w.daily[0];
     $("wx-sub").textContent = w.mode === "simulator" ? "simulated"
       : (w.location && w.location.name ? w.location.name.split(",").slice(0, 2).join(",") + ", " : "") + "from Open-Meteo";
     const icon = c.is_day ? c.icon : (c.icon === "sun" ? "cloud" : c.icon);
-    now.append(el("div", { class: "wx-now-top" }, wxIcon(c.is_day || c.icon !== "sun" ? icon : "cloud", 44),
-      el("div", { class: "wx-temp" }, c.temp == null ? "–" : Math.round(c.temp), el("small", { text: "°C" }))));
-    now.append(el("div", { class: "wx-desc", text: c.desc + (c.feels != null ? `, feels like ${Math.round(c.feels)}°` : "") }));
-    const facts = el("dl", { class: "facts" });
-    const add = (k, v) => { if (v != null) facts.append(el("dt", { text: k }), el("dd", { text: v })); };
-    add("Cloud", c.cloud != null ? `${Math.round(c.cloud)}%` : null);
-    add("Wind", c.wind != null ? `${Math.round(c.wind)} km/h` : null);
-    add("Humidity", c.humidity != null ? `${Math.round(c.humidity)}%` : null);
-    if (today) add("Sunrise, sunset", `${clock(today.sunrise)}, ${clock(today.sunset)}`);
-    facts.append(el("div", { class: "sep" }));
+    const bits = [c.desc + (c.feels != null && Math.abs(c.feels - c.temp) >= 2 ? `, feels like ${Math.round(c.feels)}°` : ""),
+      c.wind != null ? `wind ${Math.round(c.wind)} km/h` : null, c.humidity != null ? `humidity ${Math.round(c.humidity)}%` : null,
+      today ? `sunrise ${clock(today.sunrise)}, sunset ${clock(today.sunset)}` : null].filter(Boolean);
+    now.append(wxIcon(icon, 30), el("span", { class: "wx-temp" }, c.temp == null ? "–" : Math.round(c.temp), el("small", { text: "°C" })),
+      el("span", { class: "wx-line", text: bits.join(" · ") }));
     const learned = w.factor && w.factor.value != null;
-    if (today) {
-      add("Solar today, forecast", today.pv_kwh != null ? `${kwh1(today.pv_kwh)} kWh` : "learning");
-      const made = live && live.today ? live.today.pv : null;
-      add("Made so far", made != null ? `${kwh1(made)} kWh` : null);
-      const rem = live && live.weather ? live.weather.remaining_kwh : null;
-      add("Still to come", rem != null && learned ? `${kwh1(rem)} kWh` : null);
-    }
-    if (tom) add("Tomorrow", tom.pv_kwh != null ? `${kwh1(tom.pv_kwh)} kWh, ${tom.desc.toLowerCase()}` : tom.desc);
-    now.append(facts);
-
     const days = $("wx-days"); days.innerHTML = "";
     w.daily.forEach((d, i) => {
       days.append(el("div", { class: "wx-day" },
@@ -871,41 +751,10 @@
     drawWeather();
   }
 
-  function drawWeather() {
-    const w = wxData;
-    if (!w || w.status !== "ok" || $("wx-panel").hidden) return;
-    const days = w.daily.slice(0, 2);
-    const windows = days.map((d) => [d.sunrise - 1800, d.sunset + 1800]);
-    const byHour = new Map();
-    for (const h of w.hourly) byHour.set(h.t, { t: h.t + 1800, fc: h.pv_w, cloud: h.cloud, act: null });
-    for (const [t, v] of Object.entries(wxActual || {})) { const r = byHour.get(+t); if (r) r.act = v; }
-    const rows = [...byHour.values()].sort((a, b) => a.t - b.t);
-    const nowT = Date.now() / 1000;
-    const series = [
-      { key: "fc", label: "Forecast", color: "var(--solar)", dash: "5 4", values: rows.map((r) => r.fc) },
-      { key: "act", label: "Actual", color: "var(--solar)", values: rows.map((r) => (r.t - 1800 < nowT ? r.act : null)) },
-    ];
-    const lg = $("wx-legend"); lg.innerHTML = "";
-    for (const s of series) lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw" + (s.dash ? " dash" : ""), style: `border-color:${s.color}` }), s.label));
-    C.lineChart($("wx-chart"), {
-      t: rows.map((r) => r.t), series, height: 200, yMin: 0, windows, markerT: nowT, gapSeconds: 7200,
-      yFmt: S.kwAxis, tipFmt: (v) => (v == null ? "–" : S.kw(v)),
-      tipTitle: (t) => { const r = byHour.get(t - 1800); return `${new Date(t * 1000).toLocaleString([], { weekday: "short", hour: "numeric" })}` + (r && r.cloud != null ? `, ${Math.round(r.cloud)}% cloud` : ""); },
-      ariaLabel: "Solar forecast for today and tomorrow, hour by hour, with what the panels actually made today",
-    });
-  }
-
+  function drawWeather() { /* the solar forecast is drawn in the battery outlook chart */ }
   async function loadWeather() {
     try {
       wxData = await S.fetchJSON("/api/weather");
-      if (wxData && wxData.enabled && wxData.status === "ok") {
-        const since = Math.min(...wxData.hourly.map((h) => h.t));
-        const hrs = Math.max(1, (Date.now() / 1000 - since) / 3600);
-        const h = await S.fetchJSON(`/api/history?hours=${hrs.toFixed(2)}`);
-        const acc = {};
-        h.t.forEach((t, i) => { const k = Math.floor(t / 3600) * 3600; if (h.pv[i] != null) (acc[k] = acc[k] || []).push(h.pv[i]); });
-        wxActual = Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, v.reduce((a, b) => a + b, 0) / v.length]));
-      }
       renderWeather();
     } catch (e) { /* banner */ }
   }
@@ -975,13 +824,11 @@
     $("ev-key-plugged").hidden = inferred;
     if (ses && inferred) {
       add("Started", `${S.time(ses.start)}, ${dur(ses.seconds)} ago`);
-      add("Energy this session", S.kwh(ses.kwh));
       add("From the grid", ses.cost != null ? `${S.kwh(ses.grid_kwh)}, $${ses.cost.toFixed(2)}` : S.kwh(ses.grid_kwh));
       facts.append(el("div", { class: "sep" }));
     } else if (ses) {
       add("Plugged in", `${S.time(ses.start)}, ${dur(ses.seconds)} ago`);
       add("Charging time", ses.charging_s ? dur(ses.charging_s) : "not yet");
-      add("Energy this session", S.kwh(ses.kwh));
       add("From the grid", ses.cost != null ? `${S.kwh(ses.grid_kwh)}, $${ses.cost.toFixed(2)}` : S.kwh(ses.grid_kwh));
       facts.append(el("div", { class: "sep" }));
     }
@@ -991,7 +838,7 @@
     add("Delivered in total", e.total_kwh != null ? `${Math.round(e.total_kwh).toLocaleString()} kWh` : null);
     box.append(facts);
     $("ev-sub").textContent = inferred ? "from the inverter's figures"
-      : e.status === "offline" ? "charger not answering" : `Sigen AC charger, Modbus unit ${e.unit}`;
+      : e.status === "offline" ? "charger not answering" : "Sigen AC charger";
     $("ev-note").hidden = !inferred;
   }
 
@@ -1507,7 +1354,6 @@
     }
     if (p.buy == null) return;
     const [word, cls] = DESC[p.descriptor] || [p.descriptor || "", ""];
-    const ren = p.renewables != null ? p.renewables : hasAemo ? aemoSummary.renewables_pct : null;
     box.innerHTML = "";
     box.append(
       el("div", { class: "pair" },
@@ -1519,7 +1365,6 @@
         p.spike === "potential" ? el("span", { class: "tag potential", text: "Spike possible" }) : null,
         p.estimate ? el("span", { class: "tag", text: "Estimate", title: ESTIMATE_NOTE[name] || "" }) : null),
       el("dl", { class: "facts" },
-        el("dt", { text: p.renewables != null ? `Renewables (${name})` : "Renewables (AEMO)" }), el("dd", { text: ren == null ? "–" : `${Math.round(ren)}%` }),
         el("dt", { text: "This price until" }), el("dd", { text: p.ends ? clock(p.ends) : "–" }),
         p.period ? el("dt", { text: "Network period" }) : null, p.period ? el("dd", { text: p.period }) : null));
     $("price-sub").textContent = p.mode === "simulator" ? `simulated ${name} prices` : `from ${name}`;
@@ -1931,7 +1776,7 @@
       tile("Round trip", w.round_trip != null ? w.round_trip.toFixed(0) : "–", w.round_trip != null ? "%" : "", "energy out vs in"),
       tile("Battery temperature", w.temps.avg != null ? w.temps.avg.toFixed(0) : "–", w.temps.avg != null ? "°C" : "",
         w.temps.max != null ? `hottest ${w.temps.max.toFixed(0)}°C, 30 days` : null));
-    $("wear-sub").textContent = `${w.rated_kwh} kWh, ${w.lifetime ? "since it was switched on" : "since recording began"} ${new Date(w.since + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}`;
+    $("wear-sub").textContent = `${w.lifetime ? "since it was switched on" : "since recording began"} ${new Date(w.since + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}`;
     $("wear-note").textContent = `One cycle is the battery's full ${w.rated_kwh} kWh out once. ` +
       (w.recent.deep_days ? `${w.recent.deep_days} of the last ${w.recent.days} days used most of it. ` : "") +
       (wa.years ? `At the rate so far it will reach about ${wa.cycles_at_end.toLocaleString()} cycles by the end of its ${wa.years}-year warranty` +

@@ -61,7 +61,7 @@ def battery_wear(store, live, tz, installed=None, warranty_years=10, warranty_mw
     per_day = sum(dis30) / len(dis30) / rated if dis30 else None
     deep = sum(1 for x in dis30 if x >= 0.8 * rated)
 
-    # health trend from the daily averages the Trends panel records
+    # health trend from the daily averages the Over time charts record
     stats = store.daily_stats((today - timedelta(days=800)).isoformat())
     soh = [(d, v["soh"]["avg"]) for d, v in stats.items() if v.get("soh") and v["soh"]["avg"]]
     temps = [v["battery_temp"] for d, v in stats.items()

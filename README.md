@@ -97,141 +97,99 @@ Screenshots switch between light and dark to match your GitHub theme; both versi
 [`docs/screenshots`](docs/screenshots). They were taken with the built-in simulator, so the
 numbers are realistic but not from a real home.
 
-**Live prices and the grid**: your retailer's buy and sell price with a 24-hour forecast,
-AEMO's wholesale price, your region's generation mix, and every NEM region side by side.
+The dashboard is ten panels; related things share a panel, with tabs.
+
+**Battery**: charge, how long it lasts at this rate, cell temperature and voltage (Now), beside
+cycles, energy through it against the warranty, round trip, and health and temperature over time
+(Health). Shown side by side when the panel is full width, as here; as tabs when narrower.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/prices-grid-dark.png">
-  <img alt="Electricity price chart with Amber buy and sell prices and AEMO wholesale price, and the grid generation mix" src="docs/screenshots/prices-grid-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/battery-dark.png">
+  <img alt="Battery panel: 58% charged and discharging, with energy stored and room to charge, beside wear tiles for cycles, energy through it, health, warranty end, round trip and temperature, and a health-over-time chart" src="docs/screenshots/battery-light.png">
 </picture>
 
-**Money**: whether your retailer is worth it against the Default Market Offer (or your own
-quotes), priced on your own usage hour by hour; how far the solar and battery are towards paying for
-themselves; and every time the battery traded with the grid (for example Amber SmartShift),
-with what it earned.
+**Forecast**: where the battery's charge is heading until the end of tomorrow, with expected
+solar against usual home use and plain answers (will it last the night, what the grid will cost
+until sunrise, when solar fills it again), then the weather and four days of solar forecast.
+**Best times** says when to run the dishwasher, washing machine and dryer.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/money-dark.png">
-  <img alt="Money panel: Amber compared with the Default Market Offer, solar and battery payback progress with an estimated payback date, and recent battery exports to the grid with their value" src="docs/screenshots/money-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/forecast-dark.png">
+  <img alt="Forecast panel: battery charge over the last 12 hours and expected until the end of tomorrow, solar so far and expected against usual home use, advice, and four daily weather and solar forecast cards" src="docs/screenshots/forecast-light.png">
 </picture>
 
-**Battery outlook**: where the battery's charge is heading until the end of tomorrow, with
-plain answers: will it last the night, what the grid will cost until sunrise, when solar fills
-it again, and whether charging from the grid overnight is worth it.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/outlook-dark.png">
-  <img alt="Battery outlook: battery charge over the last 12 hours and expected until the end of tomorrow, with expected solar and usual home use, and advice that the battery reaches its reserve at 3 AM and tomorrow's solar will refill it" src="docs/screenshots/outlook-light.png">
-</picture>
-
-**Weather and solar forecast**: current conditions, four days ahead, and a solar forecast
-in kWh, with today's forecast hour by hour against what the panels actually made.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/weather-dark.png">
-  <img alt="Weather panel: current conditions, today's solar forecast and what's still to come, an hourly forecast-versus-actual chart for today and tomorrow, and four daily forecast cards" src="docs/screenshots/weather-light.png">
-</picture>
-
-**History**: power flows and battery charge from today to 30 days, with a crosshair to
-read any moment.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/history-dark.png">
-  <img alt="Power history chart with tooltip, and battery charge over 24 hours" src="docs/screenshots/history-light.png">
-</picture>
-
-**Solar** (Strings tab): power, voltage and current for each PV string your inverter reports,
-sunrise to sunset with the nights folded away, plus each string's energy, share and peak
-for the day. Handy for spotting shading or a faulty panel, and for telling which roof face is
-on which string.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/strings-dark.png">
-  <img alt="Chart of power from four PV strings over 24 hours, with today's energy and peak for each string" src="docs/screenshots/strings-light.png">
-</picture>
-
-**Car charging** (with a Sigen AC charger): the charger's state, this session's energy
-and cost, a 48-hour timeline and recent sessions.
+**Car charging** (with a Sigen AC charger): the charger's state, this session, a 48-hour
+timeline, recent sessions with what they cost and saved against a fuel car, and a charging plan.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/ev-charging-dark.png">
-  <img alt="Car charging panel: charging at 7 kW, session details, a 48-hour timeline of plug-ins and charging, and a table of recent sessions" src="docs/screenshots/ev-charging-light.png">
+  <img alt="Car charging panel: session details, a 48-hour timeline, savings against a fuel car and a table of recent sessions" src="docs/screenshots/ev-charging-light.png">
 </picture>
 
-**Daily energy and system status**: each day's energy in (solar, bought, from battery) and
-out (home, sold, to battery), plus inverter status and alarms.
+**Prices and the grid**: your retailer's buy and sell price with a 24-hour forecast; **The grid**
+has AEMO's wholesale price, your region's generation mix and every NEM region side by side.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/daily-system-dark.png">
-  <img alt="Daily energy balance chart and system status panel" src="docs/screenshots/daily-system-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/prices-grid-dark.png">
+  <img alt="Your price tab: buying and selling prices now and a chart of the past 12 hours and next 24" src="docs/screenshots/prices-grid-light.png">
 </picture>
 
-**Monthly summary**: each month's solar, use, bought and sold, self-sufficiency, cost and the
-value of your solar and battery, against the same month last year, plus a printable report.
+**History**: power flows and battery charge from today to 30 days (**Power**), each day's energy
+in and out (**Days**), each month against the same month last year with targets and a printable
+report (**Months**), and what the house draws overnight (**Always-on**).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/history-dark.png">
+  <img alt="History panel, Power tab: power flows for solar, home, battery, grid and car over 24 hours, and battery charge" src="docs/screenshots/history-light.png">
+</picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/monthly-dark.png">
-  <img alt="Monthly summary for September: tiles for solar made, home used, car, bought, sold, self-sufficiency, net cost and solar and battery value, each compared with August, a monthly bar chart and a table of recent months" src="docs/screenshots/monthly-light.png">
+  <img alt="History panel, Months tab: tiles for the month's solar, use, bought, sold, self-sufficiency, net cost and value, targets with a projection, a monthly chart and a table of months" src="docs/screenshots/monthly-light.png">
 </picture>
 
-**Over time**: slow changes over months that a daily view hides, in each subject's own tab.
-Here, System > Health: insulation resistance each day against the warning and alarm levels (and
-battery and inverter temperatures). Battery > Health has the battery's health, and Solar > Long
-term has the solar against the weather.
+**Solar**: power, voltage and current for each PV string with each one's share and peak
+(**Strings**), solar held back and why (**Limits**), and the solar against the weather over the
+seasons (**Long term**).
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/trends-dark.png">
-  <img alt="Trends chart of daily lowest and average insulation resistance over four months, staying between 0.5 and 0.8 megohms, above the warning and alarm lines" src="docs/screenshots/trends-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/strings-dark.png">
+  <img alt="Solar panel, Strings tab: power from four PV strings over a day, with each string's energy, share, peak and against usual" src="docs/screenshots/strings-light.png">
 </picture>
 
-**Solar > Limits**: solar the panels could have made but were held back from, and why: the
-export limit, a negative feed-in price, the inverter at its maximum or a full battery, with what
-those exports would have earned.
+**Money**: a year on each plan (your retailer, the Default Market Offer flat and time of use, or
+your own quotes) with the battery run for each, and what more battery or panels would add
+(**Plans**); how far the system is towards paying for itself (**Payback**); and price spikes caught
+and missed, export prices and a higher backup reserve (**Trading**).
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/limits-dark.png">
-  <img alt="Solar limits panel: 18.8 kWh held back in the last 30 days, mostly at the export limit, with daily bars by reason" src="docs/screenshots/limits-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/money-dark.png">
+  <img alt="Money panel, Plans tab: a year's cost on each plan with your system, without the battery, with more battery and with more panels" src="docs/screenshots/money-light.png">
 </picture>
-
-**Battery > Health**: cycles, energy through the battery, health, round trip and temperature,
-against your warranty, including when the warranty's energy limit is likely to be reached.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/battery-wear-dark.png">
-  <img alt="Battery wear panel with tiles for cycles, energy through the battery, health, health at warranty end, round trip and temperature" src="docs/screenshots/battery-wear-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/trading-dark.png">
+  <img alt="Money panel, Trading tab: battery sold to the grid, export price, spikes caught and missed, and a higher backup reserve" src="docs/screenshots/trading-light.png">
 </picture>
 
-**Always-on use**: what the house draws overnight when nothing much is running, how it's
-trending and what it costs a year.
+**System**: inverter status, alarms, data feeds and recent events, beside insulation and
+inverter temperature over time.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/always-on-dark.png">
-  <img alt="Always-on use panel: 400 W now, 3,504 kWh and about $949 a year, with a chart of each night's baseline" src="docs/screenshots/always-on-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/system-dark.png">
+  <img alt="System panel: status facts and alarms beside a chart of insulation resistance over time" src="docs/screenshots/system-light.png">
 </picture>
 
-**Best times to run appliances**: when to start the dishwasher, washing machine and dryer in
-the next 24 hours, from the battery outlook and price forecast.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/appliances-dark.png">
-  <img alt="Best times to run appliances: a table with the best start time, cost then and cost if started now for each appliance" src="docs/screenshots/appliances-light.png">
-</picture>
-
-**The grid, three ways**: all five regions as tiles with how full each interconnector is
-(above, with the price chart), as nodes and wires coloured by price, or as a chain following
-how the grid connects. Pick one in Settings.
+**The grid, three ways**: all five regions as tiles with how full each interconnector is, as
+nodes and wires coloured by price, or as a chain following how the grid connects. Pick one in
+Settings.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/grid-map-dark.png">
   <img alt="The grid as nodes and wires: each region a ring coloured by price against the market average, with moving wires showing the flows" src="docs/screenshots/grid-map-light.png">
 </picture>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/grid-chain-dark.png">
-  <img alt="The grid as a chain: Queensland, New South Wales, Victoria and South Australia in a line with flow arrows, and Tasmania below Victoria" src="docs/screenshots/grid-chain-light.png">
-</picture>
-
-**Year in review** (a link under Monthly summary): the last 12 months at a glance, with monthly
+**Year in review** (a link under History > Months): the last 12 months at a glance, with monthly
 charts and highlights, printable to A4. The monthly **Printable report** also covers solar held
 back, price spikes, always-on use and battery cycles for the month.
 
@@ -239,7 +197,7 @@ back, price spikes, always-on use and battery cycles for the month.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/arrange-dark.png">
-  <img alt="Arrange panels window listing each panel with a show checkbox, a width choice and up and down buttons" src="docs/screenshots/arrange-light.png" width="480">
+  <img alt="Arrange panels window listing each panel with a show checkbox, a width choice and up and down buttons, and the choice for very wide screens" src="docs/screenshots/arrange-light.png" width="480">
 </picture>
 
 **Settings** (the gear): every setting below, grouped, with what each one does. Saving writes
@@ -417,40 +375,37 @@ Notes:
 
 ### Money: plans, payback and battery trades
 
-The **Money** panel needs retailer prices (above) and a little setup in `sigen.env`:
+The **Money** panel needs retailer prices (above) and a little setup (Settings > Money):
 
-* **Is your retailer worth it?** Your own grid use and exports, hour by hour, priced on
-  another plan (daily supply charge, usage rate flat or time of use, feed-in tariff) against
-  what you actually paid, for each month and the last 12 months. Set `COMPARE_PLANS` to your
-  network, `nsw-ausgrid`, `nsw-endeavour` or `nsw-essential`, to compare with the **Default
-  Market Offer**: the price cap the Australian Energy Regulator sets each year for standing
-  offers, which the big retailers' default plans sit at. It's official and changes once a year,
-  so nothing depends on retailer websites. Prices are dated: each year's apply from its 1 July,
-  so past months keep the prices in force then. To compare with a real quote too (market
-  offers are usually cheaper than the DMO), copy a file from [`collector/plans/`](collector/plans)
-  to `plans.json` in your data folder and add plans to it; time-of-use windows and your own
-  feed-in rate work there. Set `RETAILER_SUPPLY_C_DAY` (and `RETAILER_FEE_MONTHLY` for a
-  membership fee) from your own bill so your side includes them; without them the comparison
-  is energy only. Every plan uses the same energy flows, so it's a guide: on a different plan
-  the battery might be run differently.
+* **Plans**: a year on each plan with the battery run the way that plan rewards (see What if,
+  below). Set `COMPARE_PLANS` to your network, `nsw-ausgrid`, `nsw-endeavour` or
+  `nsw-essential`, to compare with the **Default Market Offer**, flat and time of use: the price
+  caps the Australian Energy Regulator sets each year for standing offers, which the big
+  retailers' default plans sit at. They're official and change once a year, so nothing depends
+  on retailer websites. Prices are dated: each year's apply from its 1 July. To compare with a
+  real quote too (market offers are usually cheaper than the DMO), copy a file from
+  [`collector/plans/`](collector/plans) to `plans.json` in your data folder and add plans to it;
+  time-of-use windows and your own feed-in rate work there. Set `RETAILER_SUPPLY_C_DAY` (and
+  `RETAILER_FEE_MONTHLY` for a membership fee) from your own bill so your side includes them.
 * **Payback**: set `SYSTEM_COST` (dollars) and optionally `SYSTEM_INSTALLED` (`2025-03-15`).
   Shown two ways, side by side. **Against your retailer's prices**: what your home and car would
   have cost from the grid without solar and battery, at your retailer's price at the time, minus
   what you paid for energy (supply charges cancel out). **Against the comparison plan** (the
   Default Market Offer): the same use on a standard plan with its supply charge, minus everything
   you paid including supply and fee, since without a battery a wholesale-price retailer may not
-  have suited you. The gap between them is what being with your retailer adds. With the car-against-fuel settings (below),
-  each also gets a "+ fuel" column, where the car's charging is counted against the fuel a
-  comparable car would have burnt: four paybacks in all. Days before the collector started are estimated at the average daily saving;
-  the payback date is a projection from the last 12 months (or what's recorded so far).
-* **Battery trades**: whenever the battery sends power to the grid, or charges from it, beyond
-  what the house needs. Under normal self-consumption it does neither, so these are your
-  retailer's battery control (Amber SmartShift) or VPP events. Each is shown with its energy,
-  average price and value, with totals for this month and last. Needs no setup.
+  have suited you. The gap between them is what being with your retailer adds. With the
+  car-against-fuel settings (below), each also gets a "+ fuel" column, where the car's charging is
+  counted against the fuel a comparable car would have burnt. Days before the collector started
+  are estimated at the average daily saving; the payback date is a projection from the last 12
+  months (or what's recorded so far).
+* **Trading**: see Battery trading, below. Needs no setup.
+
+Bills (Settings > Bills) set their periods' costs exactly; Settings shows each one beside what
+the data had.
 
 ### What if
 
-The **What if** panel takes your own recorded hours (solar made, and what the home and car used)
+**Money > Plans** takes your own recorded hours (solar made, and what the home and car used)
 and plays them back through a battery model, to price a year on each plan with the battery run the
 way that plan rewards: on a flat plan it soaks up solar; on time of use it also charges from the
 grid in the cheap hours for the dear ones; on wholesale prices it charges when power is about free
@@ -591,7 +546,7 @@ west faces then get their morning and afternoon peaks at the right times. Withou
 whole array is treated as one north-facing roof at 20°. The weather panel can be hidden with
 **Arrange panels**, or turned off with `WEATHER_ENABLED=0`.
 
-### Battery outlook
+### Battery outlook (Forecast > Next two days)
 
 With a couple of days of history, the dashboard projects the battery's charge from now to the
 end of tomorrow, in 15-minute steps:
@@ -629,7 +584,7 @@ retailer's price forecast, and shows the cost against plugging in and charging s
 prefers one unbroken block when that's within 5% of the cheapest split. The house battery isn't
 counted on for the car.
 
-### Best times to run appliances
+### Best times to run appliances (Forecast > Best times)
 
 From the same projection and your retailer's price forecast, the dashboard suggests when to
 start each appliance in `APPLIANCES` (`name:kW:hours`, comma separated; by default a dishwasher,
@@ -657,11 +612,11 @@ Set a **self-sufficiency target** and a **monthly cost target** on the Settings 
 Each is one number for every month, or different numbers for groups of months, like
 `12-2:90,3-11:70` (90% from December to February, 70% otherwise). The cost target is the Monthly
 summary's Net cost (energy bought less sold, before supply charges); use a negative number to aim
-for a credit. The Monthly summary then shows this month so far, where it's heading (the rest of
+for a credit. History > Months then shows this month so far, where it's heading (the rest of
 the month at the last fortnight's average) and whether it's on track, and for past months
 whether each target was made.
 
-### Solar limits
+### Solar limits (Solar > Limits)
 
 Minutes when the panels could have made more but were held back, and why: exports sitting at
 the **export limit** (`EXPORT_LIMIT_KW`, or learned from where exports keep levelling off), a
@@ -672,7 +627,7 @@ it. The energy lost is the shortfall against the weather model's expected output
 those exports would have earned. Passing cloud isn't counted. Shown for the last 30 days and the
 month so far.
 
-### Battery trading
+### Battery trading (Money > Trading)
 
 How well the battery is traded with the grid (Amber SmartShift or a VPP), from the collector's
 minute readings over the last 30 days: what it sold and at what average price against each day's
@@ -681,7 +636,7 @@ the battery **caught** it or **missed** it (and why: already low, or charge left
 what a higher backup reserve would have done: the extra grid cost, the spike earnings it could have
 added, and the extra hours of outage cover at your always-on use.
 
-### Battery wear
+### Battery wear (Battery > Health)
 
 Cycles (the battery's lifetime discharge divided by its capacity), energy through it, round-trip
 efficiency, temperature, and the battery's own health reading, with a straight-line trend once it
@@ -711,13 +666,18 @@ If you installed it, uninstall it from **Settings → Apps**.
 
 ### Panels and tabs
 
-Related things share a panel, with tabs; each panel remembers the tab you last chose (per
-browser), and a tab with nothing to show yet is left out:
+Ten panels; related things share a panel, with tabs. Each panel remembers the tab you last chose
+(per browser), and a tab with nothing to show yet is left out:
 
-* **Battery**: Now · Health (wear, warranty and health over time)
-* **Prices and the grid**: Your price · The grid (AEMO wholesale, every region)
+* **Right now** and **Today so far**
+* **Battery**: Now · Health (wear, warranty, health and temperature over time)
+* **Forecast**: Next two days (battery outlook, weather, four days of solar) · Best times
+* **Car charging**
+* **Prices and the grid**: Your price · The grid
+* **History**: Power · Days · Months · Always-on
 * **Solar**: Strings · Limits · Long term (solar vs weather)
-* **System**: Status (alarms, data feeds, events) · Health (insulation and temperatures over time)
+* **Money**: Plans · Payback · Trading
+* **System**: Status · Health (insulation and inverter temperature over time)
 
 Battery and System show both tabs side by side when the panel is wide enough (Full width in
 Arrange panels).
@@ -805,7 +765,7 @@ day under 40%, or a string making next to nothing for 20 minutes while the other
 a red alarm. New shade, dirt, a failed panel or optimiser, or a tripped isolator show up this way.
 It starts after a week of string readings.
 
-### Always-on use
+### Always-on use (History > Always-on)
 
 Each night the home's use (without the car) between midnight and 5 am is sorted and its
 quietest tenth taken: the level the house doesn't drop below, made up of the fridge and

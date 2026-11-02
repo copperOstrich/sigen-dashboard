@@ -96,7 +96,7 @@
           </g>
         </svg>
       </div>
-      <p class="flow-caption" id="caption" aria-live="polite"></p>
+      <p class="flow-caption visually-hidden" id="caption" aria-live="polite"></p>
     </section>
 
     <section class="panel span-4 group" data-panel="battery" data-name="Battery" data-together>
@@ -114,7 +114,6 @@
           <dl class="facts">
             <dt>Energy stored</dt><dd id="f-avail">–</dd>
             <dt>Room to charge</dt><dd id="f-room">–</dd>
-            <dt>Health</dt><dd id="f-soh">–</dd>
             <dt>Cell temperature</dt><dd id="f-temp">–</dd>
             <dt>Cell voltage</dt><dd id="f-volt">–</dd>
             <div class="sep"></div>
@@ -131,7 +130,11 @@
         <p class="chart-note" id="wear-note"></p>
             </div>
         <div class="part trend" id="tb" hidden>
-          <div class="panel-head"><h3>Health over time</h3><div class="legend" id="tb-legend"></div><span class="spacer"></span>
+          <div class="panel-head"><h3>Over time</h3><div class="legend" id="tb-legend"></div><span class="spacer"></span>
+          <div class="seg" id="tb-metric" role="group" aria-label="Measure">
+            <button type="button" data-m="battery" aria-pressed="true">Health</button>
+            <button type="button" data-m="batt_temp" aria-pressed="false">Temperature</button>
+          </div>
           <div class="seg" id="tb-range" role="group" aria-label="Time range">
             <button type="button" data-d="90" aria-pressed="false">3 months</button>
             <button type="button" data-d="365" aria-pressed="true">1 year</button>
@@ -158,9 +161,12 @@
       </div>
     </section>
 
-    <section class="panel span-12" aria-labelledby="ol-h" data-panel="outlook" data-name="Battery outlook" id="ol-panel" hidden>
+    <section class="panel span-12 group" data-panel="forecast" data-name="Forecast">
+      <div class="group-head"><h2>Forecast</h2><div class="tabs" role="tablist" aria-label="Forecast"></div></div>
+      <div class="tabpage" data-tab="Next two days" role="tabpanel" id="fc-next">
+      <div class="part" id="ol-panel" hidden>
       <div class="panel-head">
-        <h2 id="ol-h">Battery outlook</h2><span class="sub" id="ol-sub"></span>
+        <h3 id="ol-h">Battery</h3><span class="sub" id="ol-sub"></span>
         <div class="legend" id="ol-legend"></div>
       </div>
       <div class="ol-grid">
@@ -172,29 +178,23 @@
           <p class="chart-note" id="ol-note"></p>
         </div>
       </div>
-    </section>
-
-    <section class="panel span-12" aria-labelledby="ap-h" data-panel="appliances" data-name="Best times to run appliances" id="ap-panel" hidden>
+          </div>
+      <div class="part" id="wx-panel" hidden>
+      <div class="panel-head">
+        <h3 id="wx-h">Weather and solar, next four days</h3><span class="sub" id="wx-sub"></span>
+      </div>
+      <div class="wx-now" id="wx-now"></div>
+      <div class="wx-days" id="wx-days"></div>
+      <p class="chart-note" id="wx-note"></p>
+          </div>
+      </div>
+      <div class="tabpage" data-tab="Best times" role="tabpanel" id="ap-panel" aria-labelledby="ap-h" hidden>
       <div class="panel-head">
         <h2 id="ap-h">Best times to run appliances</h2><span class="sub" id="ap-sub"></span>
       </div>
       <table class="strings ap-table" id="ap-table"></table>
       <p class="chart-note" id="ap-note"></p>
-    </section>
-
-    <section class="panel span-12" aria-labelledby="wx-h" data-panel="weather" data-name="Weather and solar forecast" id="wx-panel" hidden>
-      <div class="panel-head">
-        <h2 id="wx-h">Weather and solar forecast</h2><span class="sub" id="wx-sub"></span>
-        <div class="legend" id="wx-legend"></div>
-      </div>
-      <div class="wx-grid">
-        <div id="wx-now"></div>
-        <div>
-          <div class="chart" id="wx-chart"></div>
-          <div class="wx-days" id="wx-days"></div>
-          <p class="chart-note" id="wx-note"></p>
-        </div>
-      </div>
+          </div>
     </section>
 
     <section class="panel span-12" aria-labelledby="ev-h" data-panel="ev" data-name="Car charging" id="ev-panel" hidden>
@@ -265,7 +265,9 @@
           </div>
     </section>
 
-    <section class="panel span-12" aria-labelledby="hist-h" data-panel="power" data-name="Power and battery charge">
+    <section class="panel span-12 group" data-panel="history" data-name="History">
+      <div class="group-head"><h2>History</h2><div class="tabs" role="tablist" aria-label="History"></div></div>
+      <div class="tabpage" data-tab="Power" role="tabpanel" id="hist-power" aria-labelledby="hist-h">
       <div class="panel-head">
         <h2 id="hist-h">Power</h2>
         <div class="legend" id="legend"></div>
@@ -283,6 +285,52 @@
         Click a name above the chart to hide it; the scale adjusts to what's left, so hiding Solar shows the night in detail.</p>
       <div class="panel-head" style="margin:18px 0 6px"><h2>Battery charge</h2></div>
       <div class="chart" id="soc-chart"></div>
+          </div>
+      <div class="tabpage" data-tab="Days" role="tabpanel" id="hist-days" aria-labelledby="daily-h">
+      <div class="panel-head">
+        <h2 id="daily-h">Daily energy</h2>
+        <span class="sub">last 30 days, <span id="daily-unit">kWh per day, energy in above zero and out below</span></span>
+        <span class="spacer"></span>
+        <div class="seg" id="daily-metric" role="group" aria-label="Daily measure">
+          <button type="button" data-k="all" aria-pressed="true">All</button>
+          <button type="button" data-k="pv" aria-pressed="false">Solar</button>
+          <button type="button" data-k="load" aria-pressed="false">Home</button>
+          <button type="button" data-k="import" aria-pressed="false">Bought</button>
+          <button type="button" data-k="export" aria-pressed="false">Sold</button>
+          <button type="button" data-k="discharge" aria-pressed="false">Discharged</button>
+          <button type="button" data-k="ev" aria-pressed="false" id="daily-ev-btn" hidden>Car</button>
+          <button type="button" data-k="cost" aria-pressed="false">Cost</button>
+        </div>
+      </div>
+      <div class="daily-legend" id="daily-legend"></div>
+      <div class="chart" id="daily-chart"></div>
+          </div>
+      <div class="tabpage" data-tab="Months" role="tabpanel" id="mo-panel" aria-labelledby="mo-h" hidden>
+      <div class="panel-head">
+        <h2 id="mo-h">Monthly summary</h2>
+        <div class="mo-nav">
+          <button type="button" class="icon-btn" id="mo-prev" aria-label="Previous month">‹</button>
+          <span id="mo-label" class="mo-label"></span>
+          <button type="button" class="icon-btn" id="mo-next" aria-label="Next month">›</button>
+        </div>
+        <span class="sub" id="mo-sub"></span>
+        <span class="spacer"></span>
+        <span class="ev-links" id="mo-links" style="margin:0"></span>
+      </div>
+      <div class="today mo-tiles" id="mo-tiles"></div>
+      <div class="mo-targets" id="mo-targets" hidden></div>
+      <div class="mo-grid">
+        <div><div class="chart" id="mo-chart"></div></div>
+        <div style="overflow-x:auto"><table class="strings mo-table" id="mo-table"></table></div>
+      </div>
+      <p class="chart-note" id="mo-note"></p>
+          </div>
+      <div class="tabpage" data-tab="Always-on" role="tabpanel" id="bl-panel" aria-labelledby="bl-h" hidden>
+      <div class="panel-head"><h2 id="bl-h">Always-on use</h2><span class="sub">what the house draws overnight, without the car</span></div>
+      <div class="today bl-tiles" id="bl-tiles"></div>
+      <div class="chart" id="bl-chart"></div>
+      <p class="chart-note" id="bl-note"></p>
+          </div>
     </section>
 
     <section class="panel span-12 group" data-panel="solar" data-name="Solar">
@@ -336,40 +384,9 @@
       </div>
     </section>
 
-    <section class="panel span-12" aria-labelledby="mo-h" data-panel="monthly" data-name="Monthly summary" id="mo-panel" hidden>
-      <div class="panel-head">
-        <h2 id="mo-h">Monthly summary</h2>
-        <div class="mo-nav">
-          <button type="button" class="icon-btn" id="mo-prev" aria-label="Previous month">‹</button>
-          <span id="mo-label" class="mo-label"></span>
-          <button type="button" class="icon-btn" id="mo-next" aria-label="Next month">›</button>
-        </div>
-        <span class="sub" id="mo-sub"></span>
-        <span class="spacer"></span>
-        <span class="ev-links" id="mo-links" style="margin:0"></span>
-      </div>
-      <div class="today mo-tiles" id="mo-tiles"></div>
-      <div class="mo-targets" id="mo-targets" hidden></div>
-      <div class="mo-grid">
-        <div><div class="chart" id="mo-chart"></div></div>
-        <div style="overflow-x:auto"><table class="strings mo-table" id="mo-table"></table></div>
-      </div>
-      <p class="chart-note" id="mo-note"></p>
-    </section>
-
-    <section class="panel span-12" aria-labelledby="money-h" data-panel="money" data-name="Money" id="money-panel" hidden>
-      <div class="panel-head"><h2 id="money-h">Money</h2><span class="sub" id="money-sub"></span></div>
-      <div class="money">
-        <div class="money-col" id="money-compare"></div>
-        <div class="money-col" id="money-payback"></div>
-        <div class="money-col" id="money-trades"></div>
-      </div>
-      <div style="overflow-x:auto"><table class="strings money-table" id="money-table"></table>
-      <table class="strings bill-check" id="money-bills" hidden></table></div>
-      <p class="chart-note" id="money-note"></p>
-    </section>
-
-    <section class="panel span-12" aria-labelledby="wi-h" data-panel="whatif" data-name="What if" id="wi-panel" hidden>
+    <section class="panel span-12 group" data-panel="money" data-name="Money">
+      <div class="group-head"><h2>Money</h2><div class="tabs" role="tablist" aria-label="Money"></div></div>
+      <div class="tabpage" data-tab="Plans" role="tabpanel" id="wi-panel" aria-labelledby="wi-h" hidden>
       <div class="panel-head"><h2 id="wi-h">What if</h2><span class="sub" id="wi-sub"></span><span class="spacer"></span>
         <form class="wi-form" id="wi-form">
           <label>Battery <input id="wi-kwh" type="number" min="0" max="200" step="0.5" inputmode="decimal"> kWh more</label>
@@ -380,9 +397,12 @@
       <div style="overflow-x:auto"><table class="strings wi-table" id="wi-table"></table></div>
       <p class="wi-lead" id="wi-lead"></p>
       <p class="chart-note" id="wi-note"></p>
-    </section>
-
-    <section class="panel span-12" aria-labelledby="bt-h" data-panel="trading" data-name="Battery trading" id="bt-panel" hidden>
+          </div>
+      <div class="tabpage" data-tab="Payback" role="tabpanel" id="money-panel" aria-labelledby="money-h" hidden>
+      <div class="panel-head"><h2 id="money-h">Money</h2><span class="sub" id="money-sub"></span></div>
+      <div class="money-col" id="money-payback"></div>
+          </div>
+      <div class="tabpage" data-tab="Trading" role="tabpanel" id="bt-panel" aria-labelledby="bt-h" hidden>
       <div class="panel-head"><h2 id="bt-h">Battery trading</h2><span class="sub" id="bt-sub"></span></div>
       <div class="today bt-tiles" id="bt-tiles"></div>
       <div class="bt-grid">
@@ -390,36 +410,10 @@
         <div><h3 class="bt-h3">A higher backup reserve</h3><table class="strings bt-table" id="bt-reserve"></table><p class="chart-note" id="bt-reserve-note"></p></div>
       </div>
       <p class="chart-note" id="bt-note"></p>
+          </div>
     </section>
 
-    <section class="panel span-12" aria-labelledby="bl-h" data-panel="baseload" data-name="Always-on use" id="bl-panel" hidden>
-      <div class="panel-head"><h2 id="bl-h">Always-on use</h2><span class="sub">what the house draws overnight, without the car</span></div>
-      <div class="today bl-tiles" id="bl-tiles"></div>
-      <div class="chart" id="bl-chart"></div>
-      <p class="chart-note" id="bl-note"></p>
-    </section>
-
-    <section class="panel span-8" aria-labelledby="daily-h" data-panel="daily" data-name="Daily energy">
-      <div class="panel-head">
-        <h2 id="daily-h">Daily energy</h2>
-        <span class="sub">last 30 days, <span id="daily-unit">kWh per day, energy in above zero and out below</span></span>
-        <span class="spacer"></span>
-        <div class="seg" id="daily-metric" role="group" aria-label="Daily measure">
-          <button type="button" data-k="all" aria-pressed="true">All</button>
-          <button type="button" data-k="pv" aria-pressed="false">Solar</button>
-          <button type="button" data-k="load" aria-pressed="false">Home</button>
-          <button type="button" data-k="import" aria-pressed="false">Bought</button>
-          <button type="button" data-k="export" aria-pressed="false">Sold</button>
-          <button type="button" data-k="discharge" aria-pressed="false">Discharged</button>
-          <button type="button" data-k="ev" aria-pressed="false" id="daily-ev-btn" hidden>Car</button>
-          <button type="button" data-k="cost" aria-pressed="false">Cost</button>
-        </div>
-      </div>
-      <div class="daily-legend" id="daily-legend"></div>
-      <div class="chart" id="daily-chart"></div>
-    </section>
-
-    <section class="panel span-4 group" data-panel="system" data-name="System" data-together>
+    <section class="panel span-12 group" data-panel="system" data-name="System" data-together>
       <div class="group-head"><h2>System</h2><div class="tabs" role="tablist" aria-label="System"></div></div>
       <div class="tabpage" data-tab="Status" role="tabpanel" id="sys-status" aria-labelledby="sys-h">
       <div class="panel-head"><h2 id="sys-h">System</h2><span class="sub" id="sys-sub"></span></div>
@@ -439,7 +433,7 @@
           <div class="panel-head"><h3>Over time</h3><div class="legend" id="ty-legend"></div><span class="spacer"></span>
           <div class="seg" id="ty-metric" role="group" aria-label="Measure">
             <button type="button" data-m="insulation" aria-pressed="true">Insulation</button>
-            <button type="button" data-m="temps" aria-pressed="false">Temperatures</button>
+            <button type="button" data-m="inv_temp" aria-pressed="false">Inverter temperature</button>
           </div>
           <div class="seg" id="ty-range" role="group" aria-label="Time range">
             <button type="button" data-d="90" aria-pressed="false">3 months</button>

@@ -146,7 +146,7 @@ SCHEMA = [
        "use that comes from your own solar and battery, each month. A percentage, or different ones for groups of "
        "months, like 12-2:90,3-11:70 (90% from December to February). Blank = none.", "target_self", "",
        placeholder="90", unit="% each month"),
-    _s("TARGET_NET_MONTHLY", "Targets", "Monthly cost target", "The most you'd like the Monthly summary's Net "
+    _s("TARGET_NET_MONTHLY", "Targets", "Monthly cost target", "The most you'd like History > Months' Net "
        "cost to be (energy bought less sold, before supply charges). Negative to aim for a credit: -50 means $50 "
        "ahead. Month ranges work too, like 12-2:-80,3-11:20. Blank = none.", "target_cost", "",
        placeholder="-50", unit="$ a month"),
