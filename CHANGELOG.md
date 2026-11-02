@@ -2,6 +2,12 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 2.0.2
+
+- Fixes Money's tabs in 2.0.1's last commit (Plans had ended up inside Trading). Payback · Plans
+  · Trading, opening on Payback
+- Test: every tab sits directly in its panel, in the expected order
+
 ## 2.0.1
 
 - **Battery** has three tabs, Now · Health · Over time, and keeps the same height whichever is

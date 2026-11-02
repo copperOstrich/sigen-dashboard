@@ -453,5 +453,39 @@ class WhatIf(unittest.TestCase):
         self.assertLess(whatif.price_plan(h, fl, plan, None), whatif.price_plan(h, flat, plan, None))
 
 
+
+class PageStructure(unittest.TestCase):
+    def test_every_tab_sits_directly_in_its_panel(self):
+        from html.parser import HTMLParser
+        VOID = {"meta", "link", "input", "br", "img", "source", "hr", "col", "area", "base", "embed", "param", "track", "wbr"}
+
+        class P(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.stack, self.bad, self.tabs = [], [], {}
+
+            def handle_starttag(self, tag, attrs):
+                a = dict(attrs)
+                cls = (a.get("class") or "").split()
+                if "tabpage" in cls:
+                    parent = self.stack[-1] if self.stack else None
+                    if not parent or parent[0] != "section" or "group" not in parent[1]:
+                        self.bad.append(a.get("data-tab"))
+                    group = next((x[2] for x in reversed(self.stack) if x[0] == "section"), None)
+                    self.tabs.setdefault(group, []).append(a.get("data-tab"))
+                if tag not in VOID:
+                    self.stack.append((tag, cls, a.get("data-panel")))
+
+            def handle_endtag(self, tag):
+                while self.stack:
+                    if self.stack.pop()[0] == tag:
+                        break
+        p = P()
+        p.feed((ROOT / "web" / "index.html").read_text())
+        self.assertEqual(p.bad, [])
+        self.assertEqual(p.tabs["money"], ["Payback", "Plans", "Trading"])
+        self.assertEqual(p.tabs["battery"], ["Now", "Health", "Over time"])
+
+
 if __name__ == "__main__":
     unittest.main()
