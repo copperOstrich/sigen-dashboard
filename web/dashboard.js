@@ -668,21 +668,18 @@
     const items = [["Charge so far", "var(--battery)", false], ["Expected charge", "var(--battery)", true], ["Solar so far", "var(--solar)", false], ["Expected solar", "var(--solar)", true], ["Usual home use", "var(--home)", true]];
     for (const [l, c, d] of items) lg.append(el("span", { class: "legend-item" }, el("span", { class: "sw" + (d ? " dash" : ""), style: `border-color:${c}` }), l));
     const title = (t) => new Date(t * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+    // one chart: power on the left (kW), the battery's charge on the right (%)
     C.lineChart($("ol-chart"), {
-      t: lst.map((r) => r.t), height: 190, yMin: 0, yMax: 100, yTicks: [0, 25, 50, 75, 100], markerT: nowT,
-      series: [{ key: "act", label: "Charge", color: "var(--battery)", values: lst.map((r) => r.act), area: false },
-        { key: "fc", label: "Expected", color: "var(--battery)", dash: "5 4", values: lst.map((r) => r.fc) }],
-      yFmt: (v) => `${Math.round(v)}%`, tipFmt: (v) => (v == null ? "–" : `${Math.round(v)}%`), tipTitle: title,
-      ariaLabel: "Battery charge over the last 12 hours and expected until the end of tomorrow",
-    });
-    // same time axis as the charge chart above, so the two line up
-    C.lineChart($("ol-flow"), {
-      t: lst.map((r) => r.t), height: 120, yMin: 0, markerT: nowT, markerLabel: "",
-      series: [{ key: "pva", label: "Solar so far", color: "var(--solar)", values: lst.map((r) => r.pvAct) },
+      t: lst.map((r) => r.t), height: 270, yMin: 0, markerT: nowT,
+      y2: { min: 0, max: 100, ticks: [0, 25, 50, 75, 100], fmt: (v) => `${v}%` },
+      series: [
+        { key: "act", label: "Charge so far", color: "var(--battery)", values: lst.map((r) => r.act), axis: 2 },
+        { key: "fc", label: "Expected charge", color: "var(--battery)", dash: "5 4", values: lst.map((r) => r.fc), axis: 2 },
+        { key: "pva", label: "Solar so far", color: "var(--solar)", values: lst.map((r) => r.pvAct) },
         { key: "pv", label: "Expected solar", color: "var(--solar)", dash: "5 4", values: lst.map((r) => r.pv) },
         { key: "load", label: "Usual home use", color: "var(--home)", dash: "2 3", values: lst.map((r) => r.load) }],
-      yFmt: S.kwAxis, tipFmt: (v) => (v == null ? "–" : S.kw(v)), tipTitle: title,
-      ariaLabel: "Solar so far, expected solar and usual home use for the same period",
+      yFmt: S.kwAxis, tipFmt: (v, s) => (v == null ? "–" : s && s.axis === 2 ? `${Math.round(v)}%` : S.kw(v)), tipTitle: title,
+      ariaLabel: "Battery charge (right scale) and solar and home use (left scale), over the last 12 hours and expected until the end of tomorrow",
     });
   }
 
@@ -1332,9 +1329,7 @@
 
   function renderPriceNow(p) {
     priceSummary = p;
-    const box = $("price-now"), pb = $("price-banner");
-    pb.className = "banner spike";
-    pb.innerHTML = "";
+    const box = $("price-now");
     const hasAemo = aemoSummary && aemoSummary.enabled;
     if (!p.enabled) {
       box.dataset.state = "setup";
@@ -1370,10 +1365,6 @@
     $("price-sub").textContent = p.mode === "simulator" ? `simulated ${name} prices` : `from ${name}`;
     const tips = priceAdvice(p, priceData && priceData.forecast);
     $("price-note").textContent = tips.join(" ");
-    if (p.spike === "spike") {
-      pb.classList.add("show");
-      pb.append(el("span", { text: `Price spike: buying costs ${cents(p.buy)}c/kWh until ${clock(p.ends)}. Selling earns ${cents(p.sell)}c/kWh.` }));
-    }
   }
 
   function drawPrices() {
@@ -1677,7 +1668,7 @@
         el("td", { class: "hide-sm", text: val(x.now) }),
         el("td", { class: "hide-sm why", text: x.best.why })));
     }
-    $("ap-sub").textContent = `next ${Math.round((a.until - Date.now() / 1000) / 3600)} hours`;
+    $("ap-sub").textContent = `, next ${Math.round((a.until - Date.now() / 1000) / 3600)} hours`;
     $("ap-note").textContent = (a.priced
       ? `Spare solar is costed at what exporting it would have earned, battery energy at what you'll pay for grid power later (about ${a.battery_c}c/kWh), and the rest at the forecast buy price. `
       : "No retailer prices, so this picks the time that needs the least energy from the grid. ") +
@@ -1686,6 +1677,7 @@
   async function loadAppliances() {
     try { apData = await S.fetchJSON("/api/appliances"); renderAppliances(); } catch (e) { /* banner */ }
   }
+  window.SigenLoadAppliances = loadAppliances;  // the good-time drop-down refreshes it when opened
 
   // ------------------------------------------------------------ solar limits
   let limData = null;

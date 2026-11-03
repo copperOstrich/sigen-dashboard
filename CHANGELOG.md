@@ -2,6 +2,22 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 2.1.0
+
+- **A good time to use power?** An indicator at the top of the dashboard, from Free through Good,
+  Normal and Dear to Spike, with an icon and a colour for each. It goes by what an extra kWh costs
+  you right now: spare solar at the feed-in it would have earned, battery energy at what the house
+  will pay later, grid power at its price. Click it for why, how long it stays good or when the
+  next good time is, any spike coming, the scale, and the best times to run appliances
+- Settings > Dashboard: **Good time scale** adaptive (your own prices over the last fortnight,
+  the default) or fixed (**Fixed prices**, `15,35` c/kWh); **Green means** cheap, or cheap and
+  renewable (with the **Renewable share for green**, 50%)
+- **Best times** moves from Forecast into the indicator's drop-down, so Forecast is one view
+- The price-spike banner is gone: the indicator shows a spike (and pulses)
+- **Forecast**: battery charge, solar and home use on one chart, kW on the left and charge on the
+  right
+- Tests: the levels, the adaptive scale, the next good stretch, the fixed-prices setting
+
 ## 2.0.2
 
 - Fixes Money's tabs in 2.0.1's last commit (Plans had ended up inside Trading). Payback · Plans

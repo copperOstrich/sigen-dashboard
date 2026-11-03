@@ -48,7 +48,7 @@ def load_settings_file():
 
 SETTINGS_PATH = load_settings_file()
 
-VERSION = "2.0.2"
+VERSION = "2.1.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -126,6 +126,10 @@ NTFY_TOKEN = (ENV("NTFY_TOKEN", "") or "").strip()
 NOTIFY_ON = (ENV("NOTIFY_ON", "") or "all").strip()
 NOTIFY_WEEKLY = (ENV("NOTIFY_WEEKLY", "") or "off").strip()
 NOTIFY_QUIET = (ENV("NOTIFY_QUIET", "") or "").strip()
+GOOD_TIME_SCALE = "fixed" if (ENV("GOOD_TIME_SCALE", "") or "").strip().lower() == "fixed" else "adaptive"
+GOOD_TIME_FIXED_RAW = (ENV("GOOD_TIME_FIXED", "") or "15,35").strip()
+GOOD_TIME_GREEN = "renewables" if (ENV("GOOD_TIME_GREEN", "") or "").strip().lower() == "renewables" else "cost"
+GOOD_TIME_RENEWABLES = _env_num("GOOD_TIME_RENEWABLES", 50.0)
 UPDATE_CHECK = (ENV("UPDATE_CHECK", "") or "on").strip().lower() not in ("off", "0", "no", "false")
 MQTT_HOST = (ENV("MQTT_HOST", "") or "").strip()
 MQTT_SETTINGS = {k: (ENV(k, "") or "").strip() for k in ("MQTT_PORT", "MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_TOPIC",

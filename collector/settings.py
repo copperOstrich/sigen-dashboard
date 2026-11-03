@@ -119,6 +119,18 @@ SCHEMA = [
        "choice", "tiles", options=[["tiles", "Region tiles"], ["map", "Nodes and wires"], ["chain", "Chain"]]),
     _s("TIME_FORMAT", DASH, "Time format", "How times show everywhere on the dashboard, whatever your browser's "
        "language would choose.", "choice", "12h", options=[["12h", "12-hour (6:30 pm)"], ["24h", "24-hour (18:30)"]]),
+    _s("GOOD_TIME_SCALE", DASH, "Good time scale", "The indicator at the top of the dashboard says how good a time "
+       "it is to use power, from what an extra kWh costs you now. Adaptive: cheap and dear are the cheapest quarter "
+       "and dearest tenth of your own prices over the last fortnight. Fixed: the prices below.", "choice", "adaptive",
+       options=[["adaptive", "Adaptive (from your own prices)"], ["fixed", "Fixed prices"]]),
+    _s("GOOD_TIME_FIXED", DASH, "Fixed prices", "For the fixed scale: green under the first price, dear from the "
+       "second, in c/kWh. Free is 3c or less and a spike $1 or more either way. Adaptive uses these too until "
+       "there's a day of prices.", "goodfixed", "15,35", placeholder="15,35", unit="c/kWh"),
+    _s("GOOD_TIME_GREEN", DASH, "Green means", "Cheap only, or cheap and mostly renewable: then a cheap time with "
+       "less renewable power than the share below shows as normal.", "choice", "cost",
+       options=[["cost", "Cheap"], ["renewables", "Cheap and renewable"]]),
+    _s("GOOD_TIME_RENEWABLES", DASH, "Renewable share for green", "For Cheap and renewable: your retailer's "
+       "renewables figure, or AEMO's for your region.", "number", "50", min=0, max=100, unit="%"),
     _s("UPDATE_CHECK", DASH, "Tell me about new versions", "Checks GitHub's public releases list twice a day and "
        "shows a notice when a newer collector is out. Nothing about your system is sent.", "choice", "on",
        options=[["on", "On"], ["off", "Off"]]),
@@ -363,6 +375,10 @@ def validate(key, value, all_values=None):
     elif k == "secret" and key == "NTFY_TOPIC":
         if not re.fullmatch(r"[A-Za-z0-9_-]{12,64}", value):
             raise ValueError("12 to 64 letters, digits, - or _ (Generate makes one)")
+    elif k == "goodfixed":
+        from goodtime import parse_fixed
+        a, b = parse_fixed(value)
+        value = f"{a:g},{b:g}"
     elif k in ("target_self", "target_cost"):
         from targets import check
         check(value, "self" if k == "target_self" else "cost")

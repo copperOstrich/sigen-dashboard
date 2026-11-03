@@ -15,6 +15,17 @@
   <header class="topbar">
     <h1>Home energy</h1>
     <span class="pill" id="status"><span class="dot" id="status-dot"></span><span id="status-text">Connecting…</span></span>
+    <div class="gt" id="gt" hidden>
+      <button type="button" class="gt-pill" id="gt-btn" aria-expanded="false" aria-controls="gt-pop"></button>
+      <div class="gt-pop" id="gt-pop" role="dialog" aria-label="Is now a good time to use power?" hidden>
+        <div id="gt-body"></div>
+        <div class="gt-ap" id="ap-panel" hidden>
+          <h3>Best times to run appliances<span class="sub" id="ap-sub"></span></h3>
+          <table class="strings ap-table" id="ap-table"></table>
+          <p class="chart-note" id="ap-note"></p>
+        </div>
+      </div>
+    </div>
     <span class="spacer"></span>
     <button class="ghost-btn" id="widget-btn" type="button" hidden title="Switch to the small always-on-top widget">Compact widget</button>
     <button class="ghost-btn" id="layout-btn" type="button" title="Choose which panels to show and in what order">Arrange panels</button>
@@ -25,7 +36,6 @@
   </header>
 
   <div class="banner" id="banner" role="alert"></div>
-  <div class="banner spike" id="price-banner" role="status"></div>
   <div class="banner storm" id="storm-banner" role="status"></div>
   <div class="banner update" id="update-banner" role="status"></div>
 
@@ -175,7 +185,6 @@
         <div id="ol-now"></div>
         <div>
           <div class="chart" id="ol-chart"></div>
-          <div class="chart" id="ol-flow" style="margin-top:6px"></div>
           <div class="ol-advice" id="ol-advice"></div>
           <p class="chart-note" id="ol-note"></p>
         </div>
@@ -190,13 +199,6 @@
       <p class="chart-note" id="wx-note"></p>
           </div>
       </div>
-      <div class="tabpage" data-tab="Best times" role="tabpanel" id="ap-panel" aria-labelledby="ap-h" hidden>
-      <div class="panel-head">
-        <h2 id="ap-h">Best times to run appliances</h2><span class="sub" id="ap-sub"></span>
-      </div>
-      <table class="strings ap-table" id="ap-table"></table>
-      <p class="chart-note" id="ap-note"></p>
-          </div>
     </section>
 
     <section class="panel span-12" aria-labelledby="ev-h" data-panel="ev" data-name="Car charging" id="ev-panel" hidden>
@@ -497,6 +499,7 @@
 <script src="charts.js"></script>
 <script src="dashboard.js"></script>
 <script src="tabs.js"></script>
+<script src="goodtime.js"></script>
 <script src="layout.js"></script>
 <script src="wall.js"></script>
 </body>

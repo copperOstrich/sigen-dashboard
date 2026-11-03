@@ -108,14 +108,25 @@ cycles, energy through it against the warranty, round trip, and health and tempe
   <img alt="Battery panel: 58% charged and discharging, with energy stored and room to charge, beside wear tiles for cycles, energy through it, health, warranty end, round trip and temperature, and a health-over-time chart" src="docs/screenshots/battery-light.png">
 </picture>
 
-**Forecast**: where the battery's charge is heading until the end of tomorrow, with expected
-solar against usual home use and plain answers (will it last the night, what the grid will cost
-until sunrise, when solar fills it again), then the weather and four days of solar forecast.
-**Best times** says when to run the dishwasher, washing machine and dryer.
+**Forecast**: where the battery's charge is heading until the end of tomorrow, on one chart
+with solar and home use (kW on the left, charge on the right), with plain answers (will it
+last the night, what the grid will cost until sunrise, when solar fills it again), then the
+weather and four days of solar forecast.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/forecast-dark.png">
   <img alt="Forecast panel: battery charge over the last 12 hours and expected until the end of tomorrow, solar so far and expected against usual home use, advice, and four daily weather and solar forecast cards" src="docs/screenshots/forecast-light.png">
+</picture>
+
+**A good time to use power?** The indicator at the top says, from free to a price spike, how
+good a time it is to use power, from what an extra kWh costs you right now: spare solar that
+would otherwise be exported, battery energy (at what the house will pay later), or grid power.
+Click it for why, how long it stays good or when the next good time is, any spike coming, the
+scale, and the best times to run your appliances.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/goodtime-dark.png">
+  <img alt="The good-time indicator showing Free power, open to show why, until when, the scale from free to spike, and the best times to run the dishwasher, washing machine and dryer" src="docs/screenshots/goodtime-light.png" width="600">
 </picture>
 
 **Car charging** (with a Sigen AC charger): the charger's state, this session, a 48-hour
@@ -584,7 +595,21 @@ retailer's price forecast, and shows the cost against plugging in and charging s
 prefers one unbroken block when that's within 5% of the cheapest split. The house battery isn't
 counted on for the car.
 
-### Best times to run appliances (Forecast > Best times)
+### A good time to use power? (the indicator at the top)
+
+What an extra kWh costs you now decides the level: spare solar is costed at the feed-in it
+would have earned exported, battery energy at what the house will pay later to replace it (the
+average buy price when the outlook expects to buy), and grid power at its price now. Five levels:
+**Free** (3c or less: spare solar, or a negative price), **Good**, **Normal**, **Dear** and
+**Spike** ($1/kWh or more, or your retailer flags a spike; the indicator pulses). Good and Dear
+come from your own prices (the cheapest quarter and the dearest tenth of the last fortnight,
+`GOOD_TIME_SCALE=adaptive`, the default) or fixed prices (`GOOD_TIME_SCALE=fixed`,
+`GOOD_TIME_FIXED=15,35`). With `GOOD_TIME_GREEN=renewables`, Good also needs the grid at
+`GOOD_TIME_RENEWABLES`% renewable or more. Its drop-down gives the reason, how long it stays good
+or the next good stretch from the forecast, any spike coming, and the best times for appliances.
+It replaces the old price-spike banner. Needs retailer prices.
+
+### Best times to run appliances (in the good-time indicator)
 
 From the same projection and your retailer's price forecast, the dashboard suggests when to
 start each appliance in `APPLIANCES` (`name:kW:hours`, comma separated; by default a dishwasher,
@@ -671,7 +696,8 @@ Ten panels; related things share a panel, with tabs. Each panel remembers the ta
 
 * **Right now** and **Today so far**
 * **Battery**: Now · Health (wear and warranty) · Over time (health and temperature)
-* **Forecast**: Next two days (battery outlook, weather, four days of solar) · Best times
+* **Forecast**: the battery outlook, the weather and four days of solar
+* **A good time to use power?** (the indicator at the top): now, the next good time, and best times for appliances
 * **Car charging**
 * **Prices and the grid**: Your price · The grid
 * **History**: Power · Days · Months · Always-on
@@ -871,6 +897,10 @@ hand). Values in `sigen.env` win over the container's environment.
 | **Dashboard** | | |
 | `GRID_VIEW` | How The grid shows all regions: `tiles`, `map` (nodes and wires) or `chain` | `tiles` |
 | `TIME_FORMAT` | `12h` (6:30 pm) or `24h` (18:30), for every time on the dashboard | `12h` |
+| `GOOD_TIME_SCALE` | The good-time indicator's scale: `adaptive` (from your own prices) or `fixed` | `adaptive` |
+| `GOOD_TIME_FIXED` | For the fixed scale: green under the first price, dear from the second (c/kWh) | `15,35` |
+| `GOOD_TIME_GREEN` | `cost` (cheap is green) or `renewables` (cheap and renewable enough) | `cost` |
+| `GOOD_TIME_RENEWABLES` | Renewable share green needs, with `renewables` | `50` |
 | `UPDATE_CHECK` | `off` stops the twice-daily check of GitHub releases for a newer collector | `on` |
 | **Home Assistant (MQTT)** | | |
 | **Targets** | | |
@@ -931,6 +961,7 @@ thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 | `GET /api/bills` | Each bill beside what the data had for its period, and the difference |
 | `POST /api/bills` | `{"action": "save", "bill": {...}, "replace": {start, end}}` or `{"action": "delete", "start", "end"}`; home network only |
 | `POST /api/import` | `{"name": "file.csv", "data": "<base64>"}`: imports an Amber usage report, mySigen export or bills CSV; home network only |
+| `GET /api/goodtime` | Is now a good time to use power: level, cost of an extra kWh, until when, the next good time, any spike, and best times for appliances |
 | `GET /api/whatif?add_kwh=8&add_kw=3` | A year on each plan with your system, without the battery, with more battery and with more panels |
 | `GET /api/targets` | This month against the targets (so far, projected, on track) and past months made or missed |
 | `GET /api/notify` | Phone alerts: on or off, what's watched, the last one sent and any problems still open |

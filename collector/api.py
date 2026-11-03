@@ -35,6 +35,7 @@ from baseload import baseload  # noqa: E402
 from trading import trading  # noqa: E402
 import targets as targets_mod  # noqa: E402
 from whatif import what_if  # noqa: E402
+from goodtime import good_time, parse_fixed  # noqa: E402
 from evplan import ev_plan, deadline  # noqa: E402
 from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
@@ -185,6 +186,31 @@ class Api(BaseHTTPRequestHandler):
         ids = sorted({n for v in ser.values() for n in v["strings"]})
         return {**summary, "system_series": [(ser.get(d) or {}).get("system") for d in all_days],
                 "strings_series": {n: [((ser.get(d) or {}).get("strings") or {}).get(n) for d in all_days] for n in ids}}
+
+    _good_cache = (0, None)
+
+    def _goodtime(self):
+        at, hit = Api._good_cache
+        if hit and time.time() - at < 30:
+            return hit
+        try:
+            fixed = parse_fixed(GOOD_TIME_FIXED_RAW)
+        except ValueError:
+            fixed = (15.0, 35.0)
+        live = self.collector.snapshot()
+        snap = self.retailer.snapshot() if self.retailer else {}
+        o = self.collector.outlook
+        res = good_time(live, o.rows if o else [], snap.get("forecast") or [], self.store.price_history(14 * 24),
+                        scale=GOOD_TIME_SCALE, fixed=fixed, green_rule=GOOD_TIME_GREEN,
+                        renewables_min=GOOD_TIME_RENEWABLES, now=time.time())
+        if res.get("enabled"):  # the Best times list goes in the indicator's drop-down
+            try:
+                res["appliances"] = appliance_advice(o.rows, o.limits, snap.get("forecast") or [],
+                                                     parse_appliances(APPLIANCES), time.time())
+            except Exception:
+                res["appliances"] = None
+        Api._good_cache = (time.time(), res)
+        return res
 
     _whatif_cache = {}
 
@@ -466,6 +492,8 @@ class Api(BaseHTTPRequestHandler):
                 return self._json({"bills": self.store.bill_check()})
             if url.path == "/api/baseload":
                 return self._json(baseload(self.store, TZ, min(400, max(7, int(q.get("days", ["90"])[0])))))
+            if url.path == "/api/goodtime":
+                return self._json(self._goodtime())
             if url.path == "/api/appliances":
                 o = self.collector.outlook
                 fc = (self.retailer.snapshot().get("forecast") if self.retailer else None) or []

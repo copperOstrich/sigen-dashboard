@@ -22,6 +22,7 @@ import updates  # noqa: E402
 import notify  # noqa: E402
 import targets  # noqa: E402
 import whatif  # noqa: E402
+import goodtime  # noqa: E402
 from backup import Backups  # noqa: E402
 
 
@@ -452,6 +453,46 @@ class WhatIf(unittest.TestCase):
         flat = whatif.simulate(h, 10, 5, 5, 1.0, None, 1, None, "solar")
         self.assertLess(whatif.price_plan(h, fl, plan, None), whatif.price_plan(h, flat, plan, None))
 
+
+
+class GoodTime(unittest.TestCase):
+    def live(self, grid_w, buy, sell, spike="none", ren=60, soc=50):
+        return {"updated": 1_800_000_000, "price": {"buy": buy, "sell": sell, "spike": spike, "renewables": ren},
+                "power": {"grid": grid_w}, "battery": {"soc": soc, "cutoff_low": 5}, "aemo": {}}
+
+    def test_levels(self):
+        g = lambda **kw: goodtime.good_time(self.live(**kw), [], [], [], fixed=(15, 35))
+        self.assertEqual(g(grid_w=-3000, buy=25, sell=-2)["level"], "free")       # exporting, negative feed-in
+        self.assertEqual(g(grid_w=500, buy=12, sell=5)["level"], "green")
+        self.assertEqual(g(grid_w=500, buy=25, sell=5)["level"], "normal")
+        self.assertEqual(g(grid_w=500, buy=40, sell=5)["level"], "dear")
+        self.assertEqual(g(grid_w=500, buy=130, sell=90)["level"], "spike")
+        self.assertEqual(g(grid_w=500, buy=40, sell=5, spike="spike")["level"], "spike")
+        # green that isn't renewable enough, when green needs renewables
+        r = goodtime.good_time(self.live(grid_w=500, buy=12, sell=5, ren=30), [], [], [], fixed=(15, 35),
+                               green_rule="renewables", renewables_min=50)
+        self.assertEqual(r["level"], "normal")
+
+    def test_adaptive_scale_and_settings(self):
+        hist = [{"buy": b} for b in list(range(10, 50)) * 3]
+        green, dear = goodtime.thresholds("adaptive", (15, 35), hist)
+        self.assertTrue(18 <= green <= 22 and 44 <= dear <= 47, (green, dear))
+        self.assertEqual(goodtime.thresholds("adaptive", (15, 35), hist[:10]), (15, 35))  # under a day of prices
+        self.assertEqual(goodtime.thresholds("fixed", (15, 35), hist), (15, 35))
+        self.assertEqual(settings.validate("GOOD_TIME_FIXED", " 12, 40 "), "12,40")
+        for bad in ("40,12", "1,20", "abc"):
+            with self.assertRaises(ValueError):
+                settings.validate("GOOD_TIME_FIXED", bad)
+
+    def test_next_good_window(self):
+        t0 = 1_800_000_000 // 900 * 900
+        rows = [{"t": t0 + i * 900, "grid_in": 0.2, "grid_out": 0, "soc": 20} for i in range(16)]
+        fc = [{"t": t0 + i * 900, "end": t0 + (i + 1) * 900, "buy": 40 if i < 8 or i >= 12 else 10, "sell": 5} for i in range(16)]
+        live = self.live(grid_w=800, buy=40, sell=5)
+        live["updated"] = t0
+        r = goodtime.good_time(live, rows, fc, [], fixed=(15, 35), now=t0)
+        self.assertEqual(r["level"], "dear")
+        self.assertEqual((r["next_good"]["start"], r["next_good"]["end"]), (t0 + 8 * 900, t0 + 12 * 900))
 
 
 class PageStructure(unittest.TestCase):

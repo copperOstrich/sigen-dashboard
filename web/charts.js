@@ -76,11 +76,13 @@
     const t = opts.t || [];
     if (!t.length) { wrap.append(el("div", { class: "empty", text: opts.emptyText || "No history yet. It fills in as readings arrive." })); return; }
     const W = Math.max(280, wrap.clientWidth), H = opts.height || 260;
-    const m = { l: 46, r: 10, t: 10, b: 26 };
+    // opts.y2 = { min, max, ticks, fmt }: a second scale on the right for series with axis: 2
+    const Y2 = opts.y2 || null;
+    const m = { l: 46, r: Y2 ? 44 : 10, t: 10, b: 26 };
     const visible = opts.series.filter((s) => !opts.hidden || !opts.hidden.has(s.key));
     let lo = opts.yMin ?? Infinity, hi = opts.yMax ?? -Infinity;
     if (opts.yMin == null || opts.yMax == null) {
-      for (const s of visible) for (const v of s.values) if (v != null) {
+      for (const s of visible) if (s.axis !== 2) for (const v of s.values) if (v != null) {
         if (opts.yMin == null) lo = Math.min(lo, v);
         if (opts.yMax == null) hi = Math.max(hi, v);
       }
@@ -102,7 +104,11 @@
       ? (v) => { const k = winOf(v); if (k < 0) return NaN; return winX[k] + (v - wins[k][0]) / winSpan * plotW; }
       : (v) => m.l + ((v - t0) / Math.max(1, t1 - t0)) * (W - m.l - m.r);
     const inView = (v) => !wins.length || winOf(v) >= 0;
-    const y = (v) => m.t + (1 - (v - lo) / (hi - lo || 1)) * (H - m.t - m.b);
+    const y1 = (v) => m.t + (1 - (v - lo) / (hi - lo || 1)) * (H - m.t - m.b);
+    const lo2 = Y2 ? Y2.min ?? 0 : 0, hi2 = Y2 ? Y2.max ?? 100 : 1;
+    const y2 = (v) => m.t + (1 - (v - lo2) / (hi2 - lo2 || 1)) * (H - m.t - m.b);
+    const y = y1;
+    const yOf = (s) => (s.axis === 2 && Y2 ? y2 : y1);
 
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": opts.ariaLabel || "Chart" });
     if (opts.markerT != null && opts.markerT > t0 && opts.markerT < t1 && inView(opts.markerT)) {
@@ -112,6 +118,9 @@
     for (const tv of ticks) {
       svg.append(el("line", { class: tv === 0 ? "zero" : "gridline", x1: m.l, x2: W - m.r, y1: y(tv), y2: y(tv) }));
       svg.append(el("text", { class: "axis-label", x: m.l - 8, y: y(tv) + 4, "text-anchor": "end", text: opts.yFmt ? opts.yFmt(tv) : tv }));
+    }
+    if (Y2) for (const tv of Y2.ticks || [lo2, (lo2 + hi2) / 2, hi2]) {
+      svg.append(el("text", { class: "axis-label", x: W - m.r + 8, y: y2(tv) + 4, "text-anchor": "start", text: Y2.fmt ? Y2.fmt(tv) : tv }));
     }
     if (opts.markerT != null && opts.markerT > t0 && opts.markerT < t1 && inView(opts.markerT)) {
       const xm = x(opts.markerT);
@@ -133,6 +142,7 @@
     }
     const gap = opts.gapSeconds || Infinity;
     for (const s of visible) {
+      const y = yOf(s);
       let d = "", pen = false;
       for (let i = 0; i < t.length; i++) {
         const v = inView(t[i]) ? s.values[i] : null;
@@ -165,7 +175,7 @@
       visible.forEach((s, k) => {
         const v = s.values[i];
         dots[k].style.display = v == null ? "none" : "";
-        if (v != null) { dots[k].setAttribute("cx", xi); dots[k].setAttribute("cy", y(v)); }
+        if (v != null) { dots[k].setAttribute("cx", xi); dots[k].setAttribute("cy", yOf(s)(v)); }
       });
       tip.innerHTML = "";
       tip.append(el("div", { class: "t", text: opts.tipTitle ? opts.tipTitle(t[i]) : new Date(t[i] * 1000).toLocaleString() }));

@@ -25,6 +25,7 @@ const SHOTS = [
   ["money", "/", 'section[data-panel="money"]', "Plans", 1400],
   ["trading", "/", 'section[data-panel="money"]', "Trading", 1400],
   ["system", "/", 'section[data-panel="system"]', null, 1400],
+  ["goodtime", "/", "#gt", null, 1400],
   ["arrange", "/", "#layout-dlg", null, 1100],
   ["phone", "/", null, null, 390],
   ["widget", "/widget.html", null, null, 420],
@@ -50,7 +51,12 @@ const SHOTS = [
         if (await b.count()) { await b.first().click(); await p.waitForTimeout(900); }
       }
       const file = path.join(out, `${name}-${scheme}.png`);
-      if (sel) await p.locator(sel).screenshot({ path: file });
+      if (name === "goodtime") {  // the pill and its open drop-down
+        await p.click("#gt-btn"); await p.waitForTimeout(1200);
+        const a = await p.locator("#gt-btn").boundingBox(), b = await p.locator("#gt-pop").boundingBox();
+        const x = Math.min(a.x, b.x) - 12, y = a.y - 12;
+        await p.screenshot({ path: file, clip: { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x + 12, height: b.y + b.height - y + 12 } });
+      } else if (sel) await p.locator(sel).screenshot({ path: file });
       else await p.screenshot({ path: file, fullPage: false });
       console.log(file);
       await p.close();
