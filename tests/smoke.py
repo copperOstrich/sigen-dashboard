@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGES = ["/", "/settings.html", "/report.html", "/year.html", "/widget.html", "/style.css", "/dashboard.js", "/settings.js",
-         "/settings-data.js", "/wall.js", "/tabs.js", "/goodtime.js"]
+         "/settings-data.js", "/wall.js", "/tabs.js", "/goodtime.js", "/scrollguard.js"]
 APIS = ["/api/live", "/api/health", "/api/history?hours=24", "/api/daily?days=30", "/api/prices?hours=12",
         "/api/aemo?hours=24", "/api/string-history?hours=24", "/api/strings?hours=24", "/api/ev?days=30",
         "/api/ev-sessions?days=30", "/api/monthly?months=13", "/api/trends?days=90", "/api/money", "/api/outlook",

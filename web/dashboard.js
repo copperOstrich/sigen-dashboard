@@ -794,10 +794,14 @@
     $("l-ev").textContent = e.charging ? (narrow ? "Charging" : "Car, charging") : e.plugged ? (narrow ? "Plugged in" : "Car, plugged in") : "Car";
   }
 
+  // a reading without the charger's state (a network blip) keeps the panel as it was for up to 10
+  // minutes, rather than hiding it: hiding moves everything below, and pulled phones up the page
+  let evSeen = 0;
   function renderEv(e) {
     const panel = $("ev-panel");
-    panel.hidden = !evOn(e);
-    if (panel.hidden) return;
+    if (evOn(e)) evSeen = Date.now();
+    panel.hidden = !(evOn(e) || (evSeen && Date.now() - evSeen < 600000));
+    if (!evOn(e)) return;
     const box = $("ev-now"); box.innerHTML = "";
     const fault = e.state === "E" || e.state === "F" || (e.alarms || []).length;
     const dotCls = fault ? "fault" : e.charging ? "charging" : e.plugged ? "plugged" : "";

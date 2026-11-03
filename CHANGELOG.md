@@ -2,6 +2,17 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 2.1.2
+
+- **iPhone fix**: scrolled to the very bottom, the page no longer jumps up a panel or two. A panel
+  that hid for a moment when its data blipped made the page shorter for an instant, and Safari
+  pulled the view up by that much (it doesn't keep your place the way Chrome does). Now:
+  - Car charging stays visible through a reading without the charger's state, hiding only once
+    it's been gone for 10 minutes
+  - when the page gets shorter for a moment while you're near the bottom, it keeps its height and
+    your place until the content is back, you scroll away, or a few minutes pass; it never holds
+    you once you scroll yourself
+
 ## 2.1.1
 
 - **Ultrawide fix**: the panels no longer keep rearranging (two layouts swapping about twice a
