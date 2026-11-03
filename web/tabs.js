@@ -19,7 +19,10 @@
     const hide = !avail.length;
     if (g.hidden !== hide) g.hidden = hide;
     if (hide) return;
-    const together = g.hasAttribute("data-together") && avail.length > 1 && g.clientWidth >= TOGETHER_W;
+    // not on an ultrawide's columns (wall.js): a panel that changed shape with the column width would
+    // keep changing how the columns pack
+    const together = g.hasAttribute("data-together") && avail.length > 1 && g.clientWidth >= TOGETHER_W &&
+      !document.body.classList.contains("wall-mode");
     if (g.classList.contains("together") !== together) { g.classList.toggle("together", together); redraw(); }
     // data-steady: every tab takes the height of the tallest, so switching doesn't resize the panel
     g.classList.toggle("steady", g.hasAttribute("data-steady") && !together);

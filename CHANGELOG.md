@@ -2,6 +2,18 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 2.1.1
+
+- **Ultrawide fix**: the panels no longer keep rearranging (two layouts swapping about twice a
+  second). At one column width Battery switched to its side-by-side layout, which changed its
+  height, which changed how the columns packed, which changed the width back. Now:
+  - on an ultrawide's columns, Battery and System stay as tabs
+  - only a panel appearing, being switched off or moved repacks the columns, not changes inside a
+    panel
+  - a scale that overflowed once it was drawn isn't tried again until something real changes
+    (a resize, a panel appearing); one second look after each change can still go up a step,
+    so it settles on the largest scale that fits
+
 ## 2.1.0
 
 - **A good time to use power?** An indicator at the top of the dashboard, from Free through Good,

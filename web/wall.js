@@ -66,12 +66,19 @@
     return innerHeight / zoom - top - (foot ? foot.offsetHeight : 0) - 10;
   }
 
+  let ceiling = 1;  // the largest scale allowed: lowered when one overflows, reset by a real change
+  let retry = 0;    // second looks left since the last real change
   function pack(force) {
     timer = null;
     if (!wanted()) { if (on) leave(); return; }
     if (!on) { enter(); force = true; }
-    // only a panel's size changed: keep things where they are while they still fit
-    if (!force && cols.length && Math.max(...cols.map((c) => c.offsetHeight)) <= room()) return;
+    const over = cols.length && Math.max(...cols.map((c) => c.offsetHeight)) > room();
+    // only a panel's size changed: keep things where they are while they still fit, except for one
+    // second look after a real change, with heights measured in the columns rather than the page
+    if (!force && cols.length && !over && !(retry > 0)) return;
+    if (force) { ceiling = 1; retry = 1; }
+    else if (over) ceiling = Math.min(ceiling, zoom - 0.01);  // this scale didn't fit once drawn
+    else retry--;
     const panels = visible();
     if (!panels.length) return;
     // heights now, in unscaled pixels (a little extra, as they change a bit with the column width)
@@ -81,7 +88,7 @@
     const top = (grid.getBoundingClientRect().top + scrollY) / zoom;   // header and banners, unscaled
     const below = (foot ? foot.offsetHeight : 0) + 10;
     let best = null;
-    for (const z of ZOOMS) {
+    for (const z of ZOOMS.filter((v) => v <= ceiling || v === ZOOMS[ZOOMS.length - 1])) {
       const w = innerWidth / z - padX - 2;
       const n = Math.max(2, Math.floor((w + GAP) / (COL + GAP)));
       const cap = innerHeight / z - top - below;
@@ -114,8 +121,18 @@
   }
 
   addEventListener("resize", () => schedule(250, true));
-  // a panel appearing (data arrived), being switched off, reordered or changing size
-  const mo = new MutationObserver(() => schedule(400, true));
+  // a panel appearing (data arrived), being switched off or reordered. Only those count: a panel's own
+  // classes (its tabs and layout) change as it's resized, and repacking for them went round in circles
+  const shape = (s) => `${s.hidden}|${s.classList.contains("user-off")}|${s.style.order}`;
+  const last = new Map(sections.map((s) => [s, shape(s)]));
+  const mo = new MutationObserver((list) => {
+    let real = false;
+    for (const m of list) {
+      const sh = shape(m.target);
+      if (last.get(m.target) !== sh) { last.set(m.target, sh); real = true; }
+    }
+    if (real) schedule(400, true);
+  });
   sections.forEach((s) => mo.observe(s, { attributes: true, attributeFilter: ["hidden", "class", "style"] }));
   let lastH = new Map();
   const ro = new ResizeObserver((entries) => {
