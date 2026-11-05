@@ -2,6 +2,23 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 2.2.0
+
+- **Downtime filled in from the inverter's counters.** When readings resume after the collector
+  was off for more than 5 minutes (a container restart, the NAS off, the network down), the gap is
+  filled from the SigenStor's lifetime counters, which kept counting:
+  - the energy each way is exact, and so is the share after midnight (from today's counters), so
+    daily and monthly totals, Money and payback are right
+  - the minute-by-minute shape is estimated (solar from the weather model, home use from your
+    usual use), with the battery's charge following the energy in and out and staying above its
+    reserve; charts shade those stretches as "estimated"
+  - solar limits, solar vs weather, battery trading, always-on use and the usual-use profile leave
+    estimated minutes out
+  - System > Recent events says what was filled in ("The collector was off 3:10 am to 3:52 am ...")
+  - not filled: gaps over 31 days, or a counter that went backwards (an inverter reset or swap)
+- The simulator now carries its counters on from the database across restarts, as an inverter does
+- Tests: exact totals, the midnight split, counters only going up, gaps that aren't filled
+
 ## 2.1.2
 
 - **iPhone fix**: scrolled to the very bottom, the page no longer jumps up a panel or two. A panel

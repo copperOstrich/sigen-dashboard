@@ -28,7 +28,8 @@ def trading(store, live, tz, days=30, baseload_w=None, now=None):
     cap, reserve = b.get("rated_kwh"), b.get("cutoff_low")
     with store.lock:
         rows = store.db.execute(
-            "SELECT ts, battery, grid, soc, sell_c, buy_c, load FROM samples WHERE ts>=? AND sell_c IS NOT NULL ORDER BY ts",
+            "SELECT ts, battery, grid, soc, sell_c, buy_c, load FROM samples WHERE ts>=? AND sell_c IS NOT NULL "
+            "AND COALESCE(est, 0) = 0 ORDER BY ts",
             (int(now - days * 86400),)).fetchall()
     if len(rows) < 600 or not cap:
         return {"enabled": False, "reason": "needs a few days of readings with retailer prices"}

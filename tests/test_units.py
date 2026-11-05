@@ -23,6 +23,7 @@ import notify  # noqa: E402
 import targets  # noqa: E402
 import whatif  # noqa: E402
 import goodtime  # noqa: E402
+import gapfill  # noqa: E402
 from backup import Backups  # noqa: E402
 
 
@@ -493,6 +494,53 @@ class GoodTime(unittest.TestCase):
         r = goodtime.good_time(live, rows, fc, [], fixed=(15, 35), now=t0)
         self.assertEqual(r["level"], "dear")
         self.assertEqual((r["next_good"]["start"], r["next_good"]["end"]), (t0 + 8 * 900, t0 + 12 * 900))
+
+
+class GapFill(unittest.TestCase):
+    def setUp(self):
+        from zoneinfo import ZoneInfo
+        from datetime import datetime
+        self.tz = ZoneInfo("Australia/Sydney")
+        self.t_last = int(datetime(2026, 11, 4, 21, 0, tzinfo=self.tz).timestamp())   # 9 pm
+        self.now = int(datetime(2026, 11, 5, 9, 0, tzinfo=self.tz).timestamp())       # 9 am next day
+        self.last = {"ts": self.t_last, "soc": 80.0, "total_pv_kwh": 1000.0, "total_load_kwh": 2000.0,
+                     "total_import_kwh": 300.0, "total_export_kwh": 400.0, "total_charge_kwh": 500.0,
+                     "total_discharge_kwh": 600.0}
+        self.now_c = {"total_pv_kwh": 1006.0, "total_load_kwh": 2012.0, "total_import_kwh": 302.0,
+                      "total_export_kwh": 401.0, "total_charge_kwh": 503.0, "total_discharge_kwh": 610.0}
+
+    def test_totals_exact_and_split_at_midnight(self):
+        rows, info = gapfill.plan(self.last, self.now_c, self.now, self.tz,
+                                  daily_now={"pv": 6.0, "load": 7.5, "charge": 3.0, "discharge": 4.0},
+                                  capacity_kwh=40, soc_now=60)
+        self.assertEqual(info["minutes"], 12 * 60 - 1)
+        self.assertTrue(info["midnight_split"])
+        k = 60000.0
+        tot = lambda i, day=None: sum(r[i] / k for r in rows if day is None or r[1] == day)
+        self.assertAlmostEqual(tot(2), 6.0, 3)                        # solar, all of it
+        self.assertAlmostEqual(tot(3), 12.0, 3)                       # home use
+        self.assertAlmostEqual(tot(3, "2026-11-05"), 7.5, 3)          # after midnight: today's counter exactly
+        self.assertAlmostEqual(tot(3, "2026-11-04"), 4.5, 3)
+        self.assertAlmostEqual(sum(-min(0, r[4]) for r in rows) / k, 10.0, 1)   # discharged (net of charging)
+        last = rows[-1]
+        self.assertAlmostEqual(last[7], 1006.0, 3)                    # counters end where the inverter's are
+        self.assertAlmostEqual(last[12], 610.0, 3)
+        self.assertEqual(last[6], 60.0)                               # charge ends where it is now
+        self.assertTrue(all(r[-1] == 1 for r in rows))                 # all marked estimated
+        from datetime import datetime
+        night = [r[2] for r in rows if datetime.fromtimestamp(r[0], self.tz).hour in (22, 23, 0, 1, 2, 3, 4)]
+        self.assertEqual(sum(night), 0)                                # no solar at night
+        ts = [r[0] for r in rows]
+        self.assertEqual(ts, sorted(ts))
+        self.assertTrue(all(b[7] >= a[7] for a, b in zip(rows, rows[1:])))   # counters only go up
+
+    def test_not_filled(self):
+        self.assertEqual(gapfill.plan(self.last, self.now_c, self.t_last + 120, self.tz)[1], "short")
+        back = dict(self.now_c, total_pv_kwh=10.0)
+        rows, why = gapfill.plan(self.last, back, self.now, self.tz)
+        self.assertIsNone(rows)
+        self.assertIn("backwards", why)
+        self.assertIn("too long", gapfill.plan(self.last, self.now_c, self.t_last + 40 * 86400, self.tz)[1])
 
 
 class PageStructure(unittest.TestCase):

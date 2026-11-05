@@ -48,7 +48,7 @@ class PvSeason:
             hours = self.store.db.execute(
                 "SELECT (ts/3600)*3600 AS h, SUM(MAX(pv,0))/60000.0, MAX(soc), MIN(grid), MAX(sell_c), COUNT(*), "
                 "AVG(MAX(-grid,0)), MAX(pv) "
-                "FROM samples WHERE ts>=? AND ts<? GROUP BY h", (a, b)).fetchall()
+                "FROM samples WHERE ts>=? AND ts<? AND COALESCE(est, 0) = 0 GROUP BY h", (a, b)).fetchall()
             strings = self.store.db.execute(
                 "SELECT (ts/3600)*3600 AS h, n, SUM(MAX(v*a,0))/60000.0 FROM string_samples WHERE ts>=? AND ts<? "
                 "GROUP BY h, n", (a, b)).fetchall()

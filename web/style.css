@@ -746,3 +746,7 @@ details.how p { margin: 6px 0 0; }
   .gt-pill .gt-c { display: none; }
 }
 .gt-pop a { color: var(--home); }
+
+/* stretches filled in after the collector was off */
+.est-band { fill: color-mix(in srgb, var(--ink) 6%, transparent); stroke: none; }
+.est-label { font-size: 11px; fill: var(--ink-3); font-style: italic; }

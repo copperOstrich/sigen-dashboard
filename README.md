@@ -799,6 +799,19 @@ freezer, network gear, standby power and anything left on. The panel shows the l
 level, the change from four weeks earlier, what a year of it adds up to and costs at your
 average buy price, and each night over the last 90 days. Every 10 W is about 88 kWh a year.
 
+### When the collector was off
+
+The SigenStor keeps no history that Modbus can read, but its lifetime counters keep counting while
+the collector is away (the container restarted, the NAS was off, the network dropped). So when
+readings resume after more than 5 minutes, the collector fills in the gap: the energy each way
+(solar, home use, bought, sold, charged, discharged) is exact, and so is how much of it came after
+midnight (from today's counters), so daily and monthly totals, money and payback stay right. How it
+was spread over the minutes is estimated (solar by the weather model, home use by your usual use
+for each hour), and the charts shade those stretches as **estimated**. Solar limits, solar vs
+weather, battery trading and always-on use leave estimated minutes out. Car charging sessions
+during the gap aren't recorded. System > Recent events says what was filled in. Gaps of more than
+31 days, or where a counter went backwards (an inverter reset or swapped), are left as they are.
+
 ### Backups
 
 Each night (`BACKUP_TIME`, default 2:30 am) the database is copied while the collector keeps

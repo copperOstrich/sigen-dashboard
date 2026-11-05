@@ -29,6 +29,7 @@ from importer import import_folder, reload_bills  # noqa: E402
 from fuel import Fuel  # noqa: E402
 from backup import Backups  # noqa: E402
 from strings_health import StringsHealth  # noqa: E402
+import gapfill  # noqa: E402
 from limits import Limits  # noqa: E402
 from wear import battery_wear  # noqa: E402
 from advice import appliance_advice, parse as parse_appliances  # noqa: E402
@@ -66,6 +67,7 @@ class Collector:
         self.last_alarm_set = set()
         self.fail_count = 0
         self.first_seen = {}
+        self._gap_checked = False
         self.last_ignored = {}
         self.ins_level, self.ins_streak = 0, 0
         self.day_key, self.day_acc = None, {}
@@ -135,6 +137,9 @@ class Collector:
         if was == "error":
             self.store.event("connection", "Connection to inverter restored")
             log("Connection restored")
+        if not self._gap_checked or was == "error":
+            self._gap_checked = True
+            self.fill_gap(p, inv or {}, now)
         self.record(p, now, inv)
         self._track_day(p, inv, now)
         try:
@@ -404,6 +409,33 @@ class Collector:
             self.store.save_daily_stats(day, self.day_acc)
             self._day_saved = now
 
+    def fill_gap(self, p, inv, now):
+        """After a restart or an outage: the missed minutes from the inverter's counters (gapfill.py)."""
+        try:
+            with self.rec_lock:
+                self.flush_minute()
+            last = self.store.last_sample()
+            if not last:
+                return
+            daily = {"pv": p.get("daily_pv_kwh"), "load": p.get("daily_load_kwh"),
+                     "charge": inv.get("daily_charge_kwh"), "discharge": inv.get("daily_discharge_kwh")}
+            rows, info = gapfill.plan(last, {c: p.get(c) for c in COUNTERS}, now, TZ, daily_now=daily,
+                                      model=self.store.model_between(last["ts"], now), profile=self.store.home_profile(),
+                                      prices=self.store.prices_between(last["ts"], now),
+                                      capacity_kwh=p.get("battery_rated_kwh"), soc_now=p.get("battery_soc"),
+                                      soc_min=p.get("discharge_cutoff_soc"))
+            if rows is None:
+                if info != "short":
+                    log(f"Gap since the last reading not filled: {info}")
+                return
+            self.store.insert_estimated(rows)
+            msg = gapfill.describe(info, TZ)
+            log(msg)
+            self.store.event("gap", msg)
+        except Exception as e:  # never stop the readings for it
+            log(f"Filling the gap failed: {type(e).__name__}: {e}")
+            traceback.print_exc()
+
     def flush_minute(self):
         """Write the readings collected so far for the current minute (also used on shutdown)."""
         if self.minute_bucket is None or not self.minute_acc:
@@ -461,6 +493,18 @@ def start_simulator(store):
     start = (now - timedelta(days=DEMO_DAYS if store.empty() else 0)).replace(
         hour=0, minute=0, second=0, microsecond=0)
     plant.t = start
+    # an existing database: carry on from its last reading, as a real inverter's counters would,
+    # so the time the collector was off is filled in (gapfill.py) as it would be at home
+    last = None if store.empty() else store.last_sample()
+    if last and 0 < time.time() - last["ts"] < 31 * 86400:
+        start = datetime.fromtimestamp(last["ts"], TZ).replace(tzinfo=None)
+        plant.t = start
+        for k, c in (("pv", "total_pv_kwh"), ("load", "total_load_kwh"), ("import", "total_import_kwh"),
+                     ("export", "total_export_kwh"), ("charge", "total_charge_kwh"), ("discharge", "total_discharge_kwh")):
+            if last.get(c) is not None:
+                plant.totals[k] = last[c]
+        if last.get("soc") is not None:
+            plant.soc = last["soc"]
     fill = store.empty() and DEMO_DAYS > 0
     t, rows, prices, srows = start, [], [], []
     from charger import SessionTracker

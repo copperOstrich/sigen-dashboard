@@ -21,7 +21,7 @@ def baseload(store, tz, days=90, now=None):
     today = datetime.fromtimestamp(now, tz).date()
     since = datetime.combine(today - timedelta(days=days), datetime.min.time(), tz).timestamp()
     with store.lock:
-        rows = store.db.execute("SELECT ts, load, ev FROM samples WHERE ts>=? AND load IS NOT NULL", (int(since),)).fetchall()
+        rows = store.db.execute("SELECT ts, load, ev FROM samples WHERE ts>=? AND load IS NOT NULL AND COALESCE(est, 0) = 0", (int(since),)).fetchall()
         price = store.db.execute(
             "SELECT SUM(MAX(grid, 0) * buy_c) / NULLIF(SUM(MAX(grid, 0)), 0) FROM samples WHERE ts>=? AND buy_c IS NOT NULL",
             (int(now - 30 * 86400),)).fetchone()[0]

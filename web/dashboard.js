@@ -670,7 +670,7 @@
     const title = (t) => new Date(t * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
     // one chart: power on the left (kW), the battery's charge on the right (%)
     C.lineChart($("ol-chart"), {
-      t: lst.map((r) => r.t), height: 270, yMin: 0, markerT: nowT,
+      t: lst.map((r) => r.t), height: 270, yMin: 0, markerT: nowT, bands: (olPast && olPast.estimated) || [],
       y2: { min: 0, max: 100, ticks: [0, 25, 50, 75, 100], fmt: (v) => `${v}%` },
       series: [
         { key: "act", label: "Charge so far", color: "var(--battery)", values: lst.map((r) => r.act), axis: 2 },
@@ -1043,12 +1043,12 @@
     };
     C.lineChart($("power-chart"), {
       t: h.t, series: SERIES.map((s) => ({ ...s, values: h[s.key] })), hidden, height: 280,
-      gapSeconds: h.bucket_seconds * 5, yFmt: S.kwAxis,
+      gapSeconds: h.bucket_seconds * 5, yFmt: S.kwAxis, bands: h.estimated,
       tipFmt: (v, s) => signed(s.key, v, s), tipTitle, ariaLabel: `Power over time for solar, home, battery and grid${h.ev ? ", and car charging" : ""}`,
     });
     C.lineChart($("soc-chart"), {
       t: h.t, series: [{ key: "soc", label: "Charge", color: "var(--battery)", values: h.soc, area: true }],
-      height: 130, yMin: 0, yMax: 100, yTicks: [0, 50, 100], gapSeconds: h.bucket_seconds * 5,
+      height: 130, yMin: 0, yMax: 100, yTicks: [0, 50, 100], gapSeconds: h.bucket_seconds * 5, bands: h.estimated,
       yFmt: (v) => `${Math.round(v)}%`, tipTitle, ariaLabel: "Battery charge over time",
     });
   }

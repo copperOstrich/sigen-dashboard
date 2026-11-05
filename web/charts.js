@@ -115,6 +115,15 @@
       const xm = x(opts.markerT);
       svg.append(el("rect", { class: "future", x: xm, y: m.t, width: W - m.r - xm, height: H - m.t - m.b }));
     }
+    // opts.bands = [[start, end], ...]: stretches to mark as estimated (filled in after the collector was off)
+    for (const [b0, b1] of opts.bands || []) {
+      const a = Math.max(t0, b0), b = Math.min(t1, b1);
+      if (!(b > a) || !inView(a)) continue;
+      const xa = x(a), xb = x(b);
+      if (!isFinite(xa) || !isFinite(xb) || xb - xa < 1) continue;
+      svg.append(el("rect", { class: "est-band", x: xa, y: m.t, width: xb - xa, height: H - m.t - m.b }, el("title", { text: "Estimated: the collector was off, so this is filled in from the inverter's counters" })));
+      if (xb - xa > 64) svg.append(el("text", { class: "est-label", x: (xa + xb) / 2, y: m.t + 12, "text-anchor": "middle", text: "estimated" }));
+    }
     for (const tv of ticks) {
       svg.append(el("line", { class: tv === 0 ? "zero" : "gridline", x1: m.l, x2: W - m.r, y1: y(tv), y2: y(tv) }));
       svg.append(el("text", { class: "axis-label", x: m.l - 8, y: y(tv) + 4, "text-anchor": "end", text: opts.yFmt ? opts.yFmt(tv) : tv }));

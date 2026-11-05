@@ -83,6 +83,9 @@ class Store:
             for c in ("buy_c", "sell_c", "ev"):
                 if c not in cols:
                     self.db.execute(f"ALTER TABLE samples ADD COLUMN {c} REAL")
+            # est: 1 for minutes filled in after the collector was off (gapfill.py), not read from the inverter
+            if "est" not in cols:
+                self.db.execute("ALTER TABLE samples ADD COLUMN est INTEGER")
             # own_kwh/own_value/own_priced: car energy not from the grid (solar or battery), measured
             # each poll, and what it would have earned exported at that moment's price ($, never < 0)
             ecols = {r[1] for r in self.db.execute("PRAGMA table_info(ev_sessions)")}
@@ -102,6 +105,43 @@ class Store:
                 "total_import_kwh, total_export_kwh, total_charge_kwh, total_discharge_kwh, buy_c, sell_c, ev) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
             self.db.commit()
+
+    # ---- filling in after the collector was off (gapfill.py)
+    def last_sample(self):
+        with self.lock:
+            r = self.db.execute(f"SELECT ts, soc, {','.join(COUNTERS)} FROM samples WHERE total_pv_kwh IS NOT NULL "
+                                "ORDER BY ts DESC LIMIT 1").fetchone()
+        return dict(zip(["ts", "soc", *COUNTERS], r)) if r else None
+
+    def insert_estimated(self, rows):
+        with self.lock:
+            self.db.executemany(
+                "INSERT OR IGNORE INTO samples (ts, day, pv, load, battery, grid, soc, total_pv_kwh, total_load_kwh, "
+                "total_import_kwh, total_export_kwh, total_charge_kwh, total_discharge_kwh, buy_c, sell_c, ev, est) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+            self.db.commit()
+
+    def model_between(self, a, b):
+        """{hour start: kW} from the kept weather model."""
+        with self.lock:
+            try:
+                return dict(self.db.execute("SELECT ts, kw FROM pv_model WHERE ts>=? AND ts<?", (int(a) - 3600, int(b))).fetchall())
+            except sqlite3.OperationalError:  # no weather model kept
+                return {}
+
+    def prices_between(self, a, b):
+        """f(ts) -> (buy_c, sell_c) from the retailer intervals saved for that time (Amber's sign)."""
+        with self.lock:
+            rows = self.db.execute("SELECT start, end, channel, per_kwh FROM prices WHERE end>? AND start<? "
+                                   "AND channel IN ('general', 'feedIn') ORDER BY start", (int(a), int(b))).fetchall()
+        by = {"general": [], "feedIn": []}
+        for st, en, ch, v in rows:
+            by[ch].append((st, en, v))
+
+        def at(t):
+            pick = lambda ch: next((v for st, en, v in by[ch] if st <= t < en), None)
+            return pick("general"), pick("feedIn")
+        return at
 
     def save_prices(self, rows):
         with self.lock:
@@ -391,7 +431,7 @@ class Store:
         """{hour start: average PV W} for whole hours with readings for most of the hour."""
         with self.lock:
             rows = self.db.execute("SELECT (ts/3600)*3600 AS h, AVG(pv), COUNT(*) FROM samples WHERE ts>=? AND ts<? "
-                                   "GROUP BY h", (int(since), int(until))).fetchall()
+                                   "AND COALESCE(est, 0) = 0 GROUP BY h", (int(since), int(until))).fetchall()
         return {h: w for h, w, n in rows if n >= 45 and w is not None}
 
     def hourly_avgs(self, since, until):
@@ -399,7 +439,7 @@ class Store:
         with self.lock:
             rows = self.db.execute(
                 "SELECT (ts/3600)*3600 AS h, AVG(pv), AVG(MAX(0, load - COALESCE(ev, 0))), COUNT(*) FROM samples "
-                "WHERE ts>=? AND ts<? GROUP BY h", (int(since), int(until))).fetchall()
+                "WHERE ts>=? AND ts<? AND COALESCE(est, 0) = 0 GROUP BY h", (int(since), int(until))).fetchall()
         return {h: (pv, home) for h, pv, home, n in rows if n >= 45}
 
     def save_aemo(self, rows):
@@ -533,8 +573,9 @@ class Store:
         with self.lock:
             rows = self.db.execute(
                 "SELECT (ts/?)*? AS b, AVG(pv), AVG(MAX(0, load - COALESCE(ev, 0))), AVG(battery), AVG(grid), "
-                "AVG(soc), AVG(ev) FROM samples WHERE ts>=? GROUP BY b ORDER BY b", (bucket, bucket, since)).fetchall()
-        keys = ["t", "pv", "load", "battery", "grid", "soc", "ev"]
+                "AVG(soc), AVG(ev), MAX(COALESCE(est, 0)) FROM samples WHERE ts>=? GROUP BY b ORDER BY b",
+                (bucket, bucket, since)).fetchall()
+        keys = ["t", "pv", "load", "battery", "grid", "soc", "ev", "est"]
         out = {k: [] for k in keys}
         for r in rows:
             for k, v in zip(keys, r):
@@ -542,6 +583,16 @@ class Store:
         out["bucket_seconds"] = bucket
         if not any(v is not None for v in out["ev"]):
             del out["ev"]  # no charger: keep the chart to the four series
+        # stretches filled in after the collector was off: [[start, end]], for the charts to mark
+        spans, t0 = [], None
+        for t, e in zip(out["t"], out.pop("est")):
+            if e and t0 is None:
+                t0 = t
+            elif not e and t0 is not None:
+                spans.append([t0, t]); t0 = None
+        if t0 is not None:
+            spans.append([t0, out["t"][-1] + bucket])
+        out["estimated"] = spans
         return out
 
     def daily(self, days):

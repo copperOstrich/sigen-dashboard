@@ -51,7 +51,7 @@ class Limits:
         if now - self.caps["learned_at"] < 3600:
             return self.caps
         with self.store.lock:
-            rows = self.store.db.execute("SELECT -grid, pv FROM samples WHERE ts>=? AND pv > 300",
+            rows = self.store.db.execute("SELECT -grid, pv FROM samples WHERE ts>=? AND pv > 300 AND COALESCE(est, 0) = 0",
                                          (int(now - LEARN_DAYS * 86400),)).fetchall()
         if not self.export_setting:
             cap = self._ceiling([e for e, _ in rows], 0.03)
@@ -71,7 +71,7 @@ class Limits:
         caps = self.caps
         with self.store.lock:
             rows = self.store.db.execute(
-                "SELECT ts, pv, battery, grid, soc, sell_c FROM samples WHERE ts>=? AND ts<? ORDER BY ts", (t0, t1)).fetchall()
+                "SELECT ts, pv, battery, grid, soc, sell_c FROM samples WHERE ts>=? AND ts<? AND COALESCE(est, 0) = 0 ORDER BY ts", (t0, t1)).fetchall()
         out = {r: {"minutes": 0, "kwh": 0.0, "value": 0.0} for r in REASONS}
         modelled = False
         for ts, pv, batt, grid, soc, sell in rows:
