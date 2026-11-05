@@ -139,6 +139,9 @@ SCHEMA = [
        "day the system was switched on (Money).", "number", "10", min=1, max=30, unit="years"),
     _s("BATTERY_WARRANTY_MWH", BATTERY, "Warranty energy limit", "Some warranties also end after this much "
        "energy has gone through the battery. Blank if yours doesn't say.", "number", "", min=0, max=10000, unit="MWh"),
+    _s("BATTERY_RATED_CYCLES", BATTERY, "Rated cycles", "The cycle life on your battery's datasheet (SigenStor "
+       "BAT modules: 10,000 full cycles at 25°C). Battery > Health shows how far through it you are and when it would "
+       "be reached at your rate. Blank to hide.", "int", "10000", min=100, max=100000, unit="cycles"),
     _s("BATTERY_WARRANTY_SOH", BATTERY, "Warranted health", "The capacity the warranty promises at the end, "
        "e.g. 70.", "number", "", min=1, max=100, unit="%"),
     # ---------------------------------------------------------------- appliances

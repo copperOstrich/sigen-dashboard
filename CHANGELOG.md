@@ -2,6 +2,16 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 2.2.1
+
+- **Battery > Health**: the Cycles tile shows how far through the battery's rated cycle life it is
+  and when that would be reached at the rate so far, for example "1.8% of 10,000 rated, reached
+  about Aug 2063". The rating is a new setting, **Rated cycles** (Settings > Battery,
+  `BATTERY_RATED_CYCLES`), 10,000 by default: the SigenStor BAT datasheet's figure (full cycles at
+  25°C). The projection uses the average since the system was switched on once there are three
+  months of readings, otherwise the last 30 days
+- Battery > Health's tiles fit the width they have, rather than assuming six across
+
 ## 2.2.0
 
 - **Downtime filled in from the inverter's counters.** When readings resume after the collector

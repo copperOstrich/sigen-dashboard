@@ -451,7 +451,8 @@ class Api(BaseHTTPRequestHandler):
             if url.path == "/api/battery-wear":
                 return self._json(battery_wear(self.store, self.collector.snapshot(), TZ, installed=SYSTEM_INSTALLED or None,
                                                warranty_years=BATTERY_WARRANTY_YEARS, warranty_mwh=BATTERY_WARRANTY_MWH,
-                                               warranty_soh=BATTERY_WARRANTY_SOH))
+                                               warranty_soh=BATTERY_WARRANTY_SOH,
+                                               rated_cycles=int(BATTERY_RATED_CYCLES) if BATTERY_RATED_CYCLES else None))
             if url.path == "/api/trading":
                 days = min(400, max(3, int(q.get("days", ["30"])[0])))
                 bl = baseload(self.store, TZ, 30)

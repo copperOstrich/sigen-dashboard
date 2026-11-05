@@ -1760,9 +1760,15 @@
     const tile = (k, v, unit, d, cls) => el("div", {}, el("div", { class: "k", text: k }),
       el("div", { class: "v" }, v, unit ? el("small", { text: unit }) : null), d ? el("div", { class: "d" + (cls ? " " + cls : ""), text: d }) : null);
     const h = w.health, wa = w.warranty || {};
+    const monthYear = (d) => new Date(d + "T12:00:00").toLocaleDateString([], { month: "short", year: "numeric" });
+    // the datasheet's cycle life (BATTERY_RATED_CYCLES): how far through, and when at this rate
+    const r = w.rated;
+    const cyclesTile = tile("Cycles", w.cycles.toLocaleString(undefined, { maximumFractionDigits: w.cycles < 100 ? 1 : 0 }), "",
+      w.recent.cycles_per_day != null ? `${w.recent.cycles_per_day} a day lately` : `${w.cycles_per_day} a day`);
+    if (r) cyclesTile.append(el("div", { class: "d", title: "The datasheet's rated cycle life (Settings > Battery), and when it's reached at the rate so far",
+      text: `${r.used_pct < 10 ? r.used_pct.toFixed(1) : Math.round(r.used_pct)}% of ${r.cycles.toLocaleString()} rated` + (r.projected ? `, reached about ${monthYear(r.projected)}` : "") }));
     tiles.append(
-      tile("Cycles", w.cycles.toLocaleString(undefined, { maximumFractionDigits: w.cycles < 100 ? 1 : 0 }), "",
-        w.recent.cycles_per_day != null ? `${w.recent.cycles_per_day} a day lately` : `${w.cycles_per_day} a day`),
+      cyclesTile,
       wearEnergyTile(w, wa),
       tile("Health", h.now != null ? h.now.toFixed(1) : "–", "%",
         h.per_year != null ? `${h.per_year > 0 ? "+" : ""}${h.per_year}% a year` : h.days >= 1 ? "no clear trend yet" : null),
@@ -1777,7 +1783,9 @@
       (w.recent.deep_days ? `${w.recent.deep_days} of the last ${w.recent.days} days used most of it. ` : "") +
       (wa.years ? `At the rate so far it will reach about ${wa.cycles_at_end.toLocaleString()} cycles by the end of its ${wa.years}-year warranty` +
         (wa.mwh_at_end ? ` and ${wa.mwh_at_end} MWh` + (wa.mwh_reached ? `, passing the ${wa.mwh} MWh limit around ${new Date(wa.mwh_reached + "T12:00:00").toLocaleDateString([], { month: "short", year: "numeric" })}` : "") : "") + ". " : "") +
-      "Health is the battery's own reading; a trend is shown once it has moved a point over four months. Warranty terms come from Settings (Battery).";
+      (w.rated && w.rated.projected ? `At ${w.rated.per_day} cycles a day (${w.rated.basis === "since" ? "the average so far" : "the last 30 days"}), it would reach its rated ${w.rated.cycles.toLocaleString()} cycles around ${monthYear(w.rated.projected)}; ` +
+        "the rating is for full cycles at 25°C, and a battery also ages with time and heat, so it's likely to be retired on capacity before then. " : "") +
+      "Health is the battery's own reading; a trend is shown once it has moved a point over four months. Warranty terms and the rated cycles come from Settings (Battery).";
   }
   async function loadWear() {
     try { wearData = await S.fetchJSON("/api/battery-wear"); renderWear(); } catch (e) { /* banner */ }

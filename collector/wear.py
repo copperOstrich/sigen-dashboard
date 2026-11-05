@@ -25,7 +25,8 @@ def _fit(points):
     return m, (sy - m * sx) / n
 
 
-def battery_wear(store, live, tz, installed=None, warranty_years=10, warranty_mwh=None, warranty_soh=None, now=None):
+def battery_wear(store, live, tz, installed=None, warranty_years=10, warranty_mwh=None, warranty_soh=None, now=None,
+                 rated_cycles=10000):
     now = now or time.time()
     b = (live or {}).get("battery") or {}
     rated = b.get("rated_kwh")
@@ -117,4 +118,13 @@ def battery_wear(store, live, tz, installed=None, warranty_years=10, warranty_mw
                 w["mwh_projected"] = (today + timedelta(days=int(reach))).isoformat()
                 w["mwh_reached"] = w["mwh_projected"] if reach < left else None
         out["warranty"] = w
+    if rated_cycles:
+        # the datasheet's rated cycle life: when it's reached at the rate so far (the average since the
+        # start once it spans a few months, as for the warranty's energy limit; otherwise the last 30 days)
+        rate = cycles / days if (days >= 90 or per_day is None) else per_day
+        r = {"cycles": rated_cycles, "used_pct": round(cycles / rated_cycles * 100, 1),
+             "per_day": round(rate, 2), "basis": "since" if (days >= 90 or per_day is None) else "recent"}
+        if rate > 0:
+            r["projected"] = (today + timedelta(days=int(max(0.0, rated_cycles - cycles) / rate))).isoformat()
+        out["rated"] = r
     return out

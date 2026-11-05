@@ -552,11 +552,8 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .wear-tiles { margin: 4px 0 6px; }
 .wear-tiles .d { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
 .wear-tiles .d.warn { color: var(--warn); }
-.today.wear-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-@media (max-width: 1080px) { .today.wear-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .today.wear-tiles > div:nth-child(4) { border-left: 0; padding-left: 0; } .today.wear-tiles > div:nth-child(5) { border-left: 1px solid var(--rule); padding-left: 16px; } }
-@media (max-width: 560px) { .today.wear-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .today.wear-tiles > div:nth-child(odd) { border-left: 0; padding-left: 0; } .today.wear-tiles > div:nth-child(even) { border-left: 1px solid var(--rule); padding-left: 16px; } }
+.today.wear-tiles { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)) !important; row-gap: 14px; }
+.today.wear-tiles > div { border-left: 0 !important; padding-left: 0 !important; }
 .strings td.st-low { color: var(--warn); font-weight: 600; }
 .strings td.st-down { color: var(--bad); font-weight: 600; }
 .facts dd .small-link { font: 13px var(--font); color: var(--home); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; margin-left: 6px; }

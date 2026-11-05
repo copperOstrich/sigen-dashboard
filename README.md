@@ -689,6 +689,12 @@ Earlier versions had a Windows desktop app. It's been withdrawn: without a paid 
 certificate, Windows Smart App Control (and macOS) block it, and the browser does the same job.
 If you installed it, uninstall it from **Settings → Apps**.
 
+The Cycles tile also shows how far through the battery's **rated cycle life** it is and when that
+would be reached at the rate so far (the average since it was switched on, once there are three
+months of readings). The rating is `BATTERY_RATED_CYCLES`, 10,000 by default: Sigenergy's datasheet
+figure for SigenStor BAT modules, full cycles at 25°C. The warranty usually ends well before then
+(on years, health or its energy limit), and a battery also ages with time and heat.
+
 ### Panels and tabs
 
 Ten panels; related things share a panel, with tabs. Each panel remembers the tab you last chose
@@ -900,6 +906,7 @@ hand). Values in `sigen.env` win over the container's environment.
 | `EXPORT_LIMIT_KW` | Your export limit, for Solar limits | learned |
 | **Battery** | | |
 | `BATTERY_WARRANTY_YEARS` / `BATTERY_WARRANTY_MWH` / `BATTERY_WARRANTY_SOH` | Warranty length, energy limit and warranted health (%), from your warranty | `10` / none / none |
+| `BATTERY_RATED_CYCLES` | The datasheet's cycle life, for Battery > Health; blank to hide | `10000` |
 | **Appliances** | | |
 | `APPLIANCES` | Appliances to time, as `name:kW:hours`, comma separated (blank for none) | dishwasher, washing machine, dryer |
 | **Backups** | | |

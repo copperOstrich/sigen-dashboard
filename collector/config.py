@@ -48,7 +48,7 @@ def load_settings_file():
 
 SETTINGS_PATH = load_settings_file()
 
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -115,6 +115,7 @@ EXPORT_LIMIT_KW = _env_num("EXPORT_LIMIT_KW", None)
 BATTERY_WARRANTY_YEARS = _env_num("BATTERY_WARRANTY_YEARS", 10)
 BATTERY_WARRANTY_MWH = _env_num("BATTERY_WARRANTY_MWH", None)
 BATTERY_WARRANTY_SOH = _env_num("BATTERY_WARRANTY_SOH", None)
+BATTERY_RATED_CYCLES = _env_num("BATTERY_RATED_CYCLES", 10000)
 APPLIANCES = ENV("APPLIANCES", None)
 GRID_VIEW = (ENV("GRID_VIEW", "") or "tiles").strip().lower()
 TIME_FORMAT = (ENV("TIME_FORMAT", "") or "12h").strip().lower()
