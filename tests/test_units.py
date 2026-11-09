@@ -24,6 +24,7 @@ import targets  # noqa: E402
 import whatif  # noqa: E402
 import goodtime  # noqa: E402
 import gapfill  # noqa: E402
+import aemo  # noqa: E402
 from backup import Backups  # noqa: E402
 
 
@@ -541,6 +542,207 @@ class GapFill(unittest.TestCase):
         self.assertIsNone(rows)
         self.assertIn("backwards", why)
         self.assertIn("too long", gapfill.plan(self.last, self.now_c, self.t_last + 40 * 86400, self.tz)[1])
+
+
+def _zip(name, text):
+    import io as _io
+    import zipfile as _zf
+    b = _io.BytesIO()
+    with _zf.ZipFile(b, "w", _zf.ZIP_DEFLATED) as z:
+        z.writestr(name, text)
+    return b.getvalue()
+
+
+def _xlsx(rows):
+    """A minimal .xlsx with the registration list's generator sheet (inline strings)."""
+    import io as _io
+    import zipfile as _zf
+    from xml.sax.saxutils import escape
+    cells = lambda r, i: "".join(f'<c r="{chr(65 + j)}{i}" t="inlineStr"><is><t>{escape(v)}</t></is></c>' for j, v in enumerate(r))
+    sheet = ('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
+             "".join(f'<row r="{i + 1}">{cells(r, i + 1)}</row>' for i, r in enumerate(rows)) + "</sheetData></worksheet>")
+    wb = ('<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+          'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
+          '<sheet name="Overview" sheetId="1" r:id="rId1"/><sheet name="PU and Scheduled Loads" sheetId="2" r:id="rId2"/>'
+          "</sheets></workbook>")
+    rels = ('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="x"/>'
+            '<Relationship Id="rId2" Target="worksheets/sheet2.xml" Type="x"/></Relationships>')
+    b = _io.BytesIO()
+    with _zf.ZipFile(b, "w") as z:
+        z.writestr("xl/workbook.xml", wb)
+        z.writestr("xl/_rels/workbook.xml.rels", rels)
+        z.writestr("xl/worksheets/sheet1.xml", '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"/>')
+        z.writestr("xl/worksheets/sheet2.xml", sheet)
+    return b.getvalue()
+
+
+class AemoNemweb(unittest.TestCase):
+    """The NEMWeb reader, against files laid out like AEMO's (headers copied from real ones)."""
+    T = "2026/11/09 19:20:00"
+
+    def dispatch_csv(self):
+        price = ("I,DISPATCH,PRICE,5,SETTLEMENTDATE,RUNNO,REGIONID,DISPATCHINTERVAL,INTERVENTION,RRP,EEP,ROP,APCFLAG,"
+                 "MARKETSUSPENDEDFLAG,LASTCHANGED,PRICE_STATUS\n")
+        for rid, rrp in (("NSW1", 106.44), ("QLD1", 120), ("SA1", 117.8), ("TAS1", 90), ("VIC1", 95)):
+            price += f'D,DISPATCH,PRICE,5,"{self.T}",1,{rid},20261109184,0,{rrp},0,{rrp},0,0,"{self.T}",FIRM\n'
+        price += f'D,DISPATCH,PRICE,5,"{self.T}",1,NSW1,20261109184,1,999,0,999,0,0,"{self.T}",FIRM\n'  # intervention run
+        rs = ("I,DISPATCH,REGIONSUM,9,SETTLEMENTDATE,RUNNO,REGIONID,DISPATCHINTERVAL,INTERVENTION,TOTALDEMAND,"
+              "DISPATCHABLEGENERATION,NETINTERCHANGE,SS_SOLAR_CLEAREDMW,SS_WIND_CLEAREDMW\n"
+              f'D,DISPATCH,REGIONSUM,9,"{self.T}",1,NSW1,1,0,8032.19,7271.24,-760.94,0,195.9\n'
+              f'D,DISPATCH,REGIONSUM,9,"{self.T}",1,QLD1,1,0,6000,6600,600,0,100\n')
+        ic = ("I,DISPATCH,INTERCONNECTORRES,3,SETTLEMENTDATE,RUNNO,INTERCONNECTORID,DISPATCHINTERVAL,INTERVENTION,"
+              "METEREDMWFLOW,MWFLOW,MWLOSSES,MARGINALVALUE,VIOLATIONDEGREE,LASTCHANGED,EXPORTLIMIT,IMPORTLIMIT\n"
+              f'D,DISPATCH,INTERCONNECTORRES,3,"{self.T}",1,NSW1-QLD1,1,0,-660,-663,1,0,0,"{self.T}",400.7,-1129.16\n'
+              f'D,DISPATCH,INTERCONNECTORRES,3,"{self.T}",1,NSW1-SA1,1,0,-270,-269.6,1,0,0,"{self.T}",-69.9,-350\n'
+              f'D,DISPATCH,INTERCONNECTORRES,3,"{self.T}",1,T-V-MNSP1,1,0,-104,-104.4,1,0,0,"{self.T}",-104.4,-317\n')
+        return "C,NEMP.WORLD,DISPATCHIS\n" + price + rs + ic + "C,END OF REPORT\n"
+
+    def predispatch_csv(self):
+        h = ("I,PREDISPATCH,REGION_PRICES,2,PREDISPATCHSEQNO,RUNNO,REGIONID,PERIODID,INTERVENTION,RRP,EEP,LASTCHANGED,DATETIME\n"
+             "I,PREDISPATCH,REGION_SOLUTION,9,PREDISPATCHSEQNO,RUNNO,REGIONID,PERIODID,INTERVENTION,TOTALDEMAND,DATETIME\n")
+        rows = ""
+        for i, (end, rrp) in enumerate((("2099/01/01 10:30:00", 118.02), ("2099/01/01 11:00:00", 143), ("2000/01/01 10:00:00", 50))):
+            rows += f'D,PREDISPATCH,REGION_PRICES,2,1,1,NSW1,{i + 1:02d},0,{rrp},0,"x","{end}"\n'
+            rows += f'D,PREDISPATCH,REGION_PRICES,2,1,1,QLD1,{i + 1:02d},0,1,0,"x","{end}"\n'
+            rows += f'D,PREDISPATCH,REGION_SOLUTION,9,1,1,NSW1,{i + 1:02d},0,{8000 + i},"{end}"\n'
+        return h + rows
+
+    def registration(self):
+        head = ["Participant", "Station Name", "Region", "Dispatch Type", "Category", "Classification",
+                "Fuel Source - Primary", "Fuel Source - Descriptor", "Technology Type - Primary",
+                "Technology Type - Descriptor", "Units", "Aggregation", "DUID"]
+        gen = lambda duid, region, dtype, p, d: ["X", "Y", region, dtype, "Market", "Scheduled", p, d, "", "", "", "", duid]
+        rows = [["NEM Registration list"], head,
+                gen("COAL1", "NSW1", "Generating Unit", "Fossil", "Black Coal"),
+                gen("BROWN1", "VIC1", "Generating Unit", "Fossil", "Brown Coal"),
+                gen("GAS1", "NSW1", "Generating Unit", "Fossil", "Natural Gas / Diesel"),
+                gen("MINE1", "QLD1", "Generating Unit", "Fossil", "Waste Coal Mine Gas"),
+                gen("DSL1", "SA1", "Generating Unit", "Fossil", "Diesel"),
+                gen("SOLAR1", "NSW1", "Generating Unit", "Solar", "Solar "),
+                gen("WIND1", "NSW1", "Generating Unit", "Wind", "Wind"),
+                gen("HYD1", "NSW1", "Generating Unit", "Hydro", "Water"),
+                gen("PUMP1", "NSW1", "Load", "Hydro", "Water"),
+                gen("BAT1", "NSW1", "Bidirectional Unit", "Battery Storage", "Grid"),
+                gen("BIO1", "QLD1", "Generating Unit", "Renewable/ Biomass / Waste", "Bagasse")]
+        rows += [gen(f"FILL{i}", "TAS1", "Generating Unit", "Hydro", "Water") for i in range(50)]
+        return _xlsx(rows)
+
+    def scada_csv(self):
+        out = "I,DISPATCH,UNIT_SCADA,1,SETTLEMENTDATE,DUID,SCADAVALUE,LASTCHANGED\n"
+        for duid, mw in (("COAL1", 5000), ("GAS1", 300), ("SOLAR1", 1500), ("WIND1", 700), ("HYD1", 200),
+                         ("PUMP1", 150), ("BAT1", -80), ("UNKNOWN9", 10), ("BROWN1", 4000)):
+            out += f'D,DISPATCH,UNIT_SCADA,1,"{self.T}",{duid},{mw},"{self.T}"\n'
+        return out
+
+    def fetcher(self):
+        files = {
+            "DispatchIS_Reports": ("PUBLIC_DISPATCHIS_202611091920_1.zip", self.dispatch_csv()),
+            "PredispatchIS_Reports": ("PUBLIC_PREDISPATCHIS_202611091930_1.zip", self.predispatch_csv()),
+            "Dispatch_SCADA": ("PUBLIC_DISPATCHSCADA_202611091920_1.zip", self.scada_csv())}
+        calls = []
+
+        def fetch(url, timeout=60):
+            calls.append(url)
+            if url == aemo.REGISTRATION_URL:
+                return self.registration()
+            for folder, (name, text) in files.items():
+                if url == aemo.NEMWEB + folder + "/":
+                    return (f'<pre><A HREF="/Reports/CURRENT/{folder}/PUBLIC_OLD_202611091915_0.zip">old</A>'
+                            f'<A HREF="/Reports/CURRENT/{folder}/{name}">{name}</A></pre>').encode()
+                if url.endswith("/" + name):
+                    return _zip(name.replace(".zip", ".CSV"), text)
+                if "PUBLIC_OLD" in url:
+                    return _zip("x.CSV", text)
+            raise aemo.AemoError("404")
+        return fetch, calls
+
+    class _Store:
+        def __init__(self):
+            self.rows = []
+
+        def save_aemo(self, rows):
+            self.rows += rows
+
+        def aemo_history(self, region, hours, bucket=300):
+            return []
+
+    def test_fuel_groups(self):
+        f = aemo.fuel_of
+        self.assertEqual(f("Fossil", "Black Coal"), "Black coal")
+        self.assertEqual(f("Fossil", "Waste Coal Mine Gas"), "Gas")
+        self.assertEqual(f("Fossil", "Natural Gas / Fuel Oil"), "Gas")
+        self.assertEqual(f("Fossil", "Kerosene"), "Liquid fuel")
+        self.assertEqual(f("Battery Storage", "Grid", "Bidirectional Unit"), "Battery")
+        self.assertEqual(f("Renewable/ Biomass / Waste and Fossil", "Bagasse and Diesel"), "Biomass")
+        self.assertIsNone(f("Hydro", "Water", "Load"))
+
+    def test_registration_list(self):
+        d = aemo.parse_registration(self.registration())
+        self.assertEqual(d["COAL1"], ["NSW1", "Black coal"])
+        self.assertEqual(d["SOLAR1"], ["NSW1", "Solar"])
+        self.assertEqual(d["PUMP1"], ["NSW1", None])
+        self.assertEqual(d["BAT1"], ["NSW1", "Battery"])
+
+    def test_poll_end_to_end(self):
+        fetch, calls = self.fetcher()
+        store = self._Store()
+        with tempfile.TemporaryDirectory() as tmp:
+            a = aemo.Aemo(store, "NSW1", log=lambda *x: None, data_dir=tmp, fetch=fetch)
+            a.poll()
+            s = a.state
+            self.assertEqual(s["status"], "ok", s["error"])
+            self.assertIsNone(s["error"])
+            c = s["current"]
+            self.assertEqual(c["rrp"], 106.44)            # pricing run, not the intervention run
+            self.assertEqual(c["price_status"], "FIRM")
+            self.assertEqual(c["demand_mw"], 8032.19)
+            self.assertEqual(c["net_interchange_mw"], -760.94)
+            self.assertEqual(c["semischeduled_gen_mw"], 195.9)
+            self.assertFalse(c["suspended"])
+            # history saved at the interval start, and the backfill read the older file too
+            self.assertIn((int(aemo._nem_ts(self.T)) - 300, "NSW1", 106.44, 8032.19), store.rows)
+            self.assertEqual(len(store.rows), 2)
+            self.assertEqual({x["name"] for x in s["interconnectors"]}, {"NSW1-QLD1", "NSW1-SA1"})
+            sa = next(x for x in s["all_interconnectors"] if x["name"] == "NSW1-SA1")
+            self.assertEqual((sa["export_limit"], sa["import_limit"]), (-69.9, -350))
+            self.assertEqual(set(s["region_rows"]), {"NSW1", "QLD1", "SA1", "TAS1", "VIC1"})
+            # forecast: only NSW, only future half hours, starting 30 minutes before each end
+            self.assertEqual([f["rrp"] for f in s["forecast"]], [118.02, 143])
+            self.assertEqual(s["forecast"][0]["end"] - s["forecast"][0]["t"], 1800)
+            self.assertEqual(s["forecast"][0]["demand_mw"], 8000)
+            # fuel mix: pumps and charging batteries left out, unknown generators counted
+            mix = {f["fuel"]: f["mw"] for f in s["fuel"]}
+            self.assertEqual(mix, {"Black coal": 5000, "Solar": 1500, "Wind": 700, "Gas": 300, "Hydro": 200})
+            self.assertEqual(s["renewables_pct"], round(2400 / 7700 * 100, 1))
+            self.assertEqual(s["unmatched_generators"], 1)
+            self.assertEqual(s["region_mix"]["VIC1"]["top_fuel"], "Brown coal")
+            snap = a.snapshot()
+            self.assertEqual(snap["nem"]["demand_mw"], round(8032.19 + 6000))
+            # generator list cached on disk; a second poll reads nothing new and refetches no list
+            self.assertTrue((Path(tmp) / "aemo-generators.json").exists())
+            n = len(calls)
+            a.poll()
+            self.assertEqual(a.state["status"], "ok")
+            self.assertFalse([u for u in calls[n:] if u.endswith(".zip") or u == aemo.REGISTRATION_URL])
+            # a fresh start reuses the saved generator list
+            b = aemo.Aemo(store, "NSW1", log=lambda *x: None, data_dir=tmp, fetch=fetch)
+            n = len(calls)
+            b.poll()
+            self.assertNotIn(aemo.REGISTRATION_URL, calls[n:])
+
+    def test_failures_stay_separate(self):
+        fetch, _ = self.fetcher()
+
+        def broken(url, timeout=60):
+            if "Dispatch_SCADA" in url:
+                raise aemo.AemoError("AEMO returned 500 for Dispatch_SCADA")
+            return fetch(url, timeout)
+        a = aemo.Aemo(self._Store(), "NSW1", log=lambda *x: None, fetch=broken)
+        a.poll()
+        self.assertEqual(a.state["status"], "ok")
+        self.assertIn("Dispatch_SCADA", a.state["error"])
+        self.assertEqual(a.state["current"]["rrp"], 106.44)
 
 
 class PageStructure(unittest.TestCase):

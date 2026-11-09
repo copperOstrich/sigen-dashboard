@@ -1467,7 +1467,8 @@
     const ic = $("grid-ics"); ic.innerHTML = "";
     // AEMO reports each interconnector's flow as positive in its "from" to "to" direction
     const IC = { "NSW1-QLD1": ["NSW1", "QLD1"], "N-Q-MNSP1": ["NSW1", "QLD1", "Directlink"], "VIC1-NSW1": ["VIC1", "NSW1"],
-      "V-SA": ["VIC1", "SA1", "Heywood"], "V-S-MNSP1": ["VIC1", "SA1", "Murraylink"], "T-V-MNSP1": ["TAS1", "VIC1", "Basslink"] };
+      "V-SA": ["VIC1", "SA1", "Heywood"], "V-S-MNSP1": ["VIC1", "SA1", "Murraylink"], "T-V-MNSP1": ["TAS1", "VIC1", "Basslink"],
+      "NSW1-SA1": ["NSW1", "SA1", "EnergyConnect"] };
     for (const x of a.interconnectors || []) {
       const m = IC[x.name] || ((x.name || "").split("-").length === 2 ? (x.name || "").split("-") : null);
       let label = x.name;
@@ -1555,7 +1556,7 @@
         const m = IC[x.name]; if (!m || x.mw == null) continue;
         const [from, to] = x.mw >= 0 ? [m[0], m[1]] : [m[1], m[0]];
         const lim = x.mw >= 0 ? x.export_limit : (x.import_limit != null ? -x.import_limit : null);
-        const frac = lim ? Math.min(1, Math.abs(x.mw) / lim) : null;
+        const frac = lim > 0 ? Math.min(1, Math.abs(x.mw) / lim) : null;
         g.append(el("div", { class: "lbl" }, el("b", { text: `${regionName(from)} → ${regionName(to)}` }), m[2] ? ` ${m[2]}` : ""),
           el("div", { class: "val" }, mw(x.mw), frac != null ? el("span", { class: "pct", text: `${Math.round(frac * 100)}%` }) : null),
           el("div", { class: "track", title: frac != null ? `${Math.round(frac * 100)}% of its ${Math.round(lim).toLocaleString()} MW limit in this direction` : "limit not reported" },
@@ -1565,7 +1566,7 @@
     } else if (view === "map") {
       const pos = { QLD1: [700, 70], NSW1: [700, 230], VIC1: [470, 330], SA1: [240, 250], TAS1: [470, 470] };
       const svg = el("svg", { viewBox: "0 0 940 540", role: "img", "aria-label": "Prices, demand and flows across the NEM regions" });
-      for (const [x, y] of [["QLD1", "NSW1"], ["VIC1", "NSW1"], ["VIC1", "SA1"], ["TAS1", "VIC1"]]) {
+      for (const [x, y] of [["QLD1", "NSW1"], ["VIC1", "NSW1"], ["VIC1", "SA1"], ["NSW1", "SA1"], ["TAS1", "VIC1"]]) {
         const f = pairOf(x, y); if (!f || !R[x] || !R[y]) continue;
         const [p, q] = f.mw >= 0 ? [pos[x], pos[y]] : [pos[y], pos[x]];
         const d = `M${p[0]},${p[1]}L${q[0]},${q[1]}`, w = 3 + Math.min(6, Math.abs(f.mw) / 150);
@@ -1606,7 +1607,11 @@
       const f = pairOf("TAS1", "VIC1");
       const tas = el("div", { class: "nem-chain-tas" }, el("div", { class: "col" },
         el("div", { class: "vlink", title: f ? f.parts.join("\n") : null, text: f ? `${f.mw >= 0 ? "↑" : "↓"} ${mw(f.mw)} Basslink` : "" }), reg("TAS1")));
-      out.append(marketTiles(), chain, tas);
+      // EnergyConnect joins NSW and SA directly, which a straight chain can't show
+      const ec = pairOf("NSW1", "SA1");
+      const ecNote = ec && Math.abs(ec.mw) >= 1 ? el("div", { class: "muted nem-chain-note", title: ec.parts.join("\n"),
+        text: `Also ${mw(ec.mw)} from ${regionName(ec.mw >= 0 ? "NSW1" : "SA1")} to ${regionName(ec.mw >= 0 ? "SA1" : "NSW1")} on EnergyConnect` }) : null;
+      out.append(marketTiles(), chain, tas, ecNote);
     }
 
     // ---- table (phones, for the map and the chain)

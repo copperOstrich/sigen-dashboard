@@ -114,7 +114,7 @@ def main():
         retailer.since = RETAILER_SINCE  # no costs to fetch from before you joined
     if retailer:
         threading.Thread(target=retailer.run, daemon=True).start()
-    aemo = Aemo(store, AEMO_REGION, enabled=AEMO_ENABLED, simulate=AEMO_SIMULATE, log=log)
+    aemo = Aemo(store, AEMO_REGION, enabled=AEMO_ENABLED, simulate=AEMO_SIMULATE, log=log, data_dir=DATA_DIR)
     threading.Thread(target=aemo.run, daemon=True).start()
     weather = Weather(store, SITE_LAT, SITE_LON, SITE_ADDRESS, SOLAR_PLANES, SOLAR_KWP,
                       enabled=WEATHER_ENABLED, simulate=SIMULATE, cache_dir=DATA_DIR, tz=TZ, log=log)

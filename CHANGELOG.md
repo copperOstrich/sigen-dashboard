@@ -2,6 +2,21 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 2.2.2
+
+- **AEMO market data works again.** AEMO retired the feeds behind its old NEM data dashboard on
+  9 November 2026 (they now return errors), so the Grid panel went blank. The collector now reads
+  AEMO's official public files on NEMWeb instead, with no account or key:
+  - prices, price status, demand, interchange and interconnector flows for every region every
+    5 minutes, and AEMO's 30-minute forecast whenever a new one is published
+  - the generation mix from each large generator's output and AEMO's registration list (which
+    fuel each one uses), refreshed weekly and kept in the data folder
+  - after a restart the price history is caught up for up to 3 hours
+  - each part still fails on its own, so a problem with one file never blanks the rest
+- **EnergyConnect**, the new NSW to South Australia interconnector, shows in the tiles and map
+  views, and as a note under the chain view
+- Interconnector bars cope with limits that cross zero (when AEMO forces a link one way)
+
 ## 2.2.1
 
 - **Battery > Health**: the Cycles tile shows how far through the battery's rated cycle life it is

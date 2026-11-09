@@ -463,6 +463,7 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .nem-chain, .nem-chain-tas { display: grid; grid-template-columns: 1fr 96px 1fr 96px 1fr 96px 1fr; align-items: center; }
 .nem-chain-tas .col { grid-column: 5; }
 .nem-chain .reg, .nem-chain-tas .reg { padding: 10px 0; }
+.nem-chain-note { font-size: 12px; text-align: right; margin-top: 4px; }
 .nem-chain .reg .k, .nem-chain-tas .reg .k { font-size: 13px; color: var(--ink-2); }
 .nem-chain .reg .v, .nem-chain-tas .reg .v { font: 600 26px/1.25 var(--font-num); font-variant-numeric: tabular-nums; }
 .nem-chain .reg .v small, .nem-chain-tas .reg .v small { font-size: 14px; color: var(--ink-2); font-weight: 500; margin-left: 3px; }

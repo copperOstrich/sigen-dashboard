@@ -501,7 +501,8 @@ export price is negative). The sessions download includes all of it.
 
 ## 3. AEMO market data (on by default, no account needed)
 
-Every 5 minutes the collector reads AEMO's public National Electricity Market feeds for
+Every 5 minutes the collector reads AEMO's official public market files on
+[NEMWeb](https://nemweb.com.au/Reports/Current/) (the same data market participants use) for
 your region and shows:
 
 * the wholesale price (5-minute actuals and AEMO's 30-minute forecast) as a dashed line
@@ -524,9 +525,10 @@ your region and shows:
   On phones, `map` and `chain` show as a table.
 
 Set your region with `AEMO_REGION` (`NSW1`, `QLD1`, `VIC1`, `SA1` or `TAS1`; default
-`NSW1`), or turn it off with `AEMO_ENABLED=0`. These feeds power AEMO's own NEM data
-dashboard but aren't an officially supported API, so AEMO could change them; if that
-happens only this panel stops, everything else carries on. Wholesale prices are shown in
+`NSW1`), or turn it off with `AEMO_ENABLED=0`. The generation mix pairs each large generator's
+output with AEMO's registration list (which fuel it uses), downloaded once a week and kept in the
+data folder as `aemo-generators.json`; rooftop solar isn't included, as on AEMO's own dashboard.
+If AEMO is unreachable only this panel stops, everything else carries on. Wholesale prices are shown in
 c/kWh ($/MWh ÷ 10) and exclude network charges, so they're a guide to when power is
 cheap rather than what you pay.
 
@@ -1042,7 +1044,7 @@ with copperOstrich.
 Register map from Sigenergy's Modbus Protocol (V2.7–V2.9) as implemented by the
 [Sigenergy Local Modbus](https://github.com/TypQxQ/Sigenergy-Local-Modbus) Home Assistant
 integration; Amber endpoints from Amber's public API spec; LocalVolts fields as used by the
-[Localvolts Home Assistant integration](https://github.com/gurrier/localvolts); AEMO feeds
-as used by [aemonemdata](https://github.com/cabberley/aemonemdata) and AEMO's NEM data dashboard.
+[Localvolts Home Assistant integration](https://github.com/gurrier/localvolts); AEMO market data
+from [NEMWeb](https://nemweb.com.au) and AEMO's NEM Registration and Exemption List.
 Weather and irradiance forecasts by [Open-Meteo](https://open-meteo.com) (CC BY 4.0); address lookup by
 [OpenStreetMap Nominatim](https://nominatim.org).
