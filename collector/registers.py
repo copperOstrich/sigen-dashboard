@@ -168,6 +168,38 @@ def reg_count(dtype):
     return {"u16": 1, "s16": 1, "u32": 2, "s32": 2, "u64": 4}[dtype]
 
 
+# Control limits a VPP, Amber or another remote controller can set. These are *holding* registers
+# (function 0x03); the dashboard only ever reads them, so it can never change them. 0xFFFFFFFF
+# means "not set" (see control_values). kW values have gain 1000.
+PLANT_CONTROL = [
+    ("remote_ems_enable",      40029, "u16", 1,    ""),
+    ("phase_control_enable",   40030, "u16", 1,    ""),
+    ("remote_ems_mode",        40031, "u16", 1,    ""),
+    ("ess_max_charge_kw",      40032, "u32", 1000, "kW"),
+    ("ess_max_discharge_kw",   40034, "u32", 1000, "kW"),
+    ("pv_max_power_kw",        40036, "u32", 1000, "kW"),
+    ("grid_export_limit_kw",   40038, "u32", 1000, "kW"),
+    ("grid_import_limit_kw",   40040, "u32", 1000, "kW"),
+    ("pcs_export_limit_kw",    40042, "u32", 1000, "kW"),
+    ("pcs_import_limit_kw",    40044, "u32", 1000, "kW"),
+]
+CONTROL_NOT_SET = 0xFFFFFFFE / 1000
+REMOTE_EMS_MODE = {0: "PCS remote control", 1: "Standby", 2: "Maximum self-consumption",
+                   3: "Command charging (grid first)", 4: "Command charging (solar first)",
+                   5: "Command discharging (solar first)", 6: "Command discharging (battery first)", 8: "V2G"}
+
+
+def control_values(raw):
+    """Readable control limits: kW figures that aren't set become None."""
+    out = {}
+    for name, _a, dtype, gain, _u in PLANT_CONTROL:
+        v = raw.get(name)
+        if v is None:
+            continue
+        out[name] = None if (gain != 1 and v >= CONTROL_NOT_SET) else v
+    return out
+
+
 RUNNING_STATE = {0: "Standby", 1: "Running", 2: "Fault", 3: "Shutdown", 7: "Environmental abnormality"}
 EMS_WORK_MODE = {
     0: "Maximum self-consumption", 1: "AI mode", 2: "Time of use",

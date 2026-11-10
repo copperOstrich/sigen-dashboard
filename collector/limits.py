@@ -10,6 +10,12 @@ it fell well short of that AND one of these explains it:
             exported: the system (or Amber SmartShift) turned the solar down on purpose
   inverter  solar was at the inverter's ceiling (learned the same way)
   full      the battery was full and nothing was being exported (a zero-export or tight limit)
+  vpp       a VPP or remote controller held the solar back for another reason. Confirmed when the
+            inverter reports a solar or export limit it was set to and the solar sat at it;
+            otherwise inferred in VPP scheduling / remote EMS mode when the solar was just
+            covering the house (nothing exported or imported, the battery idle with room in it),
+            which a passing cloud doesn't do. Curtailment while the battery is charging can't be
+            told from cloud, so it isn't counted unless the inverter's limits confirm it
 
 The energy lost is the shortfall against the model, so it is an estimate; a cloud passing at the
 same moment can't be told apart, which is why only minutes with a clear explanation count. Without
@@ -19,7 +25,8 @@ out once and kept.
 import time
 from datetime import datetime, timedelta
 
-REASONS = ("export", "negative", "inverter", "full")
+REASONS = ("export", "negative", "inverter", "full", "vpp")
+VPP_MODES = {6, 7}  # EMS work mode: VPP scheduling, remote EMS
 LEARN_DAYS = 30
 
 
@@ -33,6 +40,9 @@ class Limits:
         with store.lock:
             store.db.execute("CREATE TABLE IF NOT EXISTS limit_days(day TEXT, reason TEXT, minutes INTEGER, kwh REAL, "
                              "value REAL, modelled INTEGER, PRIMARY KEY(day, reason))")
+            cols = {r[1] for r in store.db.execute("PRAGMA table_info(limit_days)")}
+            if "confirmed" not in cols:  # vpp: minutes the inverter's own control limits confirm
+                store.db.execute("ALTER TABLE limit_days ADD COLUMN confirmed INTEGER")
             store.db.commit()
 
     # ---------------------------------------------------------------- ceilings
@@ -71,10 +81,12 @@ class Limits:
         caps = self.caps
         with self.store.lock:
             rows = self.store.db.execute(
-                "SELECT ts, pv, battery, grid, soc, sell_c FROM samples WHERE ts>=? AND ts<? AND COALESCE(est, 0) = 0 ORDER BY ts", (t0, t1)).fetchall()
+                "SELECT ts, pv, battery, grid, soc, sell_c, pv_cap, exp_cap, ems FROM samples "
+                "WHERE ts>=? AND ts<? AND COALESCE(est, 0) = 0 ORDER BY ts", (t0, t1)).fetchall()
         out = {r: {"minutes": 0, "kwh": 0.0, "value": 0.0} for r in REASONS}
+        out["vpp"]["confirmed"] = 0
         modelled = False
-        for ts, pv, batt, grid, soc, sell in rows:
+        for ts, pv, batt, grid, soc, sell, pv_cap, exp_cap, ems in rows:
             if pv is None or grid is None:
                 continue
             exp = self.expected(ts // 3600 * 3600)
@@ -83,15 +95,30 @@ class Limits:
             if (exp or 0) < 300 and pv < 300:
                 continue  # night, or too little sun to matter
             export = -grid
-            reason = None
+            reason, confirmed = None, False
+            # a limit the controller set, tighter than the system's own: is the solar or export at it?
+            if pv_cap is not None and pv_cap < (caps.get("pv_w") or 1e9) * 0.9 and pv >= pv_cap - max(200, 0.05 * pv_cap):
+                confirmed = True
+            elif (exp_cap is not None and exp_cap < (caps.get("export_w") or 1e9) * 0.9
+                  and export >= exp_cap - 250 and (batt or 0) < 150):
+                # exports at the set limit and the battery not taking the rest: the solar had nowhere
+                # to go (while the battery charges, a cloud would look the same)
+                confirmed = True
             if sell is not None and sell > 0 and export < 250:
                 reason = "negative"
+            elif confirmed:
+                reason = "vpp"
             elif caps.get("export_w") and export >= caps["export_w"] * 0.96:
                 reason = "export"
             elif caps.get("pv_w") and pv >= caps["pv_w"] * 0.97:
                 reason = "inverter"
             elif soc is not None and soc >= 97 and abs(grid) < 250 and (batt or 0) < 150:
                 reason = "full"
+            elif ems in VPP_MODES and abs(grid) < 250 and abs(batt or 0) < 150 and (soc is None or soc < 97):
+                # solar just covering the house, with the battery neither charging nor discharging and
+                # room in it: held back. Under cloud the house would draw from the grid or the battery,
+                # or any surplus would charge the battery
+                reason = "vpp"
             if reason is None:
                 continue
             short = None
@@ -99,10 +126,14 @@ class Limits:
                 short = exp - pv
                 if short < max(250.0, 0.1 * exp):
                     continue  # producing about what the sun allowed
-            elif reason in ("inverter", "full"):
+            elif reason in ("inverter", "full") or (reason == "vpp" and not confirmed):
                 continue  # without the model these can't be told from a sunny peak or a quiet hour
+            if reason == "vpp" and not confirmed and short is not None and short < max(500.0, 0.2 * exp):
+                continue  # inferred only from a clear shortfall, to stay clear of thin cloud
             o = out[reason]
             o["minutes"] += 1
+            if reason == "vpp" and confirmed:
+                o["confirmed"] += 1
             if short is not None:
                 kwh = short / 60000.0
                 o["kwh"] += kwh
@@ -126,10 +157,13 @@ class Limits:
             return []
         with self.store.lock:
             cached = {}
-            for day, reason, mins, kwh, value, modelled in self.store.db.execute(
-                    "SELECT day, reason, minutes, kwh, value, modelled FROM limit_days WHERE day>=?",
+            for day, reason, mins, kwh, value, modelled, conf in self.store.db.execute(
+                    "SELECT day, reason, minutes, kwh, value, modelled, confirmed FROM limit_days WHERE day>=?",
                     ((today - timedelta(days=n)).isoformat(),)):
-                cached.setdefault(day, {"modelled": bool(modelled)})[reason] = {"minutes": mins, "kwh": kwh, "value": value}
+                rec = {"minutes": mins, "kwh": kwh, "value": value}
+                if reason == "vpp":
+                    rec["confirmed"] = conf or 0
+                cached.setdefault(day, {"modelled": bool(modelled)})[reason] = rec
         out = []
         for i in range(n - 1, -1, -1):
             day = (today - timedelta(days=i)).isoformat()
@@ -143,9 +177,11 @@ class Limits:
                 # keep finished days; a day inside the model's reach without it may get it later
                 if i > 0 and self._rows and (modelled or i > 13):
                     with self.store.lock:
-                        self.store.db.executemany("INSERT OR REPLACE INTO limit_days VALUES (?,?,?,?,?,?)",
-                                                  [(day, r, res[r]["minutes"], res[r]["kwh"], res[r]["value"], int(modelled))
-                                                   for r in REASONS])
+                        self.store.db.executemany(
+                            "INSERT OR REPLACE INTO limit_days (day, reason, minutes, kwh, value, modelled, confirmed) "
+                            "VALUES (?,?,?,?,?,?,?)",
+                            [(day, r, res[r]["minutes"], res[r]["kwh"], res[r]["value"], int(modelled),
+                              res[r].get("confirmed")) for r in REASONS])
                         self.store.db.commit()
             out.append({"day": day, **rec})
         return out
@@ -157,7 +193,9 @@ class Limits:
 
         def total(rows):
             t = {r: {"minutes": 0, "kwh": 0.0, "value": 0.0} for r in REASONS}
+            t["vpp"]["confirmed"] = 0
             for d in rows:
+                t["vpp"]["confirmed"] += (d.get("vpp") or {}).get("confirmed") or 0
                 for r in REASONS:
                     x = d.get(r) or {}
                     t[r]["minutes"] += x.get("minutes") or 0

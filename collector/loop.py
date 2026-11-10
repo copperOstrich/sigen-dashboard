@@ -39,6 +39,7 @@ from amber import Amber  # noqa: E402
 from localvolts import LocalVolts  # noqa: E402
 from modbus import DeviceReader, ModbusError, ModbusTCPClient  # noqa: E402
 from registers import (EMS_WORK_MODE, INVERTER, MAX_PV_STRINGS, ON_OFF_GRID, PLANT,  # noqa: E402
+                       PLANT_CONTROL, REMOTE_EMS_MODE, control_values,
                        RUNNING_STATE, decode_alarms)
 
 
@@ -52,6 +53,9 @@ class Collector:
         self.aemo = aemo
         self.client = ModbusTCPClient(host, port)
         self.plant = DeviceReader(self.client, PLANT_UNIT, PLANT)
+        # limits a VPP or remote controller has set (read only, every 30 s)
+        self.control = DeviceReader(self.client, PLANT_UNIT, PLANT_CONTROL, holding=True)
+        self.ctl, self._ctl_at = {}, 0
         self.inverter = DeviceReader(self.client, INVERTER_UNIT, INVERTER) if INVERTER_UNIT else None
         # Strings beyond PV4 are only read once the inverter says it has them (register 31025)
         self.extra_strings = {f"pv{n}_{k}" for n in range(5, MAX_PV_STRINGS + 1) for k in ("voltage", "current")}
@@ -126,10 +130,19 @@ class Collector:
                     log(f"Inverter reports {count} PV string{'s' if count != 1 else ''}")
             except Exception as e:  # inverter unit id may be wrong - plant data still useful
                 inv = {"_error": str(e)}
+        if time.time() - self._ctl_at >= 30:
+            self._ctl_at = time.time()
+            try:
+                self.ctl = control_values(self.control.read())
+            except Exception as e:  # never let these break the readings: back off for an hour
+                self.ctl, self._ctl_at = {}, time.time() + 3600
+                log(f"Couldn't read the control limits ({type(e).__name__}: {e}); trying again in an hour")
+                if isinstance(e, OSError):
+                    self.client.close()  # a timed-out reply could arrive late and confuse the next read
         buy, sell = self.retailer.prices_now() if self.retailer else (None, None)
         ev = self.charger.read(time.time(), p.get("grid_power"), buy, p, sell_c=sell)
-        self.raw = {"plant": p, "inverter": inv, "charger": self.charger.debug(), "read_at": time.time(),
-                    "unsupported": {"plant": sorted(self.plant.unsupported),
+        self.raw = {"plant": p, "inverter": inv, "charger": self.charger.debug(), "control": self.ctl, "read_at": time.time(),
+                    "unsupported": {"plant": sorted(self.plant.unsupported), "control": sorted(self.control.unsupported),
                                     "inverter": sorted(self.inverter.unsupported) if self.inverter else []}}
         now = time.time()
         was = self.state.get("status")
@@ -356,6 +369,7 @@ class Collector:
                 "running_state": RUNNING_STATE.get(int(p.get("running_state", -1)), "Unknown"),
                 "running_code": p.get("running_state"),
                 "ems_mode": EMS_WORK_MODE.get(int(p.get("ems_work_mode", -1)), "Unknown"),
+                "control": self.control_summary(),
                 "grid_status": ON_OFF_GRID.get(int(p.get("on_off_grid", -1)), "Unknown"),
                 "grid_meter": "Connected" if p.get("grid_sensor_status") == 1 else "Not connected",
                 "model": inv.get("model"), "serial": inv.get("serial"), "firmware": inv.get("firmware"),
@@ -452,9 +466,12 @@ class Collector:
         last = acc[-1]
         buy, sell = self.retailer.prices_now() if self.retailer else (None, None)
         evs = [a["ev"] for a in acc if a.get("ev") is not None]
+        # the tightest limit a controller set during the minute (None when none was set)
+        cap = lambda i: min((a["caps"][i] for a in acc if a.get("caps") and a["caps"][i] is not None), default=None)
         self.store.insert([(self.minute_bucket, local_day(self.minute_bucket),
                             avg("pv"), avg("load"), avg("battery"), avg("grid"), last["soc"],
-                            *[last[c] for c in COUNTERS], buy, sell, sum(evs) / len(evs) if evs else None)])
+                            *[last[c] for c in COUNTERS], buy, sell, sum(evs) / len(evs) if evs else None,
+                            cap(0), cap(1), last.get("ems"))])
         self.minute_acc = []
 
     def record(self, p, now, inv=None):
@@ -472,7 +489,27 @@ class Collector:
         self.minute_acc.append({"pv": p.get("pv_power", 0), "load": p.get("load_power", 0),
                                 "battery": p.get("battery_power", 0), "grid": p.get("grid_power", 0),
                                 "soc": p.get("battery_soc"), **{c: p.get(c) for c in COUNTERS},
-                                "strings": self._strings_now(inv), "ev": self.charger.power})
+                                "strings": self._strings_now(inv), "ev": self.charger.power,
+                                "caps": self.caps_now(), "ems": p.get("ems_work_mode")})
+
+    def caps_now(self):
+        """(solar cap W, export cap W) a controller has set right now, None when not set."""
+        c = self.ctl or {}
+        pv = c.get("pv_max_power_kw")
+        exp = [v for v in (c.get("grid_export_limit_kw"), c.get("pcs_export_limit_kw")) if v is not None]
+        return (pv * 1000 if pv is not None else None), (min(exp) * 1000 if exp else None)
+
+    def control_summary(self):
+        c = self.ctl or {}
+        if not c:
+            return None
+        pv, exp = self.caps_now()
+        chg = c.get("ess_max_charge_kw")
+        return {"remote": bool(c.get("remote_ems_enable")),
+                "mode": REMOTE_EMS_MODE.get(c.get("remote_ems_mode")) if c.get("remote_ems_enable") else None,
+                "pv_cap_kw": round(pv / 1000, 2) if pv is not None else None,
+                "export_cap_kw": round(exp / 1000, 2) if exp is not None else None,
+                "charge_cap_kw": round(chg, 2) if chg is not None else None}
 
     def _strings_now(self, inv):
         inv = inv or {}
@@ -518,7 +555,8 @@ def start_simulator(store):
             buy, feed, spot = (None, None, None) if (AMBER_KEY or LV_KEY) else Amber.sim_price(ts)
             rows.append((ts, t.strftime("%Y-%m-%d"), plant.p["pv"], plant.p["load"], plant.p["battery"],
                          plant.p["grid"], plant.soc, tot["pv"], tot["load"], tot["import"], tot["export"],
-                         tot["charge"], tot["discharge"], buy, feed, plant.p["ev"] if tracker else None))
+                         tot["charge"], tot["discharge"], buy, feed, plant.p["ev"] if tracker else None,
+                         plant.pv_cap, None, 6))
             if tracker:
                 tracker.update(ts, plant.charger_values(), plant.p["grid"], buy, quiet=True)
             for n, (v, a) in enumerate(plant.string_values(), 1):

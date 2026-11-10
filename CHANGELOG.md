@@ -2,6 +2,22 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 2.3.0
+
+- **Solar held back by a VPP.** Solar > Limits has a new reason, **VPP**, for solar turned down
+  for reasons other than a negative feed-in price, with the kWh, what those exports would have
+  earned, and a monthly total:
+  - **confirmed** minutes, when the inverter reports a solar or export limit that a VPP or remote
+    controller set and the solar sat at it. The collector now reads those control limits (holding
+    registers 40029 to 40045, every 30 seconds, read only) and stores them each minute; if they
+    can't be read it backs off for an hour and everything else carries on
+  - **inferred** minutes, in VPP scheduling or remote EMS mode, when the solar was just covering
+    the house with the battery idle and room in it, which cloud doesn't do
+  - in VPP mode the negative-price reason is labelled as the VPP's as well
+  - the tab says what the inverter reports right now (remote control on or off, any solar,
+    export or charging limit), and `/api/debug` includes the raw control values
+- The simulator has occasional VPP curtailments with a solar limit, for testing
+
 ## 2.2.2
 
 - **AEMO market data works again.** AEMO retired the feeds behind its old NEM data dashboard on

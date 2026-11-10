@@ -34,7 +34,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from modbus import encode
-from registers import CHARGER, CHARGER_SET_CURRENT, INVERTER, PLANT, PLANT_UNIT_ID, reg_count
+from registers import CHARGER, CHARGER_SET_CURRENT, INVERTER, PLANT, PLANT_CONTROL, PLANT_UNIT_ID, reg_count
 
 def _env_float(name, default):
     try:
@@ -156,6 +156,7 @@ class SimPlant:
         self.daily = {"pv": 0.0, "load": 0.0, "charge": 0.0, "discharge": 0.0}
         self.yesterday_pv = 61.3
         self.p = {"pv": 0.0, "load": 0.0, "battery": 0.0, "grid": 0.0, "ev": 0.0}
+        self.pv_cap = None  # a VPP's solar limit in force (W), None when not set
         self.ev_state, self.ev_total = 1, 2316.4
         self.lock = threading.Lock()
 
@@ -173,6 +174,12 @@ class SimPlant:
         # Price spike export window on some days (what Amber SmartShift does)
         if 18.0 <= h < 18.5 and _rand(t.date().isoformat(), "spike-export") > 0.45 and self.soc > 35:
             batt = -min(MAX_BATT_W, load + EXPORT_LIMIT_W)
+        # A VPP curtailment on some days: solar held to the home's use, battery held (set via the cloud,
+        # reported in the solar limit register)
+        self.pv_cap = None
+        if 11.0 <= h < 12.5 and _rand(t.date().isoformat(), "vpp-curtail") > 0.5 and pv > load + ev:
+            self.pv_cap = load + ev
+            pv, batt = load + ev, 0.0
         grid = load + ev + batt - pv
         if grid < -EXPORT_LIMIT_W:  # export limited -> curtail PV
             pv -= (-grid - EXPORT_LIMIT_W)
@@ -229,6 +236,11 @@ class SimPlant:
         }
         for i in range(1, 8):
             v[f"alarm{i}"] = alarms.get(f"alarm{i}", 0)
+        unset = 0xFFFFFFFF / 1000  # "not set" once scaled by the registers' gain of 1000
+        v.update({"remote_ems_enable": 0, "remote_ems_mode": 0, "phase_control_enable": 0,
+                  **{n: unset for n, *_ in PLANT_CONTROL if n.endswith("_kw")}})
+        if self.pv_cap is not None:
+            v["pv_max_power_kw"] = round(self.pv_cap) / 1000
         return v
 
     # Example roof: four strings on three roof faces, so the simulated strings peak at
@@ -343,7 +355,7 @@ class Handler(socketserver.BaseRequestHandler):
             addr, count = struct.unpack(">HH", pdu[1:5])
             plant.step()
             if unit == PLANT_UNIT_ID:
-                regs = register_image(PLANT, plant.plant_values(self.server.alarms))
+                regs = register_image(PLANT + PLANT_CONTROL, plant.plant_values(self.server.alarms))
             elif unit == inverter_unit:
                 regs = register_image(INVERTER, plant.inverter_values())
             elif EV_ON and CHARGER_ON_MODBUS and unit == CHARGER_UNIT:

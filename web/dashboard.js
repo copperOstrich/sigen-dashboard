@@ -1691,9 +1691,14 @@
   // ------------------------------------------------------------ solar limits
   let limData = null;
   const LIM = [["export", "Export limit", "var(--grid)"], ["negative", "Negative feed-in price", "var(--home)"],
-    ["inverter", "Inverter at maximum", "var(--solar)"], ["full", "Battery full, not exporting", "var(--battery)"]];
+    ["inverter", "Inverter at maximum", "var(--solar)"], ["full", "Battery full, not exporting", "var(--battery)"],
+    ["vpp", "Held back by VPP", "var(--ev)"]];
   function drawLimits() {
     const d = limData ? { ...limData } : null, panel = $("lim-panel");
+    // in VPP mode the negative-price curtailment is the VPP too: say so
+    const vppMode = d && /VPP|Remote/.test(d.ems_mode || "");
+    LIM[1][1] = vppMode ? "VPP, negative feed-in price" : "Negative feed-in price";
+    LIM[4][1] = vppMode ? "VPP, other times" : "Held back by VPP";
     if (d && d.modelled && d.days) {  // days before the weather model's reach have no kWh: start the chart after them
       const i = d.days.findIndex((x) => x.modelled);
       if (i > 0) d.days = d.days.slice(i);
@@ -1713,6 +1718,11 @@
         el("span", {}, el("b", { text: `${tot(p).toFixed(1)} kWh` }), "in the last 30 days"));
       const lost = p.export.value + p.inverter.value + p.full.value, saved = -p.negative.value;
       if (lost >= 0.01) sm.append(el("span", {}, el("b", { text: `$${lost.toFixed(2)}` }), "of exports missed"));
+      if (p.vpp && p.vpp.minutes) {
+        const v = p.vpp.value;
+        sm.append(el("span", {}, el("b", { text: `${p.vpp.kwh.toFixed(1)} kWh` }),
+          `held back by the VPP${vppMode ? " at other times" : ""}${Math.abs(v) >= 0.01 ? (v > 0 ? `, $${v.toFixed(2)} of exports missed` : `, $${(-v).toFixed(2)} not paid to export`) : ""}`));
+      }
       if (saved >= 0.01) sm.append(el("span", {}, el("b", { text: `$${saved.toFixed(2)}` }), "not paid to export at negative prices"));
     } else {
       sm.append(el("span", {}, el("b", { text: `${Math.round(mins(p) / 60)} h` }), "of limited solar in the last 30 days"));
@@ -1728,14 +1738,26 @@
         yFmt: (v) => `${v}`, ariaLabel: d.modelled ? "Solar held back each day, kWh, by reason" : "Hours of limited solar each day, by reason",
         tip: (i) => LIM.filter(([k]) => (d.days[i][k] || {}).minutes).map(([k, l, c]) => {
           const x = d.days[i][k];
-          return [l, `${x.kwh != null ? `${x.kwh.toFixed(1)} kWh, ` : ""}${x.minutes} min${x.value ? `, ${x.value < 0 ? "saved" : "worth"} $${Math.abs(x.value).toFixed(2)}` : ""}`, c];
+          const conf = k === "vpp" && x.confirmed ? ` (${x.confirmed === x.minutes ? "all" : x.confirmed} confirmed by the inverter)` : "";
+          return [l, `${x.kwh != null ? `${x.kwh.toFixed(1)} kWh, ` : ""}${x.minutes} min${conf}${x.value ? `, ${x.value < 0 ? "saved" : "worth"} $${Math.abs(x.value).toFixed(2)}` : ""}`, c];
         }) });
     }
     const caps = d.caps || {};
     $("lim-note").textContent = "Solar the panels could have made but didn't, against the weather model's expected output for each hour: when exports sat at the limit" +
       (caps.export_w ? ` (${(caps.export_w / 1000).toFixed(1)} kW, ${caps.export_source === "setting" ? "from Settings" : "learned"})` : "") +
-      ", the feed-in price was negative and nothing was exported (turned down on purpose), the inverter was at its maximum, or the battery was full with nowhere to send it. Estimates; passing cloud isn't counted." +
+      ", the feed-in price was negative and nothing was exported (turned down on purpose), the inverter was at its maximum, the battery was full with nowhere to send it, or a VPP held it back. " +
+      "VPP minutes are confirmed when the inverter reports a solar or export limit it was set to; otherwise they're counted only when the solar was just covering the house with the battery idle and room in it, which cloud doesn't do (curtailment while the battery charges can't be told from cloud). " +
+      "Estimates; passing cloud isn't counted." + ctlNote(d) +
       (d.modelled ? "" : " Turn on the weather forecast (Settings, latitude and longitude) to estimate kWh.");
+  }
+  function ctlNote(d) {
+    const c = d.control;
+    if (!c) return d.ems_mode ? ` Your system is in ${d.ems_mode} mode; the inverter doesn't report the limits a VPP sets, so VPP minutes are inferred.` : "";
+    const now = [];
+    if (c.pv_cap_kw != null) now.push(`solar capped at ${c.pv_cap_kw} kW`);
+    if (c.export_cap_kw != null) now.push(`exports capped at ${c.export_cap_kw} kW`);
+    if (c.charge_cap_kw != null) now.push(`battery charging capped at ${c.charge_cap_kw} kW`);
+    return ` Right now: ${c.remote ? `remote control on${c.mode ? ` (${c.mode})` : ""}` : "no remote control"}${now.length ? ", " + now.join(", ") : ", no limits set"}.`;
   }
   async function loadLimits() {
     try { limData = await S.fetchJSON("/api/limits?days=30"); drawLimits(); } catch (e) { /* banner */ }

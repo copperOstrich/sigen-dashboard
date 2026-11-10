@@ -159,10 +159,12 @@ def build_blocks(defs, max_regs=120):
 class DeviceReader:
     """Reads a register set from one Modbus unit, remembering unsupported registers."""
 
-    def __init__(self, client, unit, defs):
+    def __init__(self, client, unit, defs, holding=False):
         self.client, self.unit, self.defs = client, unit, defs
         self.unsupported = set()
         self.blocks = build_blocks(defs)
+        # holding registers are still only read (function 0x03); this module can't write
+        self._read_fn = client.read_holding_registers if holding else client.read_input_registers
 
     def read(self):
         values = {}
@@ -173,7 +175,7 @@ class DeviceReader:
             start = block[0][1]
             count = block[-1][1] + reg_count(block[-1][2]) - start
             try:
-                regs = self.client.read_input_registers(self.unit, start, count)
+                regs = self._read_fn(self.unit, start, count)
                 for name, addr, dtype, gain, _u in block:
                     off = addr - start
                     values[name] = scale(decode(dtype, regs[off:off + reg_count(dtype)]), dtype, gain)
@@ -182,7 +184,7 @@ class DeviceReader:
                 # hide the rest of the block.
                 for name, addr, dtype, gain, _u in block:
                     try:
-                        regs = self.client.read_input_registers(self.unit, addr, reg_count(dtype))
+                        regs = self._read_fn(self.unit, addr, reg_count(dtype))
                         values[name] = scale(decode(dtype, regs), dtype, gain)
                     except ModbusException:
                         self.unsupported.add(name)

@@ -80,7 +80,9 @@ class Store:
                             "avg_buy_c REAL, source TEXT, PRIMARY KEY(start, end))")
             cols = {r[1] for r in self.db.execute("PRAGMA table_info(samples)")}
             # buy_c/sell_c: retailer price (c/kWh, Amber sign) in force that minute; ev: AC charger W
-            for c in ("buy_c", "sell_c", "ev"):
+            # pv_cap/exp_cap: solar and export limits a VPP or remote controller set that minute (W, None
+            # when not set); ems: the EMS work mode (6 = VPP scheduling)
+            for c in ("buy_c", "sell_c", "ev", "pv_cap", "exp_cap", "ems"):
                 if c not in cols:
                     self.db.execute(f"ALTER TABLE samples ADD COLUMN {c} REAL")
             # est: 1 for minutes filled in after the collector was off (gapfill.py), not read from the inverter
@@ -99,11 +101,12 @@ class Store:
             return self.db.execute("SELECT COUNT(*) FROM samples").fetchone()[0] == 0
 
     def insert(self, rows):
+        rows = [tuple(r) + (None,) * (19 - len(r)) for r in rows]  # older callers leave out the control columns
         with self.lock:
             self.db.executemany(
                 "INSERT OR REPLACE INTO samples (ts, day, pv, load, battery, grid, soc, total_pv_kwh, total_load_kwh, "
-                "total_import_kwh, total_export_kwh, total_charge_kwh, total_discharge_kwh, buy_c, sell_c, ev) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+                "total_import_kwh, total_export_kwh, total_charge_kwh, total_discharge_kwh, buy_c, sell_c, ev, "
+                "pv_cap, exp_cap, ems) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
             self.db.commit()
 
     # ---- filling in after the collector was off (gapfill.py)

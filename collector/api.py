@@ -447,7 +447,11 @@ class Api(BaseHTTPRequestHandler):
             if url.path == "/api/strings-health":
                 return self._json(self.collector.health.result)
             if url.path == "/api/limits":
-                return self._json(Api.limits.summary(min(400, max(1, int(q.get("days", ["30"])[0])))))
+                res = Api.limits.summary(min(400, max(1, int(q.get("days", ["30"])[0]))))
+                sysinfo = self.collector.snapshot().get("system") or {}
+                res["control"] = sysinfo.get("control")       # limits a VPP has set right now, if readable
+                res["ems_mode"] = sysinfo.get("ems_mode")
+                return self._json(res)
             if url.path == "/api/battery-wear":
                 return self._json(battery_wear(self.store, self.collector.snapshot(), TZ, installed=SYSTEM_INSTALLED or None,
                                                warranty_years=BATTERY_WARRANTY_YEARS, warranty_mwh=BATTERY_WARRANTY_MWH,

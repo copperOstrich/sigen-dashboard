@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -214,6 +215,66 @@ class Trading(unittest.TestCase):
         self.assertTrue(s["caught"])
         self.assertEqual(res["what_if"][0]["reserve"], 20)
         self.assertAlmostEqual(res["what_if"][0]["outage_hours"], 10.0)  # 4 kWh at 400 W
+
+
+class VppCurtailment(unittest.TestCase):
+    """Solar limits: the VPP reason, confirmed by the control registers or inferred."""
+
+    def run_day(self, minute):
+        """One day of minutes from minute(m) -> (pv, battery, grid, soc, sell, pv_cap, exp_cap, ems); model 6 kW all day."""
+        import sigen_collector as sc
+        from limits import Limits
+        from registers import control_values
+        st = sc.Store(Path(tempfile.mkdtemp()) / "t.db")
+        day = "2026-11-02"
+        t0 = int(datetime.fromisoformat(day).replace(tzinfo=sc.TZ).timestamp())
+        rows = []
+        for m in range(10 * 60, 14 * 60):  # 10 am to 2 pm
+            pv, batt, grid, soc, sell, pvc, expc, ems = minute(m)
+            rows.append((t0 + m * 60, day, pv, 1000, batt, grid, soc, 0, 0, 0, 0, 0, 0, 20.0, sell, None, pvc, expc, ems))
+        st.insert(rows)
+        lim = Limits(st, sc.TZ, expected=lambda h: 6000.0, export_limit_kw=5)
+        lim.caps["pv_w"] = 10000
+        res, modelled = lim.analyse_day(day)
+        self.assertTrue(modelled)
+        self.assertIsNone(control_values({"pv_max_power_kw": 0xFFFFFFFF / 1000})["pv_max_power_kw"])
+        return res
+
+    def test_confirmed_by_solar_limit(self):
+        # 11:00-12:00 the VPP caps solar at 1 kW (the home's use): 60 confirmed minutes, 5 kWh short
+        cap = lambda m: 11 * 60 <= m < 12 * 60
+        res = self.run_day(lambda m: (1000, 0, 0, 60, -5.0, 1000, None, 6) if cap(m) else (6000, 2000, -3000, 60, -5.0, None, None, 6))
+        self.assertEqual(res["vpp"]["minutes"], 60)
+        self.assertEqual(res["vpp"]["confirmed"], 60)
+        self.assertAlmostEqual(res["vpp"]["kwh"], 5.0, places=2)
+        self.assertAlmostEqual(res["vpp"]["value"], 0.25, places=2)  # 5 kWh at 5c feed-in missed
+        self.assertEqual(sum(res[r]["minutes"] for r in ("export", "negative", "inverter", "full")), 0)
+
+    def test_inferred_when_house_only(self):
+        # no limit reported, but solar held to the house with the battery idle and room in it
+        res = self.run_day(lambda m: (1000, 0, 0, 60, -5.0, None, None, 6) if m < 11 * 60 else (6000, 2000, -3000, 60, -5.0, None, None, 6))
+        self.assertEqual(res["vpp"]["minutes"], 60)
+        self.assertEqual(res["vpp"]["confirmed"], 0)
+
+    def test_cloud_not_counted(self):
+        # cloud: solar short but the house draws from the grid, or the battery takes a smaller surplus
+        res = self.run_day(lambda m: (500, 0, 500, 60, -5.0, None, None, 6) if m < 12 * 60 else (2000, 1000, 0, 60, -5.0, None, None, 6))
+        self.assertEqual(res["vpp"]["minutes"], 0)
+
+    def test_not_inferred_outside_vpp_mode(self):
+        res = self.run_day(lambda m: (1000, 0, 0, 60, -5.0, None, None, 0))
+        self.assertEqual(res["vpp"]["minutes"], 0)
+
+    def test_negative_price_stays_its_own_reason(self):
+        res = self.run_day(lambda m: (1000, 0, 0, 60, 3.0, 1000, None, 6))
+        self.assertEqual(res["negative"]["minutes"], 240)
+        self.assertEqual(res["vpp"]["minutes"], 0)
+
+    def test_zero_export_limit_needs_idle_battery(self):
+        # export capped at 0: confirmed only while the battery isn't soaking up the rest
+        res = self.run_day(lambda m: (1000, 0, 0, 60, -5.0, None, 0, 0) if m < 11 * 60 else (3000, 2000, 0, 60, -5.0, None, 0, 0))
+        self.assertEqual(res["vpp"]["minutes"], 60)
+        self.assertEqual(res["vpp"]["confirmed"], 60)
 
 
 class Forecasts(unittest.TestCase):

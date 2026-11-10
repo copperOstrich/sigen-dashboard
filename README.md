@@ -654,6 +654,21 @@ it. The energy lost is the shortfall against the weather model's expected output
 those exports would have earned. Passing cloud isn't counted. Shown for the last 30 days and the
 month so far.
 
+**Held back by a VPP.** If a VPP (or Amber, or another remote controller) turns the solar down for
+another reason, those minutes count as **VPP** too:
+
+* **confirmed** when the inverter reports a solar or export limit that was set (its remote control
+  registers, 40029 to 40045, read every 30 seconds; the dashboard only ever reads them) and the
+  solar sat at it. Whether a VPP's commands show up there depends on how it controls the system,
+  so the tab says what the inverter reports right now
+* otherwise **inferred** in VPP scheduling or remote EMS mode, when the solar was just covering the
+  house with nothing exported or imported and the battery idle with room in it, which cloud doesn't
+  do. Curtailment while the battery is charging looks the same as cloud, so it's only counted when
+  the inverter's limits confirm it
+
+In VPP mode the negative-price minutes are labelled as the VPP's too, so the two together are
+everything it held back. VPP minutes are counted from 2.3.0 on.
+
 ### Battery trading (Money > Trading)
 
 How well the battery is traded with the grid (Amber SmartShift or a VPP), from the collector's
