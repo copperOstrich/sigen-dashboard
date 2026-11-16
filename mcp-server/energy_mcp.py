@@ -451,7 +451,8 @@ class TokenGate:
                 await send({"type": "http.response.body", "body": body})
                 return
         if scope["type"] == "http" and scope.get("path") == "/health":
-            body = json.dumps({"ok": True, "version": VERSION, "dashboard": DASHBOARD_URL}).encode()
+            # no token needed here, so it says nothing about the network (not even the dashboard's address)
+            body = json.dumps({"ok": True, "version": VERSION}).encode()
             await send({"type": "http.response.start", "status": 200,
                         "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})
             await send({"type": "http.response.body", "body": body})

@@ -55,8 +55,8 @@ Settings:
 | `MCP_PORT` | Default `8000` |
 | `TZ` | For readable times. Default `Australia/Sydney` |
 
-Check it's up: `http://<address>:8000/health` should show `{"ok": true, ...}`. Everything else
-needs the token.
+Check it's up: `http://<address>:8000/health` should show `{"ok": true, "version": "1.0.0"}`.
+Everything else needs the token.
 
 ## Connecting Claude Desktop
 

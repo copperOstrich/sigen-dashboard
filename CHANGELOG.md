@@ -2,6 +2,42 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## Home Energy MCP server 1.0.0
+
+A separate, optional container (`ghcr.io/copperostrich/sigen-dashboard-mcp`) that lets Claude, or
+any app that speaks the Model Context Protocol, answer questions from your own dashboard. The
+dashboard itself is unchanged and stays at 2.3.0. Setup is in [`mcp-server/README.md`](mcp-server/README.md).
+
+- **14 read-only tools** over the dashboard's HTTP API:
+  - `home_energy_now`, `electricity_prices`, `battery_outlook` and `best_time_to_use_power`
+  - `plan_ev_charging` and `ev_charging`
+  - `energy_by_day`, `energy_by_month` and `power_history`
+  - `weather_and_solar_forecast`, `battery_health`, `system_health` and `money_summary`
+  - `dashboard_api`, which reads any other listed endpoint. Settings, backups, debug dumps, the
+    live stream and anything that changes state can't be reached
+- **It never talks to the inverter**, so it adds no Modbus load. Every tool is marked read-only,
+  and none can change settings, the battery or the charger
+- **Security:**
+  - every request needs `Authorization: Bearer <MCP_TOKEN>`, checked in constant time, and the
+    server won't start with a token under 16 characters
+  - `MCP_ALLOWED_HOSTS` optionally refuses requests addressed to any other host name (a guard
+    against DNS rebinding)
+  - `/health` is open, for container health checks, and gives only the version
+  - meant for your home network or VPN only. Don't port-forward it
+- **Connecting:**
+  - Claude Desktop connects through the `mcp-remote` bridge
+  - Claude Code connects with `claude mcp add --transport http`
+  - on a PC, `python energy_mcp.py stdio` runs without a token
+- **Deployment:**
+  - `qnap/docker-compose.own-ip-with-mcp.yml` runs the dashboard (on its own IP) and the MCP
+    server together on one qnet network
+  - the MCP README has the service to add for the ordinary port-8088 setup
+- **Builds:** a new workflow, `Build MCP server image`, builds amd64 and arm64 images when
+  `mcp-server/` changes on main, and for release tags. `latest` follows main, and release tags
+  also tag the image with the dashboard's version number (for example `:2.4.0`), so the image tag
+  and the server's own version (1.0.0) don't match
+- Uses the MCP Python SDK 2.3 (`mcp==2.3.*`) on Python 3.12, and runs as a non-root user
+
 ## 2.3.0
 
 - **Solar held back by a VPP.** Solar > Limits has a new reason, **VPP**, for solar turned down
