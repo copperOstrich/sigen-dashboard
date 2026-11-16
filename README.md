@@ -1011,6 +1011,13 @@ thunderstorms forecast tomorrow 2 to 5 pm), `DEMO_HISTORY_DAYS`.
 
 Signs: `grid` positive = buying, negative = selling. `battery` positive = charging.
 
+## Ask Claude about your energy (optional)
+
+The **Home Energy MCP server** in [`mcp-server/`](mcp-server/README.md) lets Claude Desktop answer
+questions from your dashboard: "what's the battery at?", "will it last the night?", "when should I
+charge the car?". It's a small, read-only container that reads the API above (it never talks to the
+inverter) and needs a token for every request. Keep it on your home network or VPN.
+
 ## Troubleshooting
 
 * **"Inverter not responding"**: check Modbus TCP is enabled and saved, the IP is right,

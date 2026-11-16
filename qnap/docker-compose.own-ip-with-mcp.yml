@@ -1,0 +1,55 @@
+# QNAP Container Station: the dashboard on its OWN IP address (as in docker-compose.own-ip.yml),
+# plus the Home Energy MCP server, which lets Claude Desktop ask your dashboard questions
+# ("what's the battery at?", "when should I charge the car?"). The MCP server is read-only.
+#
+# Both live in one application so they share one network: a container on the NAS's ordinary
+# network can't reach one with its own address on the qnet network.
+#
+# Before you paste this into Container Station -> Applications -> Create (remove your existing
+# sigen-dashboard application first; your history in /share/Container/sigen-dashboard is kept):
+#   1. Copy the network settings and the dashboard's ipv4_address from your current setup.
+#   2. Pick a second free address outside your router's DHCP range for the MCP server, and
+#      optionally give it a name in your router's local DNS (e.g. homeenergy-mcp.internal).
+#   3. Make a long random token (a password manager's 40-character password is ideal) and put it
+#      in MCP_TOKEN. Claude Desktop sends it with every request; nothing works without it.
+#   4. List the address and any DNS name Claude Desktop will use in MCP_ALLOWED_HOSTS, with :8000.
+# Then Claude Desktop connects to http://<MCP address>:8000/mcp (see mcp-server/README.md).
+services:
+  sigen-dashboard:
+    image: ghcr.io/copperostrich/sigen-dashboard:latest
+    container_name: sigen-dashboard
+    restart: unless-stopped
+    environment:
+      - HTTP_PORT=80
+    volumes:
+      - /share/Container/sigen-dashboard:/data
+    networks:
+      lan:
+        ipv4_address: 192.168.1.50    # <- the dashboard's address (step 1)
+
+  sigen-mcp:
+    image: ghcr.io/copperostrich/sigen-dashboard-mcp:latest
+    container_name: sigen-mcp
+    restart: unless-stopped
+    depends_on: [sigen-dashboard]
+    environment:
+      - DASHBOARD_URL=http://192.168.1.50                    # <- the dashboard's address above
+      - MCP_TOKEN=change-me-to-a-long-random-secret          # <- step 3
+      - MCP_ALLOWED_HOSTS=192.168.1.51:8000,homeenergy-mcp.internal:8000   # <- step 4
+      - TZ=Australia/Sydney
+    networks:
+      lan:
+        ipv4_address: 192.168.1.51    # <- the MCP server's address (step 2)
+
+networks:
+  lan:
+    driver: qnet
+    driver_opts:
+      iface: eth0                     # <- step 1
+    ipam:
+      driver: qnet
+      options:
+        iface: eth0                   # <- same as above
+      config:
+        - subnet: 192.168.1.0/24      # <- step 1
+          gateway: 192.168.1.1        # <- step 1
