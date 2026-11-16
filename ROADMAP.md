@@ -26,7 +26,7 @@ bump and changelog entry; the order can change as real use shows what matters.
 - **G. Problems that reach you (1.20):** phone alerts through ntfy for alarms, strings,
   insulation, the inverter, backups, data feeds and storms with a low battery; quiet hours; a
   weekly summary.
-- **Ask Claude (MCP server 1.0):** a separate read-only container that lets Claude answer
+- **Ask Claude (2.4):** the Home Energy MCP server, a separate read-only container that lets Claude answer
   questions from the dashboard over the home network or VPN, with a token on every request. The
   first part of a wider home-network AI setup.
 

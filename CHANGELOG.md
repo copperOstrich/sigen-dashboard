@@ -2,11 +2,13 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
-## Home Energy MCP server 1.0.0
+## 2.4.0
 
-A separate, optional container (`ghcr.io/copperostrich/sigen-dashboard-mcp`) that lets Claude, or
-any app that speaks the Model Context Protocol, answer questions from your own dashboard. The
-dashboard itself is unchanged and stays at 2.3.0. Setup is in [`mcp-server/README.md`](mcp-server/README.md).
+**Home Energy MCP server.** A separate, optional container
+(`ghcr.io/copperostrich/sigen-dashboard-mcp`) that lets Claude, or any app that speaks the Model
+Context Protocol, answer questions from your own dashboard. Setup is in
+[`mcp-server/README.md`](mcp-server/README.md). The dashboard itself has no changes in this
+release apart from its version number.
 
 - **14 read-only tools** over the dashboard's HTTP API:
   - `home_energy_now`, `electricity_prices`, `battery_outlook` and `best_time_to_use_power`
@@ -33,9 +35,15 @@ dashboard itself is unchanged and stays at 2.3.0. Setup is in [`mcp-server/READM
     server together on one qnet network
   - the MCP README has the service to add for the ordinary port-8088 setup
 - **Builds:** a new workflow, `Build MCP server image`, builds amd64 and arm64 images when
-  `mcp-server/` changes on main, and for release tags. `latest` follows main, and release tags
-  also tag the image with the dashboard's version number (for example `:2.4.0`), so the image tag
-  and the server's own version (1.0.0) don't match
+  `mcp-server/` changes on main, and for release tags. `latest` follows main
+- **One version number:** the MCP server, the dashboard and both images all carry the same version
+  (2.4.0 here), and a test fails if they drift apart or the changelog's newest entry doesn't match
+- **Tests:** `tests/test_mcp.py` runs in CI:
+  - each tool against a fake dashboard
+  - the token gate and the short-token refusal
+  - a real MCP session over HTTP
+  - every tool against the collector running on its simulator, so a dashboard API change that
+    would break the MCP server fails the build
 - Uses the MCP Python SDK 2.3 (`mcp==2.3.*`) on Python 3.12, and runs as a non-root user
 
 ## 2.3.0

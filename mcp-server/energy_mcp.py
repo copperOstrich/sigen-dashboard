@@ -26,7 +26,9 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
-VERSION = "1.0.0"
+# The same version as the dashboard (collector/config.py) and both Docker images; a test checks
+# they match, so bump them together.
+VERSION = "2.4.0"
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://sigen-dashboard:8080").rstrip("/")
 TOKEN = os.environ.get("MCP_TOKEN", "")
 PORT = int(os.environ.get("MCP_PORT", "8000"))

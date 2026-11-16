@@ -27,7 +27,8 @@ Modbus load, and it is **read-only**: it can't change settings, the battery or t
 
 ## Running it on the QNAP
 
-The image is `ghcr.io/copperostrich/sigen-dashboard-mcp:latest`. If the dashboard has its own IP
+The image is `ghcr.io/copperostrich/sigen-dashboard-mcp:latest`, or pin a version such as `:2.4.0`.
+It shares the dashboard's version number, so use the same tag for both. If the dashboard has its own IP
 address, use `qnap/docker-compose.own-ip-with-mcp.yml`, which runs both together on one network.
 
 If the dashboard runs the ordinary way (port 8088 on the NAS), add this to its application instead:
@@ -55,7 +56,8 @@ Settings:
 | `MCP_PORT` | Default `8000` |
 | `TZ` | For readable times. Default `Australia/Sydney` |
 
-Check it's up: `http://<address>:8000/health` should show `{"ok": true, "version": "1.0.0"}`.
+Check it's up: `http://<address>:8000/health` should show `{"ok": true, "version": ...}`,
+with the same version as the dashboard.
 Everything else needs the token.
 
 ## Connecting Claude Desktop
@@ -90,6 +92,16 @@ Claude Code:
 ```sh
 claude mcp add --transport http home-energy http://homeenergy-mcp.internal:8000/mcp \
   --header "Authorization: Bearer change-me-to-a-long-random-secret"
+```
+
+## Tests
+
+`tests/test_mcp.py` (run in CI with the rest) checks each tool against a fake dashboard, the token
+gate, a real MCP session over HTTP, and every tool against the collector on its simulator:
+
+```sh
+pip install "mcp==2.3.*"
+python -m unittest tests.test_mcp -v
 ```
 
 ## Trying it without a NAS

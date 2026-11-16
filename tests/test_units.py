@@ -806,6 +806,19 @@ class AemoNemweb(unittest.TestCase):
         self.assertEqual(a.state["current"]["rrp"], 106.44)
 
 
+class Versions(unittest.TestCase):
+    """One version number everywhere: the dashboard, the MCP server and the newest changelog entry."""
+
+    def test_versions_match(self):
+        import re
+        import config
+        root = Path(__file__).resolve().parent.parent
+        mcp_v = re.search(r'^VERSION = "([^"]+)"', (root / "mcp-server" / "energy_mcp.py").read_text(), re.M).group(1)
+        log_v = re.search(r"^## (\d+\.\d+\.\d+)\s*$", (root / "CHANGELOG.md").read_text(), re.M).group(1)
+        self.assertEqual(mcp_v, config.VERSION, "bump mcp-server/energy_mcp.py VERSION with collector/config.py")
+        self.assertEqual(log_v, config.VERSION, "the newest CHANGELOG.md entry should be the current version")
+
+
 class PageStructure(unittest.TestCase):
     def test_every_tab_sits_directly_in_its_panel(self):
         from html.parser import HTMLParser
