@@ -502,6 +502,85 @@
       renderMonthly();
     } catch (e) { /* banner */ }
   }
+  // ------------------------------------------------------------ lifetime
+  let lifeData = null;
+  // big totals: MWh once past 10,000 kWh, and no false precision
+  const energy = (kwh) => kwh >= 10000 ? [(kwh / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }), "MWh"]
+    : [Math.round(kwh).toLocaleString(), "kWh"];
+  const longDate = (d) => new Date(d + "T12:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+  function renderLifetime() {
+    const L = lifeData, panel = $("life-panel");
+    if (!L || !L.total || !(L.total.pv > 0)) { panel.hidden = true; return; }
+    panel.hidden = false;
+    const T = L.total, R = L.recorded;
+    $("life-sub").textContent = L.since ? `since it was switched on ${longDate(L.since)}`
+      : L.before_records ? "from the inverter's own lifetime counters" : `since ${longDate(L.first_recorded)}`;
+    const tile = (label, color, kwh, d, title) => {
+      const [v, u] = energy(kwh);
+      return el("div", { title: title || null }, el("div", { class: "k" }, color ? el("i", { style: `background:${color}` }) : null, label),
+        el("div", { class: "v num" }, v, el("small", { text: u })), d ? el("div", { class: "d", text: d }) : null);
+    };
+    const plain = (label, v, unit, d, title) => el("div", { title: title || null }, el("div", { class: "k", text: label }),
+      el("div", { class: "v num" }, v, unit ? el("small", { text: unit }) : null), d ? el("div", { class: "d", text: d }) : null);
+    const tiles = $("life-tiles"); tiles.innerHTML = "";
+    tiles.append(
+      tile("Solar made", "var(--solar)", T.pv, L.per_day ? `${L.per_day} kWh a day lately` : null),
+      tile("Home used", "var(--home)", T.load, L.self_sufficiency != null ? `${Math.round(L.self_sufficiency)}% from your own solar and battery` : null),
+      ...(T.ev > 1 ? [tile("Car charged", "var(--ev)", T.ev)] : []),
+      tile("Sold", "var(--grid)", T.export, L.self_consumption != null ? `${Math.round(L.self_consumption)}% of solar used at home` : null),
+      tile("Bought", "var(--grid)", T.import),
+      tile("Battery", "var(--battery)", T.discharge, L.round_trip != null ? `delivered of ${energy(T.charge).join(" ")} stored, ${L.round_trip}%` : `delivered of ${energy(T.charge).join(" ")} stored`),
+      ...(L.co2 ? [plain("CO2 avoided", L.co2.tonnes.toLocaleString(undefined, { maximumFractionDigits: 1 }), "t",
+        `at ${L.co2.factor} kg/kWh`, `Solar made × ${L.co2.factor} kg CO2-e per kWh of grid power (${L.co2.source})`)] : []),
+      ...(R.net != null ? [plain(R.net < 0 ? "Net credit" : "Net cost", dollars(Math.abs(R.net)), "", `since ${longDate(L.first_recorded)}`,
+        `Bought ${dollars(R.bought)}, earned ${dollars(R.earned)} over ${R.priced_days} priced days`)] : []));
+    drawLifetime();
+    const tb = $("life-table"); tb.innerHTML = "";
+    tb.append(el("tr", {}, ...["Year", "Solar", "Home", "Bought", "Sold", "Self-suff.", "Net cost"].map((h) => el("th", { text: h }))));
+    const kwhCell = (v) => el("td", { text: `${Math.round(v).toLocaleString()} kWh` });
+    if (L.before_records) {
+      const b = L.before_records;
+      tb.append(el("tr", { title: "What the inverter's lifetime counters hold from before the first recorded day" },
+        el("td", { style: "font-family:var(--font)", text: "Before records" }), kwhCell(b.pv), kwhCell(b.load), kwhCell(b.import),
+        kwhCell(b.export), el("td", { text: "–" }), el("td", { text: "–" })));
+    }
+    for (const y of L.years) {
+      tb.append(el("tr", { title: `${y.days} day${y.days === 1 ? "" : "s"} of readings` },
+        el("td", { style: "font-family:var(--font)", text: y.days < 360 ? `${y.year} (${y.days} d)` : y.year }),
+        kwhCell(y.pv), kwhCell(y.load), kwhCell(y.import), kwhCell(y.export),
+        el("td", { text: y.self_sufficiency == null ? "–" : `${Math.round(y.self_sufficiency)}%` }), el("td", { text: dollars(y.net) })));
+    }
+    const base = S.apiBase();
+    $("life-links").innerHTML = "";
+    $("life-links").append(el("a", { href: `${base}/year.html${base ? `?api=${encodeURIComponent(base)}` : ""}`, target: "_blank", text: "Year in review" }));
+    const bits = [];
+    if (L.milestone && L.milestone.eta) bits.push(`At ${L.per_day} kWh a day, solar passes ${energy(L.milestone.kwh).join(" ")} about ${longDate(L.milestone.eta)}.`);
+    if (L.best_day) bits.push(`Best day: ${longDate(L.best_day.day)}, ${L.best_day.pv.toFixed(0)} kWh.`);
+    if (L.best_month) bits.push(`Best month: ${monthName(L.best_month.month)}, ${Math.round(L.best_month.pv).toLocaleString()} kWh.`);
+    bits.push(L.before_records
+      ? `Totals come from the inverter's own lifetime counters; the years are from readings here since ${longDate(L.first_recorded)}, and "Before records" is the rest.`
+      : `Totals and years are from readings here since ${longDate(L.first_recorded)}.`);
+    if (L.co2) bits.push(`CO2 avoided counts every kWh of solar, used or sold, as grid power not made, at ${L.co2.factor} kg CO2-e per kWh (${L.co2.source}; change it in Settings > Money).`);
+    $("life-note").textContent = bits.join(" ");
+  }
+  function drawLifetime() {
+    const L = lifeData;
+    if (!L || $("life-panel").hidden || !L.cumulative.length) return;
+    const pts = L.cumulative, big = L.total.pv >= 10000, k = big ? 1000 : 1;
+    C.lineChart($("life-chart"), {
+      t: pts.map((p) => dayT(p.day)), height: 220, gapSeconds: 86400 * 40,
+      series: [{ key: "pv", label: "Solar made, all time", color: "var(--solar)", values: pts.map((p) => p.pv / k) }],
+      // from just below the first day, so the climb shows rather than a flat line near the top
+      yMin: L.before_records ? Math.floor(pts[0].pv / k * 0.97) : 0,
+      yFmt: (v) => `${big ? v.toFixed(1) : Math.round(v).toLocaleString()} ${big ? "MWh" : "kWh"}`,
+      tipTitle: (x) => new Date(x * 1000).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }),
+      tipFmt: (v) => `${big ? v.toFixed(2) + " MWh" : Math.round(v).toLocaleString() + " kWh"}`,
+      ariaLabel: `Lifetime solar made, ${big ? "MWh" : "kWh"}, at the end of each day`,
+    });
+  }
+  async function loadLifetime() {
+    try { lifeData = await S.fetchJSON("/api/lifetime"); renderLifetime(); } catch (e) { /* banner */ }
+  }
   $("mo-prev").addEventListener("click", () => { if (moIdx > 0) { moIdx--; renderMonthly(); } });
   $("mo-next").addEventListener("click", () => { if (moIdx < moData.length - 1) { moIdx++; renderMonthly(); } });
 
@@ -1646,7 +1725,7 @@
   dlg.addEventListener("close", () => {
     if (dlg.returnValue !== "save") return;
     S.setApiBase($("api-input").value.trim());
-    sub.restart(); evData = null; loadWeather(); loadOutlook(); loadMonthly(); loadTrends(); loadMoney(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
+    sub.restart(); evData = null; loadWeather(); loadOutlook(); loadMonthly(); loadLifetime(); loadTrends(); loadMoney(); loadHistory(); loadDaily(); loadPrices(); loadStrings();
     loadAppliances(); loadLimits(); loadWear(); loadBaseload(); loadTrading();
   });
 
@@ -2015,15 +2094,15 @@
   setInterval(loadWeather, 10 * 60000);
   loadOutlook();
   setInterval(loadOutlook, 5 * 60000);
-  loadMonthly(); loadTrends(); loadMoney(); loadAppliances(); loadLimits(); loadWear(); loadBaseload(); loadTrading(); loadWhatIf();
-  setInterval(() => { loadMonthly(); loadTrends(); loadMoney(); loadLimits(); loadWear(); loadBaseload(); loadTrading(); loadWhatIf(); }, 60 * 60000);
+  loadMonthly(); loadLifetime(); loadTrends(); loadMoney(); loadAppliances(); loadLimits(); loadWear(); loadBaseload(); loadTrading(); loadWhatIf();
+  setInterval(() => { loadMonthly(); loadLifetime(); loadTrends(); loadMoney(); loadLimits(); loadWear(); loadBaseload(); loadTrading(); loadWhatIf(); }, 60 * 60000);
   setInterval(loadAppliances, 5 * 60000);
   setInterval(loadPrices, 5 * 60000);
   setInterval(loadHistory, 60000);
   setInterval(loadDaily, 10 * 60000);
-  window.SigenRedraw = () => { drawBaseload(); drawLimits(); drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); };
+  window.SigenRedraw = () => { drawBaseload(); drawLimits(); drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawLifetime(); drawTrends(); if (dailyData.length) drawDaily(); };
   let rt;
-  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawBaseload(); drawLimits(); drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawTrends(); if (dailyData.length) drawDaily(); }, 120); })
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { drawBaseload(); drawLimits(); drawHistory(); drawPrices(); drawStrings(); drawEvTimeline(); drawWeather(); drawOutlook(); drawMonthly(); drawLifetime(); drawTrends(); if (dailyData.length) drawDaily(); }, 120); })
     .observe(document.querySelector(".wrap"));
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawHistory(); drawDaily(); });
 })();

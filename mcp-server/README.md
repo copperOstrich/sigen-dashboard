@@ -21,6 +21,7 @@ Modbus load, and it is **read-only**: it can't change settings, the battery or t
 | `power_history` | Power flows over the last few hours, averaged into ≤36 steps |
 | `weather_and_solar_forecast` | Weather now and expected solar per day |
 | `battery_health` | State of health, cycles, round-trip efficiency, warranty tracking |
+| `lifetime_totals` | Everything since it was switched on: solar, use, bought and sold, CO2 avoided, by year |
 | `system_health` | Inverter state, alarms, insulation, feeds, solar string health |
 | `money_summary` | Export/import value, spikes caught or missed, plan comparisons |
 | `dashboard_api` | Any other read-only `/api/...` endpoint (settings and backups excluded) |

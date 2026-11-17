@@ -28,7 +28,7 @@ from mcp.types import ToolAnnotations
 
 # The same version as the dashboard (collector/config.py) and both Docker images; a test checks
 # they match, so bump them together.
-VERSION = "2.4.0"
+VERSION = "2.5.0"
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://sigen-dashboard:8080").rstrip("/")
 TOKEN = os.environ.get("MCP_TOKEN", "")
 PORT = int(os.environ.get("MCP_PORT", "8000"))
@@ -43,7 +43,7 @@ READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotent
 RAW_ALLOWED = {
     "live", "history", "daily", "monthly", "prices", "aemo", "outlook", "weather", "money", "trading",
     "battery-wear", "strings-health", "string-history", "limits", "ev", "ev-sessions", "ev-plan",
-    "goodtime", "appliances", "baseload", "targets", "trends", "whatif", "bills", "health",
+    "goodtime", "appliances", "baseload", "targets", "trends", "whatif", "bills", "health", "lifetime",
 }
 
 server = MCPServer(
@@ -372,6 +372,16 @@ async def battery_health() -> dict:
     """Battery wear: state of health, cycles so far and per day, round-trip efficiency, temperatures,
     and how it's tracking against the warranty."""
     return await api("battery-wear")
+
+
+@server.tool(annotations=READ_ONLY)
+async def lifetime_totals() -> dict:
+    """Everything the system has done since it was switched on: solar made, home use, car, bought,
+    sold, battery in and out (kWh, from the inverter's lifetime counters), self-sufficiency, CO2
+    avoided, a year-by-year breakdown, best day and month, and when the next solar milestone falls."""
+    d = await api("lifetime")
+    d.pop("cumulative", None)  # a point a day: too long to be useful here (power_history and energy_by_day have detail)
+    return d
 
 
 @server.tool(annotations=READ_ONLY)

@@ -814,6 +814,24 @@ day under 40%, or a string making next to nothing for 20 minutes while the other
 a red alarm. New shade, dirt, a failed panel or optimiser, or a tripped isolator show up this way.
 It starts after a week of string readings.
 
+### Lifetime (History > Lifetime)
+
+Everything the system has done since it was switched on: solar made, home use, the car, bought,
+sold and what the battery delivered. The totals come from the inverter's own lifetime counters, so
+they include the time before the dashboard was installed. The year-by-year table uses the readings
+here (and any imported mySigen history); whatever the counters hold from before that is shown as
+**Before records**. Also shown:
+
+* the lifetime solar total over time, and when it passes the next milestone at the recent rate
+* self-sufficiency, how much of the solar was used at home, and the battery's round trip
+* the best day and best month, and the net cost since recording began
+* **CO2 avoided**: every kWh of solar, used or sold, counted as grid power not made, at your state's
+  official grid factor (National Greenhouse Accounts: NSW 0.64, VIC 0.78, QLD 0.67, SA 0.23 kg
+  CO2-e per kWh). Set your own in Settings > Money > Grid emissions (`GRID_CO2_KG_KWH`); Tasmania
+  needs it set
+
+Set Settings > Money > Switched on (`SYSTEM_INSTALLED`) and the tab says when it all started.
+
 ### Always-on use (History > Always-on)
 
 Each night the home's use (without the car) between midnight and 5 am is sorted and its

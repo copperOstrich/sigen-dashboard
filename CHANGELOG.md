@@ -2,6 +2,22 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 2.5.0
+
+- **History > Lifetime.** A new tab with everything the system has done since it was switched on:
+  - totals for solar made, home use, the car, bought, sold and battery delivered, from the
+    inverter's own lifetime counters (so the time before the dashboard was installed counts too)
+  - a year-by-year table from the readings here, with a "Before records" row for the rest
+  - lifetime solar over time, and when it passes the next milestone at the recent rate
+  - self-sufficiency, share of solar used at home, battery round trip, best day and month, and
+    the net cost since recording began
+  - CO2 avoided, at your state's official grid emission factor (National Greenhouse Accounts
+    2025-26: NSW 0.64, VIC 0.78, QLD 0.67; SA 0.23 from 2024-25), or your own from the new
+    setting Settings > Money > Grid emissions (`GRID_CO2_KG_KWH`)
+  - new API `/api/lifetime`, kept for 10 minutes
+- **MCP server:** a new tool, `lifetime_totals`, and `lifetime` added to the endpoints
+  `dashboard_api` can read
+
 ## 2.4.0
 
 **Home Energy MCP server.** A separate, optional container

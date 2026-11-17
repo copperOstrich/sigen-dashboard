@@ -40,7 +40,7 @@ except ImportError:
 
 TOOLS = {"home_energy_now", "electricity_prices", "battery_outlook", "best_time_to_use_power", "plan_ev_charging",
          "ev_charging", "energy_by_day", "energy_by_month", "power_history", "weather_and_solar_forecast",
-         "battery_health", "system_health", "money_summary", "dashboard_api"}
+         "battery_health", "system_health", "money_summary", "dashboard_api", "lifetime_totals"}
 
 
 def free_port():
@@ -335,6 +335,9 @@ class AgainstSimulator(unittest.TestCase):
         self.assertTrue(call(m, "power_history", hours=2)["points"])
         self.assertTrue(call(m, "weather_and_solar_forecast")["days"])
         self.assertIn("cycles", call(m, "battery_health"))
+        life = call(m, "lifetime_totals")
+        self.assertGreater(life["total"]["pv"], 0)
+        self.assertNotIn("cumulative", life)
         sh = call(m, "system_health")
         self.assertIn("running_state", sh["inverter"])
         self.assertTrue(sh["feeds"])

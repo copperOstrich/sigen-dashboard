@@ -555,6 +555,10 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16
 .wear-tiles .d.warn { color: var(--warn); }
 .today.wear-tiles { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)) !important; row-gap: 14px; }
 .today.wear-tiles > div { border-left: 0 !important; padding-left: 0 !important; }
+.life-tiles { margin: 4px 0 6px; }
+.life-tiles .d { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+.today.life-tiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important; row-gap: 14px; }
+.today.life-tiles > div { border-left: 0 !important; padding-left: 0 !important; }
 .strings td.st-low { color: var(--warn); font-weight: 600; }
 .strings td.st-down { color: var(--bad); font-weight: 600; }
 .facts dd .small-link { font: 13px var(--font); color: var(--home); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; margin-left: 6px; }

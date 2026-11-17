@@ -819,6 +819,42 @@ class Versions(unittest.TestCase):
         self.assertEqual(log_v, config.VERSION, "the newest CHANGELOG.md entry should be the current version")
 
 
+class Lifetime(unittest.TestCase):
+    """Lifetime totals: the inverter's counters, years from the recorded days, and what came before."""
+
+    def test_totals_years_and_before_records(self):
+        import sigen_collector as sc
+        from datetime import date
+        from lifetime import lifetime, _milestone
+        st = sc.Store(Path(tempfile.mkdtemp()) / "t.db")
+        rows, pv = [], 5000.0                     # 5 MWh made before the dashboard was installed
+        for i, day in enumerate(("2025-12-30", "2025-12-31", "2026-01-01")):
+            t0 = int(datetime.fromisoformat(day).replace(tzinfo=sc.TZ).timestamp())
+            for h in (0, 12, 23.9):
+                frac = h / 24
+                rows.append((t0 + int(h * 3600), day, 0, 500, 0, 0, 50,
+                             pv + 40 * frac, 2000 + i * 20 + 20 * frac, 300 + i * 2 + 2 * frac,
+                             3000 + i * 25 + 25 * frac, 1000 + i * 10 + 10 * frac, 950 + i * 9 + 9 * frac,
+                             None, None, None))
+            pv += 40
+        st.insert(rows)
+        last = st.last_sample()
+        out = lifetime(st, last, ev_total=None, region="NSW1", today=date(2026, 1, 1))
+        self.assertAlmostEqual(out["total"]["pv"], 5120.0, delta=0.5)
+        self.assertEqual(out["first_recorded"], "2025-12-30")
+        self.assertEqual([y["year"] for y in out["years"]], ["2025", "2026"])
+        self.assertAlmostEqual(out["years"][0]["pv"], 80, delta=1)
+        self.assertAlmostEqual(out["before_records"]["pv"], 5000, delta=1)
+        self.assertAlmostEqual(out["cumulative"][-1]["pv"], out["total"]["pv"], delta=0.1)
+        self.assertAlmostEqual(out["cumulative"][0]["pv"], 5040, delta=1)   # end of the first recorded day
+        self.assertEqual(out["co2"]["factor"], 0.64)
+        self.assertAlmostEqual(out["co2"]["tonnes"], 5120 * 0.64 / 1000, delta=0.1)
+        self.assertEqual(out["milestone"]["kwh"], 6000)
+        self.assertEqual((_milestone(9999), _milestone(10000), _milestone(51000)), (10000, 15000, 60000))
+        self.assertIsNone(lifetime(st, last, region="TAS1", today=date(2026, 1, 1))["co2"])
+        self.assertEqual(lifetime(st, last, region="TAS1", co2_factor=0.2, today=date(2026, 1, 1))["co2"]["source"], "your setting")
+
+
 class PageStructure(unittest.TestCase):
     def test_every_tab_sits_directly_in_its_panel(self):
         from html.parser import HTMLParser

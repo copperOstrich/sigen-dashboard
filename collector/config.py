@@ -48,7 +48,7 @@ def load_settings_file():
 
 SETTINGS_PATH = load_settings_file()
 
-VERSION = "2.4.0"
+VERSION = "2.5.0"
 ENV = os.environ.get
 SIMULATE = ENV("SIGEN_SIMULATE", "0") == "1"
 HOST = ENV("SIGEN_HOST", "")
@@ -95,6 +95,8 @@ INSULATION_WARN = max(INSULATION_MIN, _env_num("INSULATION_WARN_MOHM", 0.5))
 COMPARE_PLANS = (ENV("COMPARE_PLANS", "") or "").strip().lower()
 SYSTEM_COST = _env_num("SYSTEM_COST", None)
 SYSTEM_INSTALLED = (ENV("SYSTEM_INSTALLED", "") or "").strip()
+# kg CO2-e per kWh of grid electricity, for the CO2 your solar avoided (blank: your state's official factor)
+GRID_CO2_KG_KWH = _env_num("GRID_CO2_KG_KWH", None)
 RETAILER_SUPPLY_C_DAY = (ENV("RETAILER_SUPPLY_C_DAY", "") or "").strip() or None  # a number, or dated: see money.parse_dated
 RETAILER_FEE_MONTHLY = _env_num("RETAILER_FEE_MONTHLY", None)
 RETAILER_SINCE = (ENV("RETAILER_SINCE", "") or "").strip()

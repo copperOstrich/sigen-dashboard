@@ -86,6 +86,9 @@ SCHEMA = [
     _s("SYSTEM_COST", MONEY, "System cost", "What the solar and battery cost, for payback.", "number", "",
        min=0, max=1e7, unit="$"),
     _s("SYSTEM_INSTALLED", MONEY, "Switched on", "The day the system went in.", "date", ""),
+    _s("GRID_CO2_KG_KWH", MONEY, "Grid emissions", "For the CO2 your solar avoided (History > Lifetime). Blank uses "
+       "your state's official factor: NSW 0.64, VIC 0.78, QLD 0.67, SA 0.23.", "number", "",
+       min=0, max=2, unit="kg CO2-e/kWh"),
     # ---------------------------------------------------------------- car and fuel
     _s("EV_MODEL", CAR, "Your EV", "", "text", "", placeholder="Tesla Model Y"),
     _s("EV_KWH_PER_100KM", CAR, "EV uses", "Energy use, for the fuel comparison.", "number", "",

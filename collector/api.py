@@ -22,6 +22,7 @@ from charger import ChargerWatch  # noqa: E402
 from weather import Weather  # noqa: E402
 from outlook import Outlook  # noqa: E402
 from money import Money  # noqa: E402
+from lifetime import lifetime  # noqa: E402
 from importer import import_folder, reload_bills, import_upload, import_history, clean_bill  # noqa: E402
 import base64  # noqa: E402
 from fuel import Fuel  # noqa: E402
@@ -213,6 +214,7 @@ class Api(BaseHTTPRequestHandler):
         return res
 
     _whatif_cache = {}
+    _lifetime_cache = None
 
     def _whatif(self, q):
         def num(k):
@@ -242,6 +244,7 @@ class Api(BaseHTTPRequestHandler):
         return res
 
     def _changed_costs(self):
+        Api._lifetime_cache = None
         Api._whatif_cache.clear()
         if Api.money:
             Api.money.forget()
@@ -406,6 +409,16 @@ class Api(BaseHTTPRequestHandler):
                     "insulation_limits": {"warn": INSULATION_WARN, "min": INSULATION_MIN},
                     "pv_index": self._pv_index(all_days, days),
                 })
+            if url.path == "/api/lifetime":
+                # every day of history is read, so keep it for 10 minutes
+                c = Api._lifetime_cache
+                if not c or time.time() - c[0] > 600:
+                    raw = self.collector.raw or {}
+                    ev = (raw.get("plant") or {}).get("total_evac_kwh")
+                    data = lifetime(self.store, self.store.last_sample(), ev_total=ev, installed=SYSTEM_INSTALLED,
+                                    region=AEMO_REGION, co2_factor=GRID_CO2_KG_KWH, today=datetime.now(TZ).date())
+                    c = Api._lifetime_cache = (time.time(), data)
+                return self._json(c[1])
             if url.path == "/api/monthly":
                 months = min(36, max(1, int(q.get("months", ["13"])[0])))
                 rows = self.store.monthly(months)
