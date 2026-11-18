@@ -26,9 +26,6 @@ bump and changelog entry; the order can change as real use shows what matters.
 - **G. Problems that reach you (1.20):** phone alerts through ntfy for alarms, strings,
   insulation, the inverter, backups, data feeds and storms with a low battery; quiet hours; a
   weekly summary.
-- **Ask Claude (2.4):** the Home Energy MCP server, a separate read-only container that lets Claude answer
-  questions from the dashboard over the home network or VPN, with a token on every request. The
-  first part of a wider home-network AI setup.
 
 ## Phase H: deeper insight (done in 1.22–1.23)
 
@@ -47,6 +44,10 @@ The repo is public; making it easier for other SigenStor owners helps it stay he
       SA, and the Victorian Default Offer)
 
 ## Parked
+
+- **Ask Claude (MCP server):** a read-only, token-protected container that lets Claude answer
+  questions from the dashboard. Built and tested in 2.4, then moved to the `mcp-server` branch in
+  2.5.1 to keep main to the dashboard while the home-network AI setup is planned.
 
 - **Control** (writing to the inverter, for example raising the backup reserve before a storm):
   the dashboard is read-only by design. Worth revisiting only with an explicit opt-in setting,

@@ -2,6 +2,15 @@
 
 Release notes for each tagged version. The Docker image is tagged with the same version.
 
+## 2.5.1
+
+- **The MCP server has moved to its own branch.** `mcp-server/`, its image build, its tests and the
+  dashboard-plus-MCP compose file are now on the
+  [`mcp-server`](https://github.com/copperOstrich/sigen-dashboard/tree/mcp-server) branch, unchanged
+  and complete, so main is just the dashboard while the home-network AI setup is planned. No new
+  MCP images are built from main; the dashboard itself is unchanged
+- The test workflow is standard library only again
+
 ## 2.5.0
 
 - **History > Lifetime.** A new tab with everything the system has done since it was switched on:
@@ -16,15 +25,15 @@ Release notes for each tagged version. The Docker image is tagged with the same 
     setting Settings > Money > Grid emissions (`GRID_CO2_KG_KWH`)
   - new API `/api/lifetime`, kept for 10 minutes
 - **MCP server:** a new tool, `lifetime_totals`, and `lifetime` added to the endpoints
-  `dashboard_api` can read
+  `dashboard_api` can read (now on the `mcp-server` branch)
 
 ## 2.4.0
 
 **Home Energy MCP server.** A separate, optional container
 (`ghcr.io/copperostrich/sigen-dashboard-mcp`) that lets Claude, or any app that speaks the Model
 Context Protocol, answer questions from your own dashboard. Setup is in
-[`mcp-server/README.md`](mcp-server/README.md). The dashboard itself has no changes in this
-release apart from its version number.
+`mcp-server/README.md` (now on the `mcp-server` branch, since 2.5.1). The dashboard itself has no
+changes in this release apart from its version number.
 
 - **14 read-only tools** over the dashboard's HTTP API:
   - `home_energy_now`, `electricity_prices`, `battery_outlook` and `best_time_to_use_power`

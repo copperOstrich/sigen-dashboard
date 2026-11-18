@@ -1,8 +1,7 @@
 name: Tests
 
 # Unit tests and a smoke test (the collector on its built-in simulator, every page and API endpoint)
-# on every push and pull request. The collector is standard library only; the MCP server's tests
-# (tests/test_mcp.py) need the MCP SDK, installed here at the same version as its Docker image.
+# on every push and pull request. Standard library only, so no dependencies to install.
 on:
   push:
     branches: [main]
@@ -23,12 +22,8 @@ jobs:
         with:
           python-version: "3.12"   # the same as the Docker image
 
-      - name: Install the MCP SDK (for tests/test_mcp.py)
-        run: pip install "mcp==2.3.*"
-
       - name: Unit tests
         env:
-          REQUIRE_MCP: "1"          # fail rather than skip the MCP server's tests
           TZ: Australia/Sydney
         run: python -m unittest discover -s tests -v
 
